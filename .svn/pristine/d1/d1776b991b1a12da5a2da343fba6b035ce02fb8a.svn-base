@@ -1,0 +1,829 @@
+<template>
+  <div style="height: 100%">
+    <a-row :gutter="8" style="height: 100%">
+      <a-col :span="showSidebar ? 18 : 23" style="height: 100%">
+        <a-tabs type="editable-card" :activeKey="activeKey" :hideAdd="true" class="tabs-flex" @change="tabsChange">
+          <a-tab-pane key="order" :tab="$t('工单信息')" :closable="false">
+            <div style="height: calc(100% - 60px); overflow-y: auto">
+              <user-table-form-view
+                ref="userTableFormView"
+                :params="{
+                  tableName,
+                  template,
+                  fieldRule,
+                  parentParams,
+                  remarksRule,
+                  handleFormRules,
+                  handleWayData,
+                  remarksMaxRows,
+                  remarksMinRows,
+                  templateOther: orderData.template || [],
+                  action: 'edit',
+                  page:
+                    (config && config.data && config.data.type === 'create') ||
+                    (orderData.data &&
+                      (['all_process'].includes(orderData.data.type) ||
+                        (['my_process'].includes(orderData.data.type) &&
+                          orderData.data.process_current_user &&
+                          orderData.data.process_current_user.includes(userInfo.username))))
+                      ? 'workflow'
+                      : 'over'
+                }"
+                :formThis="this"
+                @ok="submitReturn"
+              />
+            </div>
+          </a-tab-pane>
+          <a-tab-pane key="associated" :tab="$t('订单信息')" :closable="false">
+            <order-info ref="OrderInfo" :orderId="itemOrderId" />
+          </a-tab-pane>
+        </a-tabs>
+      </a-col>
+      <a-col :span="showSidebar ? 6 : 1">
+        <div style="position: relative">
+          <a-icon
+            :type="showSidebar ? 'caret-right' : 'caret-left'"
+            class="iconClass"
+            @click="showSidebar = !showSidebar"
+          />
+          <a-tabs v-if="showSidebar" style="width: 100%">
+            <a-tab-pane key="order">
+              <span slot="tab">
+                <a-badge :count="orderList.length" :offset="[15, 0]">{{ $t('订单查询') }}</a-badge>
+              </span>
+              <a-spin :spinning="orderListLoading">
+                <div v-if="orderList.length" style="height: calc(100vh - 169px); overflow-y: auto; background: #fff">
+                  <div class="listStyle">
+                    <a-form
+                      v-for="(orderItem, orderIndex) in orderList"
+                      :key="orderIndex"
+                      :labelCol="{ style: 'width: 80px; display: inline-block' }"
+                      :wrapperCol="{ style: 'width: calc(100% - 80px); display: inline-block' }"
+                      class="formStyle"
+                      :class="
+                        currentOrderIndex === orderIndex && currentOrderIndex !== fillIndex
+                          ? 'orderStyle'
+                          : fillIndex === orderIndex || clickSearchType === 'orderId'
+                          ? 'orderFill'
+                          : ''
+                      "
+                    >
+                      <div @dblclick="orderNumberJump(orderItem.orderId, orderIndex)">
+                        <a-form-item :label="$t('订单号')" style="padding: 4px 0">
+                          <span v-if="config.data.type !== 'create'">{{ orderItem.orderId || '--' }}</span>
+                          <a v-if="config.data.type === 'create'">{{ orderItem.orderId || '--' }}</a>
+                          <a-icon
+                            v-if="
+                              fillIndex !== orderIndex && config.data.type === 'create' && clickSearchType === 'phone'
+                            "
+                            type="select"
+                            style="margin-left: 32px"
+                            class="select"
+                            @click.stop="orderRefresh(orderItem), (fillIndex = orderIndex)"
+                          />
+                        </a-form-item>
+                        <a-divider style="margin: 4px 0" />
+                        <a-form-item :label="$t('订单状态')">{{ orderItem.orderStatus || '--' }}</a-form-item>
+                        <a-form-item :label="$t('下单时间')">{{ orderItem.orderTime || '--' }}</a-form-item>
+                        <a-form-item :label="$t('寄方名称')">{{ orderItem.shopName || '--' }}</a-form-item>
+                        <a-form-item :label="$t('寄方电话')">
+                          <a-tag v-if="orderItem.shopPhoneShow" color="#108ee9">
+                            {{ orderItem.shopPhone || '--' }}
+                          </a-tag>
+                          <span v-else>{{ orderItem.shopPhone || '--' }}</span>
+                        </a-form-item>
+                        <a-form-item :label="$t('寄方地址')">{{ orderItem.shopAddress || '--' }}</a-form-item>
+                        <a-form-item :label="$t('收方名称')">{{ orderItem.userName || '--' }}</a-form-item>
+                        <a-form-item :label="$t('收方电话')">
+                          <a-tag v-if="orderItem.userPhoneShow" color="#108ee9">
+                            {{ orderItem.userPhone || '--' }}
+                          </a-tag>
+                          <span v-else>{{ orderItem.userPhone || '--' }}</span>
+                        </a-form-item>
+                        <a-form-item :label="$t('收方地址')">{{ orderItem.userAddress || '--' }}</a-form-item>
+                        <a-form-item :label="$t('骑士姓名')">{{ orderItem.riderName || '--' }}</a-form-item>
+                        <a-form-item :label="$t('骑士电话')" style="padding-bottom: 8px">
+                          <a-tag v-if="orderItem.riderPhoneShow" color="#108ee9">
+                            {{ orderItem.riderPhone || '--' }}
+                          </a-tag>
+                          <span v-else>{{ orderItem.riderPhone || '--' }}</span>
+                        </a-form-item>
+                      </div>
+                    </a-form>
+                  </div>
+                </div>
+                <a-empty v-else />
+              </a-spin>
+            </a-tab-pane>
+            <a-tab-pane key="associated">
+              <span slot="tab">
+                <a-badge :count="associatedList.length" :offset="[15, 0]">{{ $t('关联工单') }}</a-badge>
+              </span>
+              <a-spin :spinning="associatedLoading">
+                <div style="height: calc(100vh - 169px); overflow-y: auto; background: #fff">
+                  <div class="listStyle">
+                    <a-button-group style="margin-bottom: 8px; width: 100%">
+                      <a-button
+                        v-for="(item, index) in buttonList"
+                        :key="index"
+                        style="width: 50%"
+                        :type="buttonIndex === index ? 'primary' : 'default'"
+                        @click="associatedButton(index)"
+                      >
+                        {{ item }}
+                      </a-button>
+                    </a-button-group>
+                    <div v-if="associatedList.length">
+                      <a-form
+                        v-for="(assItem, assIndex) in associatedList"
+                        :key="assIndex"
+                        :labelCol="{ style: 'width: 80px; display: inline-block' }"
+                        :wrapperCol="{ style: 'width: calc(100% - 80px); display: inline-block' }"
+                        class="formStyle"
+                      >
+                        <a-form-item :label="$t('工单编号')" style="padding: 4px 0">
+                          <a @click="orderShow(assItem)">{{ assItem.caseNumber || '--' }}</a>
+                        </a-form-item>
+                        <a-form-item :label="$t('创建时间')">{{ assItem.inputTime || '--' }}</a-form-item>
+                        <a-form-item :label="$t('更新时间')">{{ assItem.updateTime || '--' }}</a-form-item>
+                        <a-form-item :label="$t('工单类型')">{{ assItem.type || '--' }}</a-form-item>
+                        <a-form-item :label="$t('工单状态')">{{ assItem.processStatus || '--' }}</a-form-item>
+                        <a-form-item :label="$t('来电号码')">{{ assItem.telPhone || '--' }}</a-form-item>
+                        <a-form-item :label="$t('联系人')">{{ assItem.contacts || '--' }}</a-form-item>
+                        <a-form-item :label="$t('当前办理人')">{{ assItem.processCurrentUser || '--' }}</a-form-item>
+                        <a-form-item :label="$t('备注记录')">{{ assItem.remark || '--' }}</a-form-item>
+                      </a-form>
+                    </div>
+                    <a-empty v-else style="margin-top: 8px" />
+                  </div>
+                </div>
+              </a-spin>
+            </a-tab-pane>
+          </a-tabs>
+        </div>
+      </a-col>
+    </a-row>
+    <ExpressWorkbenchCard ref="ExpressWorkbenchCard" :workObj="{ type: 'my_handle' }" />
+  </div>
+</template>
+<script>
+import Vue from 'vue'
+import { mapGetters } from 'vuex'
+import imagesLoaded from 'vue-images-loaded'
+import { Timeline } from 'ant-design-vue'
+import VueClipBoard from 'vue-clipboard2'
+Vue.use(Timeline)
+Vue.use(VueClipBoard)
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    UserTableFormView: () => import('@/views/admin/UserTable/UserTableFormView'),
+    OrderInfo: () => import('./OrderInfo'),
+    ExpressWorkbenchCard: () => import('@/views/express/ExpressWorkbenchCard')
+  },
+  directives: {
+    imagesLoaded
+  },
+  data () {
+    return {
+      showSidebar: true,
+      clickSearchType: '',
+      orderListLoading: false,
+      associatedLoading: false,
+      buttonList: [this.$t('按来电号码'), this.$t('按订单号')],
+      buttonIndex: 0,
+      itemOrderId: '',
+      loading: false,
+      visible: false,
+      tip: '',
+      orderData: { data: {} },
+      data: {},
+      config: {},
+      listThis: null,
+      // flowList: [],
+      // variableList: [],
+      labelCol: { style: 'width: 100px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 150px); display: inline-block' },
+      copyAlias: ['caseNumber', 'zd', 'ddh', 'yhyx', 'khm', 'ydh', 'zydh', 'bgh', 'jyh'],
+      // content: '',
+      // nowWay: '',
+      form: this.$form.createForm(this),
+      activeKey: 'order',
+      logList: [],
+      associatedList: [],
+      currentOrderIndex: -1,
+      fillIndex: -1,
+      // 订单联系人
+      orderContacts: '',
+      // 订单骑士信息
+      orderRider: [],
+      // 站点信息
+      orderStation: [],
+      // 订单列表数据
+      orderList: [],
+      tableName: '',
+      template: [],
+      parentParams: {
+        record: {}
+      },
+      fieldRule: [],
+      remarksRule: [],
+      remarksMaxRows: 4,
+      remarksMinRows: 2,
+      timer: null,
+      handleFormRules: [],
+      handleWayData: [],
+      templateOther: []
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+
+  methods: {
+    show (config, parent) {
+      this.config = config
+      this.activeKey = 'order'
+      this.showSidebar = true
+      this.associatedList = []
+      this.orderList = []
+      this.buttonIndex = 0
+      this.itemOrderId = ''
+      const item = config.data
+      this.orderData.data = item
+      this.currentOrderIndex = this.fillIndex = -1
+      if (item.type === 'create') {
+        // 建单
+        this.parentParams = {
+          url: '/admin/wcase/add',
+          flowCondition: config.parent.flowCondition,
+          viewType: 'create',
+          workflowId: 'ba913d89ff384293b782f3a22e5a001b',
+          record: {}
+        }
+      } else {
+        // 办单
+        this.parentParams = {
+          tplviewUrl: '/admin/centerflow/handleOrder',
+          url: '/admin/workitem/processing',
+          flowCondition: config.parent.flowCondition,
+          viewType: 'handle',
+          operation: 'handle',
+          tableId: '9cf401eb8793408686bba8cf8d38fc25',
+          record: {}
+        }
+      }
+      const dataValue = {}
+      if (item.type === 'create') {
+        dataValue.url = '/admin/wcase/add'
+        dataValue.data = {
+          action: 'get',
+          parameter: {},
+          title: this.$t('创建流程: SFTC工单流程'),
+          tplviewUrl: '/admin/wcase/add',
+          url: '/admin/wcase/add',
+          viewType: 'create',
+          width: 1200,
+          workflowId: 'ba913d89ff384293b782f3a22e5a001b'
+        }
+      } else if (['all_process'].includes(item.type) || ['my_process'].includes(item.type) && item.process_current_user && item.process_current_user.includes(this.userInfo.username)) {
+        dataValue.url = '/admin/centerflow/handleOrder'
+        dataValue.data = {
+          caseId: item.caseId,
+          flowCondition: config.parent.flowCondition,
+          viewType: 'handle'
+        }
+      } else {
+        dataValue.url = '/admin/centerflow/viewOrder'
+        dataValue.data = {
+          caseId: item.caseId,
+          flowCondition: config.parent.flowCondition,
+          templateId: '19520478fca04eeeb43a290320196dc6',
+          viewType: 'view'
+        }
+      }
+      parent.loading = true
+      const p = new Promise((resolve, reject) => {
+        this.axios({
+          url: dataValue.url,
+          data: dataValue.data
+        }).then(res => {
+          this.template = []
+          if (res.code) {
+            setTimeout(() => {
+              parent.visible = false
+            }, 1000)
+            this.$message.warning(res.message)
+            reject(res)
+          } else {
+            parent.bbar = res.result.bbar || []
+            parent.bbar.forEach(item => {
+              item.component = {
+                template: `<span>${item.attribute}</span>`,
+                data: () => {
+                  return {
+                    parent: parent
+                  }
+                }
+              }
+            })
+            this.orderData = res.result
+            if (this.orderData?.data) {
+              this.orderData.data.type = item.type
+            }
+            const val = res.result
+            if (this.$refs.userTableFormView) {
+              this.$refs.userTableFormView.form.resetFields()
+            }
+            if (this.orderData.data) {
+              this.parentParams.caseId = this.orderData.data.caseId
+              this.parentParams.record = this.orderData.data
+              if (this.orderData.data.fksj) {
+                const currentTime = this.moment(this.moment().format('YYYY-MM-DD HH:mm:ss'))
+                const fksj = this.moment(this.orderData.data.fksj)
+                const days = currentTime.diff(fksj, 'days')
+                this.orderData.data.ddls = days
+              }
+              // this.axios({
+              //   url: '/admin/centerflow/workflowLog',
+              //   data: {
+              //     pageNo: 1,
+              //     pageSize: 100,
+              //     sortField: 'id',
+              //     sortOrder: 'descend',
+              //     caseId: this.orderData.data.caseId
+              //   }
+              // }).then(res => {
+              //   this.logList = res.result.data
+              // })
+            }
+            if (val.template) {
+              // 表单初始化loader
+              if (val.tplSetting && val.tplSetting.tplInitJs) {
+                var initAttribute = val.tplSetting.tplInitJs
+                var initTemplate = {
+                  type: 'component',
+                  attribute: initAttribute
+                }
+                val.template.push(initTemplate)
+              }
+              const formData = this.orderData.data
+              const getTemplate = (array) => {
+                array.forEach((item, index) => {
+                  if (item.columns) {
+                    // 骑士信息 栅格
+                    if (item.key === 'grid_8681557016') {
+                      item.type = formData?.qsxm ? 'grid' : 'null'
+                    }
+                    // 开票信息 栅格
+                    if (item.key === 'grid_54859628196') {
+                      item.type = formData?.gdlx && ['xianxia_kp', 'zhuanpiao', 'pupiao'].includes(formData.gdlx) ? 'grid' : 'null'
+                    }
+                    // 商品信息 栅格
+                    if (item.key === 'grid_1646906946772') {
+                      item.type = formData?.gdlx && ['anquan_l', 'huopin_yssh', 'huopin_sh', 'huopin_ys'].includes(formData.gdlx) ? 'grid' : 'null'
+                    }
+                    // 合作信息 栅格
+                    if (item.key === 'grid_88690499820') {
+                      item.type = formData?.gdlx && formData.gdlx === 'hezuo_gt2' ? 'grid' : 'null'
+                    }
+                    getTemplate(item.columns)
+                  } else if (item.trs) {
+                    getTemplate(item.trs)
+                  } else if (item.list) {
+                    getTemplate(item.list)
+                  } else {
+                    if (item.label === '来电骑士信息') {
+                      item.type = formData?.qsxm ? 'dividerTag' : 'null'
+                    } else if (item.label === '开票信息') {
+                      item.type = formData?.gdlx && ['xianxia_kp', 'zhuanpiao', 'pupiao'].includes(formData.gdlx) ? 'dividerTag' : 'null'
+                    } else if (item.label === '商品信息') {
+                      item.type = formData?.gdlx && ['anquan_l', 'huopin_yssh', 'huopin_sh', 'huopin_ys'].includes(formData.gdlx) ? 'dividerTag' : 'null'
+                    } else if (item.label === '合作信息') {
+                      item.type = formData?.gdlx && formData.gdlx === 'hezuo_gt2' ? 'dividerTag' : 'null'
+                    }
+                  }
+                })
+              }
+              getTemplate(val.template)
+            }
+            this.tableName = val.tableName
+            this.template = JSON.parse(JSON.stringify(val.template))
+            this.fieldRule = val.fieldRule
+            this.remarksRule = val.remarksRule
+            this.handleFormRules = val.handleFormRules
+            this.handleWayData = val.handleMethods
+            this.templateOther = JSON.parse(JSON.stringify(val.template))
+            this.remarksMinRows = val.remarksMinRows
+            this.remarksMaxRows = val.remarksMaxRows
+            const getComponent = (array) => {
+              array.forEach((item, index) => {
+                if (item.columns) {
+                  getComponent(item.columns)
+                } else if (item.trs) {
+                  getComponent(item.trs)
+                } else if (item.list) {
+                  getComponent(item.list)
+                } else {
+                  if (item.type === 'component') {
+                    item.component = {
+                      template: `<span>${item.attribute}</span>`,
+                      data: () => {
+                        return {
+                          parent: this
+                        }
+                      }
+                    }
+                  }
+                }
+              })
+            }
+            getComponent(this.template)
+            this.$emit('get', res.result)
+            resolve()
+          }
+        })
+      })
+      p.then(() => {
+        parent.loading = false
+        if (this.orderData.data?.ldzchm) {
+          // 获取来电号码订单查询列表
+          this.getOrderList('phone', this.orderData.data.ldzchm, '/express/sfExpress/getOrderList')
+        }
+      })
+    },
+    copyForm () {
+      const that = this
+      const formParam = this.$refs.userTableFormView.form.getFieldsValue().record
+      const value = `个人/企业开票: ${formParam.grqykp}\n发票抬头：${formParam.fptt}\n纳税识别号：${formParam.nssbh}\n开票金额：${formParam.kpje}\n开票订单号：${formParam.kpddh}\n发票寄递地址：${formParam.fpjddz}\n收件人：${formParam.sjr}\n电子邮箱：${formParam.dzyx}\n收件人电话：${formParam.shoujian_rdh}`
+      this.$copyText(value).then(function (e) {
+        that.$message.success('复制成功')
+      }, function (e) {
+        that.$message.success('复制失败')
+      })
+    },
+    tabsChange (e) {
+      this.$nextTick(() => {
+        this.activeKey = e
+        if (e === 'associated') {
+          // if (this.orderData.data) {
+          this.itemOrderId = this.orderData.data ? this.orderData.data.ddh : this.$refs.userTableFormView.form.getFieldsValue().record.ddh
+          // }
+        }
+      })
+    },
+    associatedButton (index) {
+      const inputObj = this.$refs.userTableFormView.form.getFieldsValue().record
+      const obj = { ddh: inputObj.ddh, ldzchm: inputObj.ldzchm }
+      // 判断是创建工单时的参数还是查看工单的参数  传不同的订单号参数或来电号码参数
+      const paramData = this.orderData?.data ? this.orderData.data : obj
+      this.getAssList(index, paramData)
+    },
+    imageProgress (instance, image) {
+      const result = image.isLoaded ? 'loaded' : 'broken'
+      if (result === 'loaded') {
+        this.$refs.chats.scrollTop = this.$refs.chats.scrollHeight
+      }
+    },
+    getCity (orderId) {
+      return new Promise((resolve, reject) => {
+        this.axios({
+          url: `/express/sfExpress/getCityInfo/${orderId}`,
+          data: {}
+        }).then(res => {
+          resolve(res.result)
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    },
+    getOrderDetail (orderIdItem) {
+      return new Promise((resolve, reject) => {
+        this.axios({
+          url: '/express/sfExpress/getOrderDetail',
+          data: {
+            orderId: orderIdItem
+          }
+        }).then(res => {
+          resolve(res.result)
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    },
+    async orderRefresh (orderItem) {
+      this.activeKey = 'order'
+      if (orderItem) {
+        const orderIdItem = orderItem.orderId.replace(/\t/, '')
+        this.itemOrderId = orderIdItem
+        const cityObj = await this.getCity(orderIdItem)
+        this.setCity(cityObj.data) // 填充 城市字段
+        const obj = {}
+        // 订单详情信息
+        const orderDetail = await this.getOrderDetail(orderIdItem)
+        const formObj = this.$refs.userTableFormView.form.getFieldsValue().record
+        if (orderDetail?.data?.ucode && formObj.zrf === 'qishi') {
+          obj['record[zeren_tcid]'] = orderDetail.data.ucode
+          obj['record[zeren_qsxm]'] = orderDetail.data.riderName
+          this.$refs.userTableFormView.form.setFieldsValue(obj)
+        }
+        const p1 = new Promise(resolve => {
+          this.axios({
+            url: '/admin/search/dictSearch',
+            data: { dictCategoryNumber: 'yewu_lx' }
+          }).then(res => {
+            resolve(res.result)
+          })
+        })
+        p1.then(result => {
+          obj['record[ddh]'] = orderIdItem
+          obj['record[lxr]'] = this.orderContacts || ''
+          obj['record[ywlx]'] = result.find((item) => item.label === orderDetail.data.businessType).value
+          this.$refs.userTableFormView.form.setFieldsValue(obj)
+        })
+      }
+    },
+    orderNumberJump (orderId, orderIndex) {
+      // if (this.config.data.type === 'create') {
+      this.currentOrderIndex = orderIndex
+      this.activeKey = 'associated'
+      this.itemOrderId = orderId.replace(/\t/, '')
+      // }
+    },
+    // 订单查询列表
+    getOrderList (type, param, url) {
+      // type：phone-->来电注册号码查询 orderId--> 订单号查询   param：对应的值  url：对应的各自接口地址
+      this.clickSearchType = type
+      this.orderListLoading = true
+      let objData = {}
+      if (type === 'phone') {
+        objData = { phone: param }
+      } else {
+        objData = { orderId: param }
+      }
+      this.axios({
+        url: url,
+        data: objData
+      }).then(res => {
+        this.orderListLoading = false
+        if (res.code !== 0) {
+          this.$message.error(res.message)
+          this.orderList = []
+        } else {
+          this.currentOrderIndex = this.fillIndex = -1
+          const formDataCreate = this.$refs.userTableFormView.form.getFieldsValue().record
+          // this.itemOrderId = res.result?.data?.length ? res.result.data[0].orderId.replace(/\t/, '') : ''
+          // 如果查看工单 默认按照查看工单的订单号查询 否则用创建工单的查询出来的订单号查询
+          const paramData = this.orderData?.data ? this.orderData.data : { ldzchm: formDataCreate.ldzchm }
+          this.getAssList(0, paramData) // 获取关联工单列表
+          this.orderList = res.result?.data?.length ? res.result.data : [] // 订单数据列表
+          if (this.orderList?.length) {
+            this.orderList.forEach((item, index) => {
+              if (this.orderData?.data && item.orderId.replace(/\t/, '') === this.orderData.data.ddh) {
+                this.fillIndex = index
+              }
+              if (item.shopPhone === objData.phone) {
+                item.shopPhoneShow = true
+              }
+              if (item.userPhone === objData.phone) {
+                item.userPhoneShow = true
+              }
+              if (item.riderPhone === objData.phone) {
+                item.riderPhoneShow = true
+              }
+            })
+          }
+          this.orderContacts = res.result.contacts // 联系人
+          this.orderRider = res.result.rider // 骑士信息 数组
+          this.orderStation = res.result.station // 站点信息 数组
+          const obj = {}
+          if (this.config.data.type === 'create') {
+            this.setCity('')
+            if (type === 'phone' && !formDataCreate.ddh) {
+              obj['record[ddh]'] = ''
+            }
+            if (type === 'orderId') {
+              // 点击订单号查询 填充字段
+              this.orderRefresh(res.result.data[0])
+            }
+            obj['record[lxr]'] = ''
+            obj['record[ywlx]'] = undefined
+            // obj['record[cs]'] = undefined
+            if (formDataCreate.zrf === 'qishi') {
+              obj['record[zeren_tcid]'] = ''
+              obj['record[zeren_qsxm]'] = ''
+            }
+            this.$refs.userTableFormView.form.setFieldsValue(obj)
+          }
+          this.setForm() // 骑士信息卡片
+          if (this.orderRider?.length) {
+            this.$nextTick(() => {
+              obj['record[qsxm]'] = this.orderRider[0].chineseName
+              obj['record[qsID]'] = this.orderRider[0].riderId
+              obj['record[tcID]'] = this.orderRider[0].ucode
+              this.$refs.userTableFormView.form.setFieldsValue(obj)
+            })
+          }
+          if (this.orderStation?.length) {
+            this.$nextTick(() => {
+              obj['record[qspszx]'] = this.orderStation[0].lcName
+              obj['record[gszd]'] = this.orderStation[0].name
+              obj['record[zzxm]'] = this.orderStation[0].contact
+              obj['record[zzdh]'] = this.orderStation[0].contactPhone
+              this.$refs.userTableFormView.form.setFieldsValue(obj)
+            })
+          }
+          const initData = this.orderData
+          if (initData?.data?.zeren_tcid && initData?.data?.zrf === 'qishi') {
+            // 003 待工单客服处理 责任方为骑士时 填充 工单信息对应订单号的订单详情的 同城ID和骑士姓名
+            obj['record[zeren_tcid]'] = initData.data.zeren_tcid
+            obj['record[zeren_qsxm]'] = initData.data.zeren_qsxm
+            this.$refs.userTableFormView.form.setFieldsValue(obj)
+          } else if (!initData?.data?.zeren_tcid && initData?.data?.zrf === 'qishi') {
+            this.axios({
+              url: '/express/sfExpress/getOrderDetail',
+              data: {
+                orderId: initData.data.ddh
+              }
+            }).then(res => {
+              if (res.code === 0) {
+                const resData = res.result?.data ? res.result.data : {}
+                obj['record[zeren_tcid]'] = resData.ucode
+                obj['record[zeren_qsxm]'] = resData.riderName
+                this.$refs.userTableFormView.form.setFieldsValue(obj)
+              }
+            })
+          }
+        }
+      })
+    },
+    setForm () {
+      const setFormShow = (array) => {
+        array.forEach((item, index) => {
+          if (item.columns) {
+            if (item.key === 'grid_8681557016') {
+              item.type = this.orderRider?.length ? 'grid' : 'null'
+            }
+            setFormShow(item.columns)
+          } else if (item.trs) {
+            setFormShow(item.trs)
+          } else if (item.list) {
+            setFormShow(item.list)
+          } else {
+            if (item.label === '来电骑士信息') {
+              item.type = this.orderRider?.length ? 'dividerTag' : 'null'
+            }
+          }
+        })
+      }
+      setFormShow(this.template)
+    },
+    setCity (cityData) {
+      const getCityData = (array) => {
+        array.forEach((item, index) => {
+          if (item.columns) {
+            getCityData(item.columns)
+          } else if (item.trs) {
+            getCityData(item.trs)
+          } else if (item.list) {
+            getCityData(item.list)
+          } else {
+            if (item.field && item.field.alias === 'cs') {
+              item.field.option = [{ fullDictDataName: cityData ? cityData.cityName : '', dictDataNumber: cityData ? cityData.cityId : '' }]
+            }
+          }
+        })
+      }
+      getCityData(this.template)
+    },
+    // 关联工单 列表
+    getAssList (index, formData) {
+      this.associatedList = []
+      const createFormData = formData
+      const param = {}
+      if (index === 0) {
+        // 按来电注册号码
+        param.telPhone = createFormData.ldzchm || ''
+      } else {
+        // 按订单号
+        param.orderId = createFormData.ddh || ''
+      }
+      param.caseNumber = createFormData.caseNumber || ''
+      this.associatedLoading = true
+      this.buttonIndex = index
+      this.axios({
+        url: '/express/sfExpress/relationWorkOrder',
+        data: param
+      }).then(res => {
+        this.associatedLoading = false
+        if (!res.code) {
+          this.associatedList = res.result.data
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+    },
+    // 备注
+    handleRemarks () {
+      const obj = Object.assign(this.$refs.userTableFormView.form.getFieldsValue().record, { caseId: this.config.data.caseId })
+      this.config.parent.handleRemarks(obj)
+    },
+    orderShow (record) {
+      this.$refs.ExpressWorkbenchCard.show({
+        title: this.$t('查看关联工单'),
+        data: record,
+        parent: this.config.parent
+      })
+    },
+    // 取消
+    handleCancel () {
+      this.visible = !this.visible
+    },
+    handleSubmit (data) {
+      this.loading = true
+      const verifJs = this.verifJs
+      if (verifJs) {
+        const parent = this
+        const str = 'return ' + verifJs
+        // eslint-disable-next-line no-new-func
+        const func = new Function(str)
+        const flag = func()(parent)
+        if (flag) {
+          this.$refs.userTableFormView.handleSubmit(data)
+        }
+      } else {
+        this.$refs.userTableFormView.handleSubmit(data)
+      }
+    },
+    submitReturn (data, tableName, status) {
+      this.$emit('ok', data, tableName, status)
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.iconClass {
+  margin-top: 16px;
+  font-size: 14px;
+  position: absolute;
+  left: -12px;
+  color: @primary-color;
+}
+.select {
+  color: @primary-color;
+}
+.labelStyle {
+  font-weight: 600;
+}
+/deep/ img {
+  max-height: 200px;
+}
+.orderFill {
+  background: @primary-1 !important;
+}
+.orderStyle {
+  background-color: #ffffff;
+  box-shadow: 0 1px 15px @primary-color;
+}
+.listStyle {
+  background: rgba(243, 243, 243, 0.7);
+  padding: 6px 8px 0px 8px;
+  margin-right: 8px;
+  min-height: 100%;
+  overflow-y: auto;
+}
+.formStyle {
+  /deep/ .ant-form-item-label {
+    line-height: 28px;
+  }
+  /deep/ .ant-form-item-control {
+    line-height: 28px;
+  }
+  margin-bottom: 8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: #fff;
+}
+::-webkit-scrollbar {
+  /*滚动条整体样式*/
+  width: 8px;
+  /*高宽分别对应横竖滚动条的尺寸*/
+  height: 6px;
+  scrollbar-arrow-color: red;
+}
+::-webkit-scrollbar-thumb {
+  /*滚动条里面小方块*/
+  border-radius: 5px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+  scrollbar-arrow-color: red;
+}
+::-webkit-scrollbar-track {
+  /*滚动条里面轨道*/
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.1);
+}
+</style>

@@ -1,0 +1,363 @@
+<template>
+  <div>
+    <a-form :form="form">
+      <a-popover v-model="selectshow" :trigger="fieldRule === 'readonly' ? '' : 'click'" placement="bottomLeft">
+        <a-form-item>
+          <a-input
+            v-model="contents"
+            read-only
+            :disabled="fieldRule === 'readonly'"
+            :size="size"
+            :placeholder="fieldRule === 'readonly' ? '' : $t('请选择')"
+            :style="fieldRule === 'readonly' ? {} : { cursor: 'pointer' }"
+            @click.stop="changeStatus"
+          >
+            <a-icon
+              v-if="field && field.setting && field.setting.form.suffixIcon === 'custom'"
+              slot="suffix"
+              :type="field.setting.form.suffixVal.type"
+              :theme="field.setting.form.suffixVal.theme"
+              @click.stop="changeStatus"
+            />
+            <span v-else-if="field && field.setting && field.setting.form.suffixIcon === 'string'" slot="suffix">
+              {{ field.setting.form.suffixVal.type }}
+            </span>
+          </a-input>
+        </a-form-item>
+        <div slot="content" :style="{ width: '600px' }">
+          <a-select
+            showSearch
+            :value="undefined"
+            style="width: 100%"
+            :placeholder="$t('请输入关键字进行搜索')"
+            allowClear
+            :filter-option="false"
+            :not-found-content="fetching ? undefined : null"
+            @search="searchTabs"
+            @popupScroll="popupScroll"
+            @change="
+              (e) => {
+                if (!e) {
+                  searchdata = []
+                }
+              }
+            "
+          >
+            <a-spin v-if="fetching" slot="notFoundContent" size="small" />
+            <a-select-option
+              v-for="search in searchdata"
+              :key="search.number"
+              :value="search.number"
+              @click="setValue(search)"
+            >
+              {{ search.fullName }}
+            </a-select-option>
+          </a-select>
+          <a-spin :spinning="loading">
+            <a-tabs v-model="activeKey" size="small" :animated="false">
+              <a-tab-pane v-for="(tabs, key) in showData" :key="key" :tab="tabs.tab" :disabled="tabs.disabled">
+                <a-row v-if="tabs.data.length > 0">
+                  <a-col v-for="dataItem in tabs.data" :key="dataItem.number" :span="6">
+                    <a-button
+                      size="small"
+                      style="cursor: pointer; border: none"
+                      :type="dataItem.number === tabs.select ? 'primary' : ''"
+                      @click="getChildren(tabs, dataItem.number, dataItem.fullName, dataItem.fullNumber)"
+                    >
+                      {{ dataItem.name }}
+                    </a-button>
+                  </a-col>
+                </a-row>
+                <div v-else>{{ $t('暂无数据') }}</div>
+              </a-tab-pane>
+              <a-button slot="tabBarExtraContent" type="danger" ghost size="small" @click="resetClear">
+                {{ $t('清除') }}
+              </a-button>
+            </a-tabs>
+          </a-spin>
+        </div>
+      </a-popover>
+    </a-form>
+  </div>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+export default {
+  i18n: window.lang('admin'),
+  props: {
+    field: {
+      type: Object,
+      default: () => { }
+    },
+    valueKey: {
+      type: String,
+      default: () => ''
+    },
+    action: {
+      type: String,
+      default: () => { }
+    },
+    alias: {
+      type: String,
+      default: () => ''
+    },
+    fieldType: {
+      type: String,
+      default: () => ''
+    },
+    writeBack: {
+      type: Array,
+      default: () => []
+    },
+    fieldRule: {
+      type: String,
+      default: () => ''
+    },
+    display: {
+      type: String,
+      default: () => ''
+    },
+    size: {
+      type: String,
+      default: () => 'default'
+    },
+    value: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    this.searchTabs = debounce(this.searchTabs, 800)
+    return {
+      selectshow: false,
+      loading: false,
+      searchValue: '',
+      styleGround: {},
+      activeKey: 0,
+      sendValue: '',
+      searchdata: [],
+      allValue: '',
+      contents: '',
+      lastFetchId: 0,
+      fetching: false,
+      scrollStats: true,
+      page: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      form: this.$form.createForm(this),
+      showData: [{ tab: this.$t('1级'), data: [] }],
+      checkValue: '',
+      defaultValue: ''
+    }
+  },
+  watch: {
+    writeBack: {
+      handler (newValue) {
+        const tabs = JSON.parse(JSON.stringify(newValue))
+        this.showData.forEach((item, index) => {
+          item.tab = tabs[index] ? tabs[index].tab : (index + 1) + this.$t('级')
+          item.disabled = this.gdlx === 'ts2' && item.tab === '服务项目'
+        })
+      },
+      deep: true
+    },
+    // defaultValue: {
+    //   handler (newValue) {
+    //     if (this.fieldType !== 'search') {
+    //       this.loading = true
+    //       this.axios({
+    //         url: '/admin/dict/getCascader',
+    //         data: { dictCategoryNumber: this.valueKey || 1, dictDataNumber: newValue }
+    //       }).then(res => {
+    //         this.loading = false
+    //         this.childrenIn(res.result)
+    //       })
+    //     }
+    //   }
+    // },
+    value: {
+      handler (newValue) {
+        if (newValue && newValue.length) {
+          const obj = newValue[0]
+          this.contents = obj.fullDictDataName
+          this.checkValue = obj.dictDataNumber
+          this.defaultValue = obj.dictDataNumber
+          this.$emit('send', obj.dictDataNumber, this.alias, obj.fullDictDataName, '', obj.fullDictDataNumber)
+        }
+      },
+      immediate: true
+    }
+  },
+  mounted () {
+    // this.contents = this.field && this.field.value ? (this.field.value.display ? this.field.value.display : this.display) : ''
+    // if (this.fieldType === 'field' && this.defaultValue) {
+    //   this.loading = true
+    //   this.axios({
+    //     url: '/admin/dict/getCascader',
+    //     data: { dictCategoryNumber: this.valueKey || 1, dictDataNumber: this.defaultValue }
+    //   }).then(res => {
+    //     this.loading = false
+    //     this.childrenIn(res.result)
+    //   })
+    // }
+  },
+  methods: {
+    searchTabs (val) {
+      this.searchValue = val
+      this.page.pageNo = 1
+      this.scrollStats = true
+      if (val) {
+        this.lastFetchId += 1
+        const fetchId = this.lastFetchId
+        this.fetching = true
+        this.axios({
+          url: '/admin/search/dictSearch',
+          data: Object.assign(this.page, { dictCategoryNumber: this.valueKey, searchName: val })
+        }).then(res => {
+          if (fetchId !== this.lastFetchId) {
+            return
+          }
+          this.searchdata = res.result.data
+          this.fetching = false
+        })
+      } else {
+        this.searchdata = []
+      }
+    },
+    getTabsScroll () {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: Object.assign(this.page, { dictCategoryNumber: this.valueKey, searchName: this.searchValue })
+      }).then(res => {
+        if (!res.result.data.length) {
+          this.scrollStats = false
+        }
+        this.searchdata = [...this.searchdata, ...res.result.data]
+      })
+    },
+    popupScroll (e) {
+      const scrollTop = e.target.scrollTop
+      const scrollHeight = e.target.scrollHeight
+      const clientHeight = e.target.clientHeight
+      const scrollBottom = scrollHeight - clientHeight - scrollTop
+      if (scrollBottom < 1 && this.scrollStats && this.searchValue) {
+        this.page.pageNo++
+        this.getTabsScroll()
+      }
+    },
+    changeStatus () {
+      if (!this.showData[0].data.length && this.value && this.value.length) {
+        this.loading = true
+        this.axios({
+          url: '/admin/dict/getCascader',
+          data: { dictCategoryNumber: this.valueKey, dictDataNumber: this.checkValue }
+        }).then(res => {
+          this.loading = false
+          this.childrenIn(res.result)
+        })
+      } else if (this.showData[0].data.length === 0) {
+        this.loading = true
+        this.axios({
+          url: '/admin/dict/getCascader',
+          data: { dictCategoryNumber: this.valueKey }
+        }).then(res => {
+          this.loading = false
+          this.showData[0].data = res.result
+          this.showData[0].tab = this.writeBack[0].tab
+        })
+      }
+      this.selectshow = !this.selectshow
+    },
+    childrenIn (data) {
+      this.showData[this.activeKey].data = data
+      this.showData[this.activeKey].tab = this.writeBack[this.activeKey] ? this.writeBack[this.activeKey].tab : (this.activeKey + 1) + '级'
+      data.forEach(item => {
+        if (item.children) {
+          this.showData[this.activeKey].select = item.number
+          this.contents = item.fullName
+          this.allValue = item.fullNumber
+          if (item.children.length > 0) {
+            this.$emit('send', item.number, this.alias, item.fullName, 'true', item.fullNumber)
+            this.showData.splice(this.activeKey + 1, 0, { data: [], tab: (this.activeKey + 2) + this.$t('级') })
+            this.activeKey++
+            this.childrenIn(item.children)
+          } else {
+            this.$emit('send', item.number, this.alias, item.fullName, '', item.fullNumber)
+          }
+        } else if (item.number === this.defaultValue) {
+          this.contents = item.fullName
+          this.allValue = item.fullNumber
+          this.showData[this.activeKey].select = item.number
+          this.getChildren(item, item.number, item.fullName, item.fullNumber)
+          this.$emit('send', item.number, this.alias, item.fullName, '', item.fullNumber)
+        }
+      })
+    },
+    reset () {
+      this.searchdata = []
+    },
+    resetClear () {
+      this.showData.splice(1, this.showData.length - 1)
+      this.showData[0].select = ''
+      this.contents = ''
+      this.allValue = ''
+      this.checkValue = ''
+      this.activeKey = 0
+      this.$emit('send', '', this.alias)
+    },
+    setValue (search) {
+      this.axios({
+        url: '/admin/dict/getChildren',
+        data: { dictCategoryNumber: this.valueKey, parentDictDataNumber: search.number }
+      }).then(res => {
+        this.selectshow = false
+        this.contents = search.fullName
+        this.allValue = search.fullNumber
+        this.checkValue = search.dictDataNumber
+        this.searchdata = []
+        let str = ''
+        if (res.result.length > 0) {
+          str = 'true'
+        }
+        this.$emit('send', search.number, this.alias, search.name, str, search.fullNumber)
+      })
+    },
+    getChildren (tabs, value, name, allValue) {
+      this.$set(tabs, 'select', value)
+      this.contents = name
+      this.allValue = allValue
+      this.checkValue = value
+      this.loading = true
+      this.axios({
+        url: '/admin/dict/getChildren',
+        data: { dictCategoryNumber: this.valueKey, parentDictDataNumber: value }
+      }).then(res => {
+        this.loading = false
+        if (res.result.length > 0) {
+          this.$emit('send', value, this.alias, name, 'true', allValue)
+        } else if (this.defaultValue === value) {
+          this.$emit('send', value, this.alias, name, '', allValue)
+        } else {
+          this.selectshow = false
+          this.$emit('send', value, this.alias, name, '', allValue)
+        }
+        if (!this.showData[this.activeKey + 1] && res.result.length > 0) {
+          this.showData.splice(this.activeKey + 1, this.showData.length - (this.activeKey + 1), { data: [], tab: '' })
+          this.$set(this.showData[this.activeKey + 1], 'data', res.result)
+          this.$set(this.showData[this.activeKey + 1], 'tab', this.writeBack[this.activeKey + 1] ? this.writeBack[this.activeKey + 1].tab : this.activeKey + 2 + '级')
+          this.activeKey = this.activeKey + 1
+        } else if (res.result.length > 0) {
+          this.showData[this.activeKey + 1].data = res.result
+          this.showData.splice(this.activeKey + 2, this.showData.length - (this.activeKey + 1))
+          this.activeKey = this.activeKey + 1
+        } else {
+          this.showData.splice(this.activeKey + 1, this.showData.length - (this.activeKey + 1))
+        }
+      })
+    }
+  }
+}
+</script>

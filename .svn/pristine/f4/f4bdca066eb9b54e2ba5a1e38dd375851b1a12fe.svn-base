@@ -1,0 +1,141 @@
+<template>
+  <a-drawer
+    title="导入"
+    :width="600"
+    :visible="visible"
+    :confirmLoading="loading"
+    :destroyOnClose="true"
+    @ok="handleSubmit"
+    @close="handleCancel"
+  >
+    <a-spin :spinning="loading" style="display: flex; flex-direction: column; height: 100%; background-color: white">
+      <div>
+        <a-form :form="form">
+          <a-form-item label="模板下载" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-button size="small" @click="handleDownLoad">模板下载</a-button>
+          </a-form-item>
+          <a-form-item label="导入文件" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-upload
+              name="upload"
+              :showUploadList="false"
+              :action="uploadUrl"
+              :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+              @change="handleChange"
+            >
+              <a-button size="small">
+                <a-icon type="upload" />
+                选择文件
+              </a-button>
+            </a-upload>
+            {{ uploadMessage }}
+          </a-form-item>
+        </a-form>
+        <a-table
+          ref="table"
+          style="flex-grow: 1; margin: 8px"
+          class="table-fill"
+          size="small"
+          rowKey="table"
+          :scroll="{ y: true }"
+          :columns="columns"
+          :dataSource="tablefield"
+        >
+          <div slot="check" slot-scope="text">
+            <a-icon v-if="text === 0" type="check-circle" theme="twoTone" two-tone-color="#52c41a" />
+            <a-icon v-else type="close-circle" theme="twoTone" two-tone-color="#f5222d" />
+          </div>
+        </a-table>
+      </div>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">保存</a-button>
+        <a-button @click="visible = !visible">关闭</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  data () {
+    return {
+      labelCol: {
+        xs: { span: 24 },
+        sm: { span: 4 }
+      },
+      wrapperCol: {
+        xs: { span: 24 },
+        sm: { span: 20 }
+      },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      tablefield: [],
+      csvfield: [],
+      columns: [{
+        title: '数据表字段',
+        dataIndex: 'table'
+      }, {
+        title: '导入文件字段',
+        dataIndex: 'csv'
+      }, {
+        title: '校验',
+        dataIndex: 'check',
+        scopedSlots: { customRender: 'check' }
+      }],
+      fileName: '',
+      filePath: '',
+      uploadMessage: '请选择要导入的文件',
+      downloadUrl: `${process.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=static/template/知识库导入模板.xlsx`,
+      uploadUrl: `${process.env.VUE_APP_API_BASE_URL}admin/attachment/upload`
+    }
+  },
+  methods: {
+    show () {
+      this.visible = true
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          values.fileName = this.fileName
+          values.filePath = this.filePath
+          this.axios({
+            url: '/knowledge/index/importKnowledge',
+            data: values
+          }).then((res) => {
+            this.loading = false
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$emit('ok')
+              this.visible = false
+              this.$message.success(res.result.message)
+            }
+          })
+        }
+      })
+    },
+    handleDownLoad () {
+      window.open(this.downloadUrl)
+    },
+    handleCancel () {
+      this.visible = false
+    },
+    handleChange (info) {
+      this.loading = true
+      if (info.file.status === 'uploading') {
+        this.uploadMessage = '文件【' + info.file.name + '】上传中...'
+      } else if (info.file.status === 'done') {
+        this.loading = false
+        this.uploadMessage = '文件【' + info.file.name + '】上传完成'
+        this.tablefield = info.file.response.result.data
+        this.fileName = info.file.response.result.fileName
+        this.filePath = info.file.response.result.filePath
+      } else if (info.file.status === 'error') {
+        this.loading = false
+        this.uploadMessage = '文件【' + info.file.name + '】上传失败'
+        this.fileName = ''
+      }
+    }
+  }
+}
+</script>

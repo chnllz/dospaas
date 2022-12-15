@@ -1,0 +1,225 @@
+<template>
+  <a-modal :visible="true" :title="$t('底部导航设置')" :width="1000" @cancel="visible = !visible">
+    <a-spin :spinning="spinning">
+      <a-form>
+        <!-- <a-form-item :label="$t('底部导航栏')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 14 }">
+          <a-switch
+            v-model="showTabbar"
+            @change="
+              (val) => {
+                tabbarList = []
+                if (val) {
+                  const tarbarItem1 = JSON.parse(JSON.stringify(tarbarConfig))
+                  const tarbarItem2 = JSON.parse(JSON.stringify(tarbarConfig))
+                  tabbarList.push(tarbarItem1, tarbarItem2)
+                }
+              }
+            "
+          ></a-switch>
+        </a-form-item> -->
+        <div style="position: relative">
+          <a-row>
+            <a-col :span="2">
+              <div style="height: 28px; line-height: 28px; text-align: right">{{ $t('导航栏') }}</div>
+            </a-col>
+            <a-col :span="4">
+              <a-button type="link" @click="addTabbar">
+                {{ $t('添加') }}
+              </a-button>
+            </a-col>
+          </a-row>
+          <draggable
+            v-model="tabbarList"
+            animation="200"
+            handle=".handle"
+            :style="{
+              'flex-grow': 1,
+              overflow: 'auto',
+              display: 'flex',
+              'flex-flow': 'column wrap',
+              'align-content': 'flex-start'
+            }"
+          >
+            <a-row v-for="(tarbarItem, index) in tabbarList" :key="index" class="handle tabbar-item" :gutter="6">
+              <a-col span="1">
+                <a-icon type="drag" class="handle" style="cursor: pointer" />
+              </a-col>
+              <a-col span="5">
+                <a-input v-model="tarbarItem.appId" :placeholder="$t('APP名称')"></a-input>
+              </a-col>
+              <a-col span="5">
+                <a-input v-model="tarbarItem.navigationName" :placeholder="$t('导航名称')"></a-input>
+              </a-col>
+              <a-col span="2">
+                <set-icon
+                  :currentIconProp="tarbarItem.icon"
+                  @setUViewIcon="
+                    (val) => {
+                      tarbarItem.icon = val
+                    }
+                  "
+                />
+              </a-col>
+              <a-col span="5">
+                <a-select
+                  v-model="tarbarItem.navigationType"
+                  :placeholder="$t('导航页面类型	')"
+                  @change="(val) => handleChange(val, tarbarItem)"
+                >
+                  <a-select-option key="appBasicPage" value="appBasicPage">{{ $t('自定义页面') }}</a-select-option>
+                  <a-select-option key="appDataWindow" value="appDataWindow">{{ $t('数据窗口') }}</a-select-option>
+                  <a-select-option key="custom" value="custom">{{ $t('自定义') }}</a-select-option>
+                </a-select>
+              </a-col>
+              <a-col span="5">
+                <a-cascader
+                  v-if="['appBasicPage', 'appDataWindow'].includes(tarbarItem.navigationType)"
+                  :placeholder="
+                    tarbarItem.navigationType === 'appDataWindow' ? $t('请选择数据窗口') : $t('请选择自定义页面')
+                  "
+                  :show-search="true"
+                  option-filter-prop="children"
+                  :options="tarbarItem.navigationType === 'appDataWindow' ? appDataWindow : appBasicPage"
+                  :fieldNames="{
+                    label: 'text',
+                    value: 'value',
+                    children: 'children'
+                  }"
+                />
+                <a-input v-else v-model="tarbarItem.navigationPath"></a-input>
+              </a-col>
+              <a-col span="1">
+                <a-icon
+                  v-show="tabbarList.length > 2"
+                  type="delete"
+                  class="handle"
+                  style="cursor: pointer; color: red; margin-left: 4px"
+                  @click="
+                    () => {
+                      if (tabbarList.length > 2) {
+                        tabbarList.splice(index, 1)
+                      }
+                    }
+                  "
+                />
+              </a-col>
+            </a-row>
+          </draggable>
+        </div>
+      </a-form>
+      <template slot="footer">
+        <a-button type="primary" @click="saveTababr">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = false">{{ $t('关闭') }}</a-button>
+      </template>
+    </a-spin>
+  </a-modal>
+</template>
+
+<script>
+export default {
+  components: {
+    draggable: () => import('vuedraggable'),
+    setIcon: () => import('./setIcon')
+  },
+  data () {
+    return {
+      visible: false,
+      showTabbar: false,
+      tarbarConfig: {
+        appId: '', // APP名称
+        navigationName: '', // 导航名称
+        navigationIcon: '', // 导航图标
+        navigationType: '', // 导航页面类型
+        navigationPath: '', // 导航页面配置
+        status: true // 状态
+      },
+      tabbarList: [
+        {
+          appId: '', // APP名称
+          navigationName: '', // 导航名称
+          navigationIcon: '', // 导航图标
+          navigationType: '', // 导航页面类型
+          navigationPath: '', // 导航页面配置
+          status: true // 状态
+        },
+        {
+          appId: '', // APP名称
+          navigationName: '', // 导航名称
+          navigationIcon: '', // 导航图标
+          navigationType: '', // 导航页面类型
+          navigationPath: '', // 导航页面配置
+          status: true // 状态
+        }
+      ],
+      appDataWindow: [],
+      appBasicPage: [],
+      spinning: true
+    }
+  },
+  async mounted () {
+    this.spinning = true
+    await this.axios({
+      url: '/admin/modeling/initAppBasePageTrees'
+    }).then(res => {
+      const loop = (list) => {
+        list.forEach(item => {
+          item.text = item.name
+          item.value = item.templateId
+          if (item.children && item.children.lenght > 0) {
+            loop(item.children)
+          } else {
+            delete item.children
+          }
+        })
+      }
+      const list = res.result
+      loop(list)
+      this.appBasicPage = list
+    })
+    await this.axios({
+      url: '/admin/modeling/getAppDataWindowCascadeOptions'
+    }).then(res => {
+      if (!res.code) {
+        this.appDataWindow = res.result
+      }
+    })
+    this.spinning = false
+  },
+  methods: {
+    show () {
+      this.visible = true
+    },
+    addTabbar () {
+      if (this.tabbarList.length < 5) {
+        const tarbarItem = JSON.parse(JSON.stringify(this.tarbarConfig))
+        this.tabbarList.push(tarbarItem)
+      } else {
+        this.$message.warning('最多配置5个导航')
+      }
+    },
+    handleChange (val, tarbarItem) {
+      if (val === 'appBasicPage') {
+        tarbarItem.list = this.appBasicPage
+        console.log('tarbarItem', tarbarItem)
+      } else if (val === 'appDataWindow') {
+        tarbarItem.list = this.appDataWindow
+      }
+    },
+    saveTababr () { }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.tabbar-card {
+  width: 100%;
+}
+.tabbar-item {
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  line-height: 38px;
+}
+</style>

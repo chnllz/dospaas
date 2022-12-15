@@ -1,0 +1,276 @@
+<template>
+  <div>
+    <vue-tinymce
+      ref="tm"
+      :key="tinyKey"
+      v-model="content"
+      :setup="setup"
+      :setting="Object.assign(setting, newOptions)"
+    />
+  </div>
+</template>
+<script>
+import VueTinymce from '@packy-tang/vue-tinymce/src/vue-tinymce'
+import storage from '@/utils/storage'
+export default {
+  components: {
+    VueTinymce
+  },
+  props: {
+    disabled: {
+      type: Boolean,
+      default: false
+    },
+    newId: {
+      type: String,
+      default: ''
+    },
+    newOptions: {
+      type: Object,
+      default: () => { }
+    },
+    // 表单校验用字段
+    // eslint-disable-next-line
+    value: {
+      type: String
+    }
+  },
+  data () {
+    return {
+      content: '',
+      editor: null,
+      tinyKey: 1,
+      setting: {
+        language_url: require('@/components/Editor/zh_CN'),
+        // 图片上传时关闭相对路径
+        relative_urls: false,
+        language: storage.get('lang'),
+        height: 600,
+        plugins: 'link lists advlist image imagetools code table colorpicker textcolor wordcount textpattern hr preview fullscreen codesample',
+        file_picker_types: 'file image media',
+        contextmenu: false,
+        branding: false,
+        // 去除段落的默认设定
+        // forced_root_block: false,
+        // 为初始内容增加格外属性
+        forced_root_block_attrs: {
+          style: 'margin: 0; font-size:16px;'
+        },
+        // 禁用url自动补齐功能
+        convert_urls: false,
+        // 链接默认新窗口打开
+        default_link_target: '_blank',
+        // 关闭链接配置标题
+        link_title: false,
+        // eslint-disable-next-line no-useless-escape
+        toolbar: `fullscreen | fontselect fontsizeselect styleselect | alignment retract lineheight | bold italic underline strikethrough | forecolor backcolor removeformat formatpainter | bullist numlist | \ 
+        table image codesample code hr link blockquote preview`,
+        // 选中图片工具内容
+        imagetools_toolbar: 'imageoptions',
+        // 取消设置图片宽高
+        // image_dimensions: false,
+
+        // 行高列表
+        lineheight_formats: '1 1.5 1.6 1.75 1.8 2 3',
+        // 段落格式列表
+        style_formats: [
+          {
+            title: 'Header 1', block: 'h1', styles: { 'font-size': '30px' }
+          }, {
+            title: 'Header 2', block: 'h2', styles: { 'font-size': '24px' }
+          }, {
+            title: 'Header 3', block: 'h3', styles: { 'font-size': '18px' }
+          }, {
+            title: 'Header 4', block: 'h4', styles: { 'font-size': '16px' }
+          }, {
+            title: 'Header 5', block: 'h5', styles: { 'font-size': '14px' }
+          }, {
+            title: 'Header 6', block: 'h6', styles: { 'font-size': '12px' }
+          }, {
+            title: this.$t('正文'), block: 'p'
+          }
+        ],
+        // 按钮拓展列表
+        toolbar_groups: {
+          // 对齐方式
+          alignment: {
+            icon: 'align-left',
+            tooltip: this.$t('对齐'),
+            items: 'alignleft aligncenter alignright alignjustify'
+          },
+          // 缩进方式
+          retract: {
+            icon: 'outdent',
+            tooltip: this.$t('缩进'),
+            items: 'outdent indent'
+          }
+        },
+        // 字体大小列表
+        fontsize_formats: '12px 14px 16px 18px 24px 36px 48px 56px 72px',
+        // 字体列表
+        font_formats: `${this.$t('微软雅黑')}=Microsoft YaHei,Helvetica Neue,PingFang SC,sans-serif;${this.$t('苹果苹方')}= PingFang SC, Microsoft YaHei, sans- serif; ${this.$t('宋体')}=simsun, serif; ${this.$t('仿宋体')}=FangSong, serif; ${this.$t('黑体')}=SimHei, sans- serif; Arial = arial, helvetica, sans - serif;Arial Black = arial black, avant garde;Book Antiqua = book antiqua, palatino; `,
+        // 快捷操作列表
+        textpattern_patterns: [
+          { start: '*', end: '*', format: 'italic' },
+          { start: '**', end: '**', format: 'bold' },
+          { start: '#', format: 'h1', styles: { 'font-size': '30px' } },
+          { start: '##', format: 'h2', styles: { 'font-size': '24px' } },
+          { start: '###', format: 'h3', styles: { 'font-size': '18px' } },
+          { start: '####', format: 'h4', styles: { 'font-size': '16px' } },
+          { start: '#####', format: 'h5', styles: { 'font-size': '14px' } },
+          { start: '######', format: 'h6', styles: { 'font-size': '12px' } },
+          { start: '1. ', cmd: 'InsertOrderedList' },
+          { start: '* ', cmd: 'InsertUnorderedList' },
+          { start: '- ', cmd: 'InsertUnorderedList' }
+        ],
+        init_instance_callback: editor => {
+          // 初始化赋值
+          if (this.value) {
+            editor.setContent(this.value)
+          }
+          editor.on('paste', (e) => {
+            // 监听粘贴事件
+            this.onPaste(e)
+          })
+          if (this.newId) {
+            editor.id = this.newId
+          }
+        },
+        images_upload_handler: (blobInfo, success, failure) => {
+          const base64ToFile = (data) => {
+            // 将base64 的图片转换成file对象上传 atob将ascii码解析成binary数据
+            const binary = atob(data.split(',')[1])
+            const mime = data.split(',')[0].match(/:(.*?);/)[1]
+            const array = []
+            for (let i = 0; i < binary.length; i++) {
+              array.push(binary.charCodeAt(i))
+            }
+            const fileData = new Blob([new Uint8Array(array)], {
+              type: mime
+            })
+            const file = new File([fileData], `${blobInfo.blob().name} `, { type: mime })
+            return file
+          }
+          const file = base64ToFile('data:image/jpeg;base64,' + blobInfo.base64())
+          const formData = new FormData()
+          formData.append('upload', file)
+          this.$nextTick(() => {
+            this.axios({
+              url: '/admin/attachment/upload/?uploadName=upload',
+              data: formData,
+              'Access-Token': this.$store.getters.userInfo.accessToken
+            }).then(res => {
+              if (!res.code) {
+                const path = encodeURIComponent(res.result.filePath)
+                const img = location.origin + process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + path
+                success(img)
+              } else {
+                this.$message.error(this.$t('上传失败'))
+              }
+            })
+          })
+        },
+        file_picker_callback: (callback, value, meta) => {
+          const filetype = '.pdf, .txt, .zip, .rar, .7z, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .mp3, .mp4'
+          const that = this
+          const input = document.createElement('input')
+          input.setAttribute('type', 'file')
+          input.setAttribute('accept', filetype)
+          input.click()
+          input.onchange = function () {
+            const file = this.files[0]
+            const formData = new FormData()
+            formData.append('upload', file)
+            that.axios({
+              url: '/admin/attachment/upload/?uploadName=upload',
+              data: formData,
+              'Access-Token': that.$store.getters.userInfo.accessToken
+            }).then(res => {
+              if (!res.code) {
+                const path = encodeURIComponent(res.result.filePath)
+                const filePath = location.origin + process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + path
+                callback(filePath, { text: res.result.fileName })
+              } else {
+                that.$message.error(that.$t('上传失败'))
+              }
+            })
+          }
+        },
+        menubar: false // 隐藏菜单栏
+      }
+    }
+  },
+  watch: {
+    content (newVal, oldVal) {
+      this.content = newVal
+      this.$emit('change', newVal)
+    },
+    value (newVal) {
+      this.content = newVal
+    }
+  },
+  activated () {
+    this.tinyKey++
+  },
+  methods: {
+    setup (editor) {
+      this.editor = editor
+      editor.on('init', function () {
+        this.getDoc().body.style.fontFamily = 'Microsoft YaHei'
+      })
+      this.$emit('get', editor.id)
+    },
+    onPaste (event) {
+      const items = (event.clipboardData || window.clipboardData).items
+      if (items[0].type.indexOf('image') !== -1) {
+        event.preventDefault()
+        const file = items[0].getAsFile()
+        const formData = new FormData()
+        formData.append('upload', file)
+        this.$nextTick(() => {
+          this.$setLoading({ spinning: true, tip: this.$t('图片上传中,请稍后……') })
+          this.axios({
+            url: '/admin/attachment/upload/?uploadName=upload',
+            data: formData,
+            'Access-Token': this.$store.getters.userInfo.accessToken
+          }).then(res => {
+            this.$setLoading({ spinning: false, tip: null })
+            if (!res.code) {
+              const path = encodeURIComponent(res.result.filePath)
+              const img = location.origin + process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + path
+              window.tinymce.get(this.editor.id).insertContent(`< img src = "${img}" />`)
+            } else {
+              this.$message.error(this.$t('图片上传失败'))
+            }
+          })
+        })
+      }
+    }
+  }
+}
+</script>
+<style lang="less">
+.tox-toolbar__primary .tox-toolbar__group:first-child {
+  position: absolute;
+  right: 0;
+}
+.tox {
+  .tox-tbtn:hover {
+    // background: #ebf3ff;
+    cursor: pointer;
+  }
+  .tox-tbtn__select-label:hover {
+    cursor: pointer;
+  }
+  .tox-tbtn--bespoke .tox-tbtn__select-label {
+    width: 4em;
+    margin: 0 2px;
+  }
+  .tox-tbtn[aria-label='字号'] {
+    width: 60px;
+  }
+  .tox-tbtn[aria-label='格式'] {
+    width: 60px;
+  }
+}
+</style>

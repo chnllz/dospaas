@@ -1,0 +1,23 @@
+<template>
+  <component :is="coms" :ref="config.ref" :config="config" @ok="getValue" />
+</template>
+<script>
+export default {
+  data () {
+    return {
+      config: {},
+      coms: ''
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.coms = () => import('@/views/' + config.coms)
+    },
+    getValue (val) {
+      this.config.callback && this.config.callback(val)
+      this.$emit('ok', val)
+    }
+  }
+}
+</script>

@@ -1,0 +1,329 @@
+<template>
+  <a-row :gutter="16" style="height: 100%; padding: 0px 12px">
+    <a-col :span="8" class="page" style="height: 100%; border-right: 4px solid rgb(240, 242, 245)">
+      <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search">
+        <a-row class="form normal" style="height: 36px; align-items: center">
+          <a-col :span="17">
+            <a-input v-model="queryParam.name" :placeholder="$t('请输入名称')" style="width: 100%" />
+          </a-col>
+          <a-space style="padding-left: 8px">
+            <a-button htmlType="submit" @click="$refs.table1.refresh(true)">{{ $t('搜索') }}</a-button>
+            <a-button
+              @click="
+                () => {
+                  queryParam = {}
+                  $refs.table1.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+          </a-space>
+        </a-row>
+      </a-form>
+      <a-space>
+        <a-button icon="plus" type="primary" @click="handleAdd()">{{ $t('添加') }}</a-button>
+      </a-space>
+      <s-table
+        ref="table1"
+        class="table-fill"
+        size="small"
+        rowKey="id"
+        :columns="columns"
+        :scroll="{ y: true }"
+        :data="loadDataTable"
+        :sorter="sorter"
+      >
+        <div slot="action" slot-scope="text, record">
+          <a @click="handleEdit(record)">{{ $t('编辑') }}</a>
+          <a-divider type="vertical" />
+          <a @click="handleDelete(record)">{{ $t('删除') }}</a>
+        </div>
+        <a slot="name" slot-scope="text, record" @click="handleDetail(record)">{{ text }}</a>
+      </s-table>
+    </a-col>
+    <a-col v-if="details" :span="16" class="page" style="height: 100%">
+      <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search">
+        <a-row class="form normal">
+          <a-col :span="10">
+            <a-form-item :label="$t('所属分类')">
+              <a-input v-model="categoryName" :disabled="true" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="10">
+            <a-form-item :label="$t('关键字')">
+              <a-input v-model="queryContentParam.content" :placeholder="$t('请输入快捷词或回复内容')" />
+            </a-form-item>
+          </a-col>
+          <a-space style="padding-left: 8px">
+            <a-button htmlType="submit" @click="$refs.table2.refresh(true)">{{ $t('搜索') }}</a-button>
+            <a-button
+              @click="
+                () => {
+                  queryContentParam = {}
+                  $refs.table2.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+          </a-space>
+        </a-row>
+      </a-form>
+      <a-space>
+        <a-button icon="plus" type="primary" @click="handleContentAdd">{{ $t('添加') }}</a-button>
+        <a-button icon="upload" @click="handleImport">{{ $t('导入') }}</a-button>
+      </a-space>
+      <s-table
+        ref="table2"
+        class="table-fill"
+        size="small"
+        rowKey="id"
+        :columns="columns2"
+        :scroll="{ y: true }"
+        :data="loadDataTable2"
+        :sorter="sorter"
+      >
+        <div slot="action" slot-scope="text, record">
+          <a @click="handleContentEdit(record)">{{ $t('编辑') }}</a>
+          <a-divider type="vertical" />
+          <a @click="handleContentDelete(record)">{{ $t('删除') }}</a>
+        </div>
+      </s-table>
+    </a-col>
+    <a-col
+      v-else
+      :span="16"
+      style="height: 100%; background: #fff; display: flex; align-items: center; justify-content: center"
+    >
+      <a-result :title="$t('请先选择一个分类')"></a-result>
+    </a-col>
+    <reply-category-form ref="replyCategoryForm" @ok="handleCategoryOk"></reply-category-form>
+    <reply-content-form ref="replyContentForm" @ok="handleContentOk"></reply-content-form>
+    <general-export ref="generalExport">
+      <a-alert :message="$t('注意')" :description="message" type="warning" show-icon />
+      <a-form-item :label="$t('模板下载')">
+        <a-button icon="download" @click="temDownload">{{ $t('模板下载') }}</a-button>
+      </a-form-item>
+    </general-export>
+  </a-row>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    ReplyCategoryForm: () => import('@/views/chat/ReplyCategoryForm'),
+    ReplyContentForm: () => import('@/views/chat/ReplyContentForm'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    tabKey: {
+      type: Number,
+      default: null
+    }
+  },
+  data () {
+    return {
+      // 快捷内容默认不显示
+      details: false,
+      queryParam: {},
+      queryContentParam: {},
+      columns: [{
+        title: this.$t('操作'),
+        align: 'center',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        align: 'right',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('名称'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'name' },
+        sorter: true
+      }, {
+        title: this.$t('最后修改人'),
+        width: 100,
+        dataIndex: 'updateUser'
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        sorter: true
+      }],
+      columns2: [{
+        title: this.$t('操作'),
+        align: 'center',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        align: 'right',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('快捷词'),
+        dataIndex: 'title',
+        width: 200,
+        sorter: true
+      }, {
+        title: this.$t('回复内容'),
+        dataIndex: 'content',
+        sorter: true
+      }, {
+        title: this.$t('最后修改人'),
+        width: 100,
+        dataIndex: 'updateUser'
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 150,
+        sorter: true
+      }],
+      sorter: { field: 'id', order: 'descend' },
+      myvisible: false,
+      loading: false,
+      categoryId: '',
+      categoryName: '',
+      message: <div>{this.$t('1、导入时，若{分类名称}不存在，将自动创建新的分类。')}<br />{this.$t('2、{快捷词}范围：2-20字符。')}</div>
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    loadDataTable (parameter) {
+      let serviceId = ''
+      if (!this.param) {
+        serviceId = this.userInfo.username
+      }
+      const params = Object.assign(parameter, this.queryParam, { type: this.tabKey ? 'public' : 'private', serviceId: serviceId })
+      return this.axios({
+        url: '/chat/replyCategory/init',
+        data: params
+      }).then(res => {
+        return res.result
+      })
+    },
+    loadDataTable2 (parameter) {
+      const params = Object.assign(parameter, this.queryContentParam, { type: this.tabKey ? 'public' : 'private', id: this.categoryId })
+      return this.axios({
+        url: '/chat/reply/init',
+        data: params
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleCategoryOk () {
+      this.$refs.table1.refresh()
+    },
+    handleContentOk () {
+      if (this.$refs.table2) {
+        this.$refs.table2.refresh()
+      }
+    },
+    // 分类
+    handleAdd () {
+      this.loading = true
+      this.$refs.replyCategoryForm.show({
+        title: this.$t('添加'),
+        url: '/chat/replyCategory/add',
+        type: this.tabKey ? 'public' : 'private'
+      })
+    },
+    handleEdit (record) {
+      this.$refs.replyCategoryForm.show({
+        title: this.$t('编辑') + '：' + record.name,
+        url: '/chat/replyCategory/edit',
+        record: record,
+        type: this.tabKey ? 'public' : 'private'
+      })
+    },
+    handleDelete (record) {
+      const that = this
+      const table1 = this.$refs.table1
+      const id = record && record.id
+      this.$confirm({
+        title: record ? this.$t('删除分类时将会同时删除分类下面的所有快捷回复内容，您确认要删除吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/chat/replyCategory/delete',
+            data: { action: 'delete', id: id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+            } else {
+              that.$message.error(res.message)
+            }
+            that.details = false
+            table1.refresh()
+          })
+        }
+      })
+    },
+    handleDetail (record) {
+      this.details = true
+      this.categoryId = record.id
+      this.categoryName = record.name
+      this.handleContentOk()
+    },
+    // 快捷回复
+    handleContentAdd () {
+      this.$refs.replyContentForm.show({
+        title: this.$t('添加'),
+        url: '/chat/reply/add',
+        type: this.tabKey ? 'public' : 'private',
+        categoryName: this.categoryName,
+        categoryId: this.categoryId
+      })
+    },
+    handleContentEdit (record) {
+      this.$refs.replyContentForm.show({
+        title: this.$t('编辑') + '：' + record.title,
+        url: '/chat/reply/edit',
+        record: record,
+        type: this.tabKey ? 'public' : 'private',
+        categoryName: this.categoryName,
+        categoryId: this.categoryId
+      })
+    },
+    handleContentDelete (record) {
+      const that = this
+      const table2 = this.$refs.table2
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/chat/reply/delete',
+            data: { action: 'delete', id: record.id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+            } else {
+              that.$message.error(res.message)
+            }
+            table2.refresh()
+          })
+        }
+      })
+    },
+    handleImport () {
+      this.$refs.generalExport.show({
+        slotScoped: true,
+        title: this.$t('导入'),
+        type: 'import',
+        className: this.tabKey ? 'ImportPublicReplyTask' : 'ImportPrivateReplyTask'
+      })
+    },
+    // 模板下载
+    temDownload () {
+      const filePath = encodeURIComponent('static/template/chat/快捷词导入模板.xlsx')
+      window.open(`${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}`)
+    }
+  }
+}
+</script>

@@ -1,0 +1,632 @@
+<template>
+  <div>
+    <a-space>
+      <a-button @click="handleVisiable(2)">{{ $t('选择字段') }}</a-button>
+      <a-button v-if="setting.enableWorkflow" @click="workflowFilterSetting()">{{ $t('设置流程筛选组') }}</a-button>
+      <a-button @click="searchTemplateSetting()">{{ $t('添加搜索模板组') }}</a-button>
+      <a-button @click="multiFieldSearch()">{{ $t('添加多字段搜索框') }}</a-button>
+      <a-button @click="handleVisiable(1)">{{ $t('添加自定义组件') }}</a-button>
+      <a-button @click="handleVisiable('setting')">{{ $t('设置') }}</a-button>
+      <a-popconfirm
+        :title="$t('请确实是否清除所有内容？')"
+        :ok-text="$t('确定')"
+        :cancel-text="$t('取消')"
+        @confirm="handleVisiable(3)"
+      >
+        <a-button type="danger">{{ $t('清空内容') }}</a-button>
+      </a-popconfirm>
+    </a-space>
+    <a-divider style="margin: 8px 0" />
+    <draggable
+      v-if="data.length !== 0"
+      v-model="data"
+      class="list-group"
+      animation="200"
+      handle=".handle"
+      @start="drag = true"
+      @end="drag = false"
+    >
+      <div
+        v-for="element in data"
+        :key="element.id"
+        :class="['item', 'ant-col-' + element.column]"
+        :style="[element.fieldRule === 'hidden' ? { backgroundColor: '#f5f5f5' } : {}]"
+      >
+        <div style="display: flex; align-items: center; margin-bottom: 5px">
+          <a-icon type="drag" class="handle" />
+          <span v-if="element.type === 'place'" style="flex: 1"></span>
+          <span v-else style="flex: 1">
+            {{ element.changeTitle ? element.changeTitle : element.componentName || element.name }}:
+          </span>
+          <a-icon class="action" type="setting" @click="handleEdit(element)" />
+          <a-popconfirm
+            :title="$t('请确认是否删除?')"
+            :ok-text="$t('确定')"
+            :cancel-text="$t('取消')"
+            @confirm="handleDel(element)"
+          >
+            <a-icon class="action" type="delete" />
+          </a-popconfirm>
+        </div>
+        <a-input
+          v-if="(element.formType === 'text' && element.type === 'field') || element.type === 'multiFieldSearch'"
+          :disabled="element.fieldRule === 'readonly'"
+        />
+        <a-input v-else-if="element.type === 'component'" :placeholder="$t('组件')" />
+        <a-input v-else-if="element.type === 'place'" :placeholder="$t('占位符')" />
+        <a-input v-else-if="element.formType === 'serialnumber'" :placeholder="$t('流水号')" />
+        <a-divider v-else-if="element.type === 'divider'">{{ $t('分隔符') }}</a-divider>
+        <a-textarea
+          v-else-if="element.formType === 'textarea'"
+          :rows="2"
+          :disabled="element.fieldRule === 'readonly'"
+        />
+        <a-date-picker
+          v-else-if="element.formType === 'datetime'"
+          format="YYYY-MM-DD HH:mm:ss"
+          style="width: 100%"
+          :disabled="element.fieldRule === 'readonly'"
+        />
+        <a-select
+          v-else-if="
+            element.formType === 'combobox' || element.formType === 'organization' || element.formType === 'score'
+          "
+          style="width: 100%"
+          :disabled="element.fieldRule === 'readonly'"
+        >
+          <a-select-option value="1">{{ $t('选项1') }}</a-select-option>
+          <a-select-option value="2">{{ $t('选项2') }}</a-select-option>
+        </a-select>
+        <a-radio-group v-else-if="element.formType === 'radio'" :disabled="element.fieldRule === 'readonly'">
+          <a-radio value="1">{{ $t('选项1') }}</a-radio>
+          <a-radio value="2">{{ $t('选项2') }}</a-radio>
+        </a-radio-group>
+        <a-checkbox-group v-else-if="element.formType === 'checkbox'" :disabled="element.fieldRule === 'readonly'">
+          <a-checkbox value="1">{{ $t('选项1') }}</a-checkbox>
+          <a-checkbox value="2">{{ $t('选项2') }}</a-checkbox>
+        </a-checkbox-group>
+        <a-tree-select
+          v-else-if="element.formType === 'treeselect'"
+          style="width: 100%"
+          :placeholder="$t('请选择')"
+          allow-clear
+        >
+          <a-tree-select-node key="0-1" value="parent 1" :title="$t('根节点1')">
+            <a-tree-select-node key="random" value="leaf1" :title="$t('叶子1')" />
+            <a-tree-select-node key="random1" value="leaf2" :title="$t('叶子2')" />
+          </a-tree-select-node>
+          <a-tree-select-node key="0-2" value="parent 2" :title="$t('根节点2')">
+            <a-tree-select-node key="random2" value="leaf3" :title="$t('叶子3')" />
+            <a-tree-select-node key="random3" value="leaf4" :title="'叶子4'" />
+          </a-tree-select-node>
+        </a-tree-select>
+        <a-switch
+          v-else-if="element.formType === 'switch'"
+          :checked="true"
+          :disabled="element.fieldRule === 'readonly'"
+        ></a-switch>
+        <tiny-mce v-else-if="element.formType === 'editor'" :newOptions="{ height: '200px' }" />
+        <a-input-number
+          v-else-if="element.formType === 'number'"
+          style="width: 100%"
+          :disabled="element.fieldRule === 'readonly'"
+        />
+        <a-upload
+          v-else-if="element.formType === 'image'"
+          action="https://www.mocky.io/v2/5cc8019d300000980a055e76"
+          list-type="picture-card"
+          :disabled="element.fieldRule === 'readonly'"
+        >
+          <a-icon type="plus" />
+          <div>Upload</div>
+        </a-upload>
+        <a-upload
+          v-else-if="element.formType === 'file'"
+          action="https://www.mocky.io/v2/5cc8019d300000980a055e76"
+          :disabled="element.fieldRule === 'readonly'"
+        >
+          <a-button>
+            <a-icon type="upload" />
+            Upload
+          </a-button>
+        </a-upload>
+        <a-cascader
+          v-else-if="element.formType === 'cascader' || element.formType === 'tag'"
+          :disabled="element.fieldRule === 'readonly'"
+          style="width: 100%"
+          :options="[
+            {
+              value: 'zhejiang',
+              label: 'Zhejiang',
+              children: [
+                {
+                  value: 'hangzhou',
+                  label: 'Hangzhou',
+                  children: [
+                    {
+                      value: 'xihu',
+                      label: 'West Lake'
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              value: 'jiangsu',
+              label: 'Jiangsu',
+              children: [
+                {
+                  value: 'nanjing',
+                  label: 'Nanjing',
+                  children: [
+                    {
+                      value: 'zhonghuamen',
+                      label: 'Zhong Hua Men'
+                    }
+                  ]
+                }
+              ]
+            }
+          ]"
+          placeholder="Please select"
+        />
+        <!-- 关联数据 -->
+        <a-input-search v-else-if="element.formType === 'associated'" />
+        <!-- 地址选择 -->
+        <address-select
+          v-else-if="element.formType === 'address'"
+          style="margin-top: -1px"
+          :fieldRule="element.fieldRule"
+        />
+        <!-- 流程筛选组 -->
+        <a-radio-group v-else-if="element.type === 'workflowFilter'" :disabled="element.fieldRule === 'readonly'">
+          <a-radio-button
+            v-for="workflow in element.workflowFilters.filter((filterItem) => filterItem.enable === '1')"
+            :key="workflow.value"
+            :value="workflow.value"
+          >
+            {{ workflow.name }}
+          </a-radio-button>
+        </a-radio-group>
+        <!-- 搜索模板组 -->
+        <template v-if="element.type === 'searchTemplate'">
+          <a-select
+            v-if="element.displayStyle === '0'"
+            style="width: 100%"
+            :disabled="element.fieldRule === 'readonly'"
+          >
+            <a-select-option value="1">{{ $t('选项1') }}</a-select-option>
+            <a-select-option value="2">{{ $t('选项2') }}</a-select-option>
+          </a-select>
+          <a-radio-group v-else :disabled="element.fieldRule === 'readonly'">
+            <a-radio-button value="1">{{ $t('选项1') }}</a-radio-button>
+            <a-radio-button value="2">{{ $t('选项2') }}</a-radio-button>
+          </a-radio-group>
+        </template>
+        <span v-if="!element.formType"></span>
+      </div>
+    </draggable>
+    <a-empty v-else></a-empty>
+    <column-check ref="columnCheck" :dataList="data" :fieldCategory="fieldCategory" @ok="saveField"></column-check>
+    <querier-control ref="querierControl" :fieldColumns="controlFieldsarr" :template="data" @func="addOther" />
+    <tplview-data-querier-search-settings ref="tplviewDataQuerierSearchSettings" @ok="getSearchSettings" />
+    <tplview-data-querier-workflow-filter ref="tplviewDataQuerierWorkflowFilter" @ok="getWorkflowFilter" />
+    <tplview-data-querier-search-template ref="tplviewDataQuerierSearchTemplate" @ok="getSearchTemplate" />
+    <tplview-data-querier-multi-field-search ref="tplviewDataQuerierMultiFieldSearch" @ok="getMultiFieldSearch" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    draggable: () => import('vuedraggable'),
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    QuerierControl: () => import('./QuerierControl'),
+    AddressSelect: () => import('../Field/AddressSelect'),
+    ColumnCheck: () => import('./ColumnCheck'),
+    TplviewDataQuerierSearchSettings: () => import('./TplviewDataQuerierSearchSettings'),
+    TplviewDataQuerierWorkflowFilter: () => import('./TplviewDataQuerierWorkflowFilter'),
+    TplviewDataQuerierSearchTemplate: () => import('./TplviewDataQuerierSearchTemplate'),
+    TplviewDataQuerierMultiFieldSearch: () => import('./TplviewDataQuerierMultiFieldSearch')
+  },
+  props: {
+    fieldColumns: {
+      type: Array,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    fieldMappings: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    tableId: {
+      type: String,
+      default () {
+        return '0'
+      }
+    },
+    myTemplate: {
+      type: Array,
+      default () {
+        return {}
+      }
+    },
+    fieldCategory: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: false
+    },
+    tabThis: {
+      type: Object,
+      default () {
+        return {}
+      }
+    },
+    setting: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      form: this.$form.createForm(this),
+      item: {},
+      choiceFieldrule: '',
+      data: [{
+        id: '',
+        type: 'field',
+        name: '',
+        formType: 'textarea',
+        value: '',
+        column: 12,
+        placeholder: false,
+        fieldRule: 'allow',
+        attribute: '',
+        componentName: '',
+        validationType: null
+      }],
+      controlFieldsarr: [],
+      placeholder: false,
+      drag: false,
+      addField: false,
+      columns: [{
+        title: this.$t('字段名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('UI组件'),
+        dataIndex: 'formType'
+      }],
+      checkAll: false,
+      indeterminate: true,
+      checkedList: [],
+      value: [],
+      action: '',
+      searchSection: {
+        labelLocation: 'left'
+      }
+    }
+  },
+  computed: {
+    plainOptions: function () {
+      return this.fieldColumns.map((item) => (item.name))
+    }
+  },
+  watch: {
+    myTemplate: function (newValue) {
+      this.data = newValue
+      this.$emit('func', newValue)
+      var arr = []
+      this.data.map((item) => {
+        if (item.name) {
+          const obj = {}
+          obj.name = item.name
+          obj.alias = item.value
+          arr.push(obj)
+        }
+      })
+      this.checkedList = arr
+    },
+    data (newValue) {
+      var choiceList = []
+      newValue.map(item => {
+        if (item.type === 'field') {
+          choiceList.push(item.value)
+        }
+      })
+      var arr = []
+      this.fieldColumns.map(item => {
+        if (choiceList.indexOf(item.alias) === -1) {
+          arr.push(item)
+        }
+      })
+      this.controlFieldsarr = arr
+    },
+    setting: {
+      handler (newValue) {
+        this.searchSection = newValue.searchSection
+      },
+      deep: true,
+      immediate: true
+    }
+  },
+  created () {
+    this.data = JSON.parse(JSON.stringify(this.myTemplate))
+    this.data.forEach(item => {
+      item.display = 'v'
+    })
+    this.checkedList = this.fieldColumns
+    this.checkAll = this.checkedList.every(item => item.checked)
+    this.indeterminate = this.checkedList.length > 0 ? this.checkedList.some(item => item.checked) : false
+  },
+  methods: {
+    // 打开设置组件
+    handleEdit (item) {
+      if (item.type === 'workflowFilter') {
+        this.workflowFilterSetting(item)
+      } else if (item.type === 'searchTemplate') {
+        this.searchTemplateSetting(item)
+      } else if (item.type === 'multiFieldSearch') {
+        this.multiFieldSearch(item)
+      } else {
+        this.item = item
+        this.$refs.querierControl.show({
+          title: `${this.$t('设置')}: ${item.name}`,
+          action: 'edit',
+          item: item
+        })
+        this.action = 'edit'
+      }
+    },
+    // 删除
+    handleDel (item) {
+      const index = this.data.findIndex((val) => {
+        return val === item
+      })
+      this.checkedList.forEach(checkedItem => {
+        if (checkedItem.alias === item.value) {
+          checkedItem.checked = false
+        }
+      })
+      this.data.splice(index, 1)
+      this.checkAll = this.checkedList.every(item => item.checked)
+      this.indeterminate = !this.checkedList.every(item => item.checked)
+    },
+    listSearch (e) {
+      this.checkedList.forEach(item => {
+        if (item.name.includes(e)) {
+          item.show = true
+        } else {
+          item.show = false
+        }
+      })
+    },
+    // 流程筛选设置
+    workflowFilterSetting (data) {
+      let obj = data
+      if (!obj) {
+        obj = this.data.find(item => item.type === 'workflowFilter')
+      }
+      this.$refs.tplviewDataQuerierWorkflowFilter.show({
+        title: this.$t('设置：流程筛选组'),
+        record: obj || { showWorkflowFilters: true }
+      })
+    },
+    searchTemplateSetting (data) {
+      this.$refs.tplviewDataQuerierSearchTemplate.show({
+        title: data ? this.$t('编辑') : this.$t('添加'),
+        action: data ? 'edit' : 'add',
+        record: data || {},
+        tableId: this.tableId
+      })
+    },
+    multiFieldSearch (data) {
+      this.$refs.tplviewDataQuerierMultiFieldSearch.show({
+        title: data ? this.$t('编辑') : this.$t('添加'),
+        action: data ? 'edit' : 'add',
+        record: data || {},
+        tableId: this.tableId,
+        fieldMappings: this.fieldMappings,
+        fieldCategory: this.fieldCategory
+      })
+    },
+    // 控件按钮
+    handleVisiable (e) {
+      switch (e) {
+        case 1:
+          this.$refs.querierControl.show({
+            title: this.$t('添加自定义组件'),
+            action: 'add',
+            item: {
+              id: '',
+              type: 'component',
+              name: '',
+              formType: '',
+              value: '',
+              column: '',
+              placeholder: false,
+              fieldRule: 'allow',
+              attribute: '',
+              componentName: '',
+              validationType: '',
+              validity: undefined
+            }
+          })
+          this.action = 'add'
+          break
+        case 2:
+          this.$refs.columnCheck.show({
+            action: 'edit',
+            title: this.$t('选择字段'),
+            data: this.fieldMappings
+          })
+          break
+        case 3:
+          this.data = []
+          this.checkedList.forEach(item => {
+            item.checked = false
+          })
+          this.checkAll = false
+          this.indeterminate = false
+          break
+        case 'setting':
+          this.$refs.tplviewDataQuerierSearchSettings.show({
+            title: this.$t('搜索区设置'),
+            record: this.searchSection
+          })
+          break
+        default:
+          break
+      }
+    },
+    getSearchSettings (data) {
+      this.searchSection = data
+    },
+    // 流程筛选组数据保存
+    getWorkflowFilter (data) {
+      const index = this.data.findIndex(item => item.type === 'workflowFilter')
+      if (index === -1) {
+        this.data.push(data)
+      } else {
+        this.data.splice(index, 1, data)
+      }
+    },
+    // 搜索模板组保存
+    getSearchTemplate (data) {
+      const index = this.data.findIndex(item => item.id === data.id)
+      if (index === -1) {
+        this.data.push(data)
+      } else {
+        this.data.splice(index, 1, data)
+      }
+    },
+    getMultiFieldSearch (data) {
+      const index = this.data.findIndex(item => item.id === data.id)
+      if (index === -1) {
+        this.data.push(data)
+      } else {
+        this.data.splice(index, 1, data)
+      }
+    },
+    // 保存字段
+    saveField (e) { // choiceField
+      this.addField = false
+      const arr = e.map(mapItem => {
+        const obj = this.fieldColumns.find(findItem => findItem.alias === mapItem.alias)
+        return {
+          type: 'field',
+          name: obj.name,
+          fieldId: obj.fieldId,
+          value: obj.alias,
+          alias: obj.alias,
+          formType: obj.formType,
+          column: obj.formType === 'editor' ? 24 : 6,
+          placeholder: '0',
+          fieldRule: 'allow',
+          attribute: '',
+          componentName: '',
+          validationType: null
+        }
+      })
+      arr.forEach(item => {
+        const index = this.data.findIndex(findItem => findItem.value === item.alias)
+        if (index !== -1) {
+          this.data[index] = Object(item, this.data[index])
+        } else {
+          this.data.push(item)
+        }
+      })
+      this.data.forEach((item, index) => {
+        if (item.type === 'field' && arr.every(findItem => findItem.alias !== item.value)) {
+          this.data.splice(index, 1)
+        }
+      })
+    },
+    // 选择字段
+    onChange (e, checkItem) {
+      checkItem.checked = e.target.checked
+      if (this.checkedList.every(item => item.checked)) {
+        this.indeterminate = false
+        this.checkAll = true
+      } else {
+        this.indeterminate = this.checkedList.some(item => item.checked)
+        this.checkAll = false
+      }
+    },
+    // 选择所有字段
+    onCheckAllChange (e) {
+      this.checkAll = e.target.checked
+      this.indeterminate = false
+      this.checkedList.forEach(item => {
+        item.checked = e.target.checked
+      })
+    },
+    // 设置添加
+    addOther (e) {
+      if (this.action === 'edit') {
+        const index = this.data.findIndex((val) => {
+          return val === this.item
+        })
+        this.data.splice(index, 1, e)
+      } else {
+        this.data.push(e)
+      }
+      this.checkedList.forEach(checkedItem => {
+        if (e.value === checkedItem.alias) {
+          checkedItem.checked = true
+        }
+      })
+    },
+    addClose () {
+      this.addField = false
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.list-group {
+  display: flex;
+  flex-wrap: wrap;
+  border-radius: 5px;
+  padding: 10px;
+  background: white;
+}
+.list-group .item {
+  padding: 5px;
+  margin-bottom: 20px;
+  border: 1px dashed white;
+  border-radius: 3px;
+}
+.list-group .item:hover {
+  background: #f9fafa;
+  border: 1px dashed #e5e5e5;
+}
+.list-group .item[draggable='true'] {
+  opacity: 0.5;
+  background: #c8ebfb;
+}
+.list-group .item .handle {
+  padding-right: 8px;
+  cursor: move;
+}
+.list-group .item .action {
+  margin-right: 8px;
+  cursor: pointer;
+  display: none;
+}
+.list-group .item:hover .action {
+  display: unset;
+}
+</style>

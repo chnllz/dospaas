@@ -1,0 +1,184 @@
+
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="800" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <div>
+        <div>
+          <div style="text-align: center">
+            <div>
+              <h1>
+                <b>{{ formdata.title }}</b>
+              </h1>
+            </div>
+            <div v-if="formdata.time === '0'">
+              <p>{{ $t('本次考试不限时， 共 {0} 道题，满分为 {1} 分', { 0: examData.total, 1: examData.score }) }}</p>
+            </div>
+            <div v-else>
+              <p>
+                {{
+                  $t('本次考试限时{0}分钟， 共 {1} 道题，满分为 {2} 分', {
+                    0: formdata.time,
+                    1: examData.total,
+                    2: examData.score
+                  })
+                }}
+              </p>
+            </div>
+            <div>
+              <p>
+                {{ $t('本次考试一共可以考') }}
+                <span class="span">{{ examNum }}</span>
+                {{ $t('次') }}，{{ $t('已考') }}
+                <span class="span2">{{ tested ? tested : 0 }}</span>
+                {{ $t('次') }}
+              </p>
+            </div>
+          </div>
+          <a-alert v-if="formdata.remarks" :message="formdata.remarks" type="warning" style="margin-bottom: 10px" />
+        </div>
+        <a-card :title="$t('考卷详情')" size="small">
+          <s-table
+            ref="table"
+            size="small"
+            rowKey="id"
+            :columns="columns"
+            :data="loadDataTable"
+            :showPagination="false"
+            :sorter="{ field: 'id', order: 'descend' }"
+          >
+            <div slot="action" slot-scope="text, record">
+              <a @click="lookPage(record)">{{ $t('查看') }}</a>
+            </div>
+            <div slot="duration" slot-scope="text">
+              {{ text + '分钟' }}
+            </div>
+          </s-table>
+        </a-card>
+      </div>
+      <div class="bbar">
+        <a-button v-if="tested < examNum && timecheck" type="primary" html-type="submit" @click="examPage">
+          {{ tested === 0 ? $t('开始考试') : $t('重新考试') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <browsing ref="Browsing" @ok="$refs.table.refresh(true)" />
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('exam'),
+  components: {
+    Browsing: () => import('./Browsing')
+  },
+  data () {
+    return {
+      advanced: false,
+      visible: false,
+      loading: false,
+      queryParam: {},
+      config: {},
+      examNum: 0,
+      formdata: {},
+      colLayout: {},
+      tested: null,
+      examData: {},
+      timecheck: false,
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('完成时间'),
+        dataIndex: 'finishTime'
+      }, {
+        title: this.$t('成绩'),
+        dataIndex: 'grade'
+      }, {
+        title: this.$t('用时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' }
+      }]
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    loadDataTable () {
+      return this.axios({
+        url: '/exam/achievement/userGrades',
+        data: { paperId: this.config.data.id, username: this.userInfo.username }
+      }).then((res) => {
+        this.tested = res.result.data.length
+        this.examData = res.result.exam
+        return res.result
+      })
+    },
+    // 接收数据传参
+    show (config) {
+      this.loading = true
+      this.visible = true
+      this.formdata = {}
+      this.formdata.setting = {}
+      this.config = config
+      this.formdata = this.config.data
+      this.formdata.settings = JSON.parse(this.formdata.setting)
+      this.examNum = this.formdata.settings.examNum
+      const time = new Date()
+      if (Date.parse(time) < Date.parse(config.data.endTime) && Date.parse(time) > Date.parse(config.data.startTime)) {
+        this.timecheck = true
+      } else {
+        this.timecheck = false
+      }
+      this.loading = false
+    },
+    // 查看试卷页面
+    lookPage (record) {
+      this.$refs.Browsing.detailshow({
+        action: 'check',
+        user: 'person',
+        title: this.$t('查看试卷'),
+        url: '',
+        data: record
+      })
+    },
+    // 考试页面
+    examPage () {
+      const self = this
+      this.$confirm({
+        title: this.$t('您确定要开始考试吗？'),
+        onOk () {
+          self.$refs.Browsing.personShow({
+            action: 'borwsing',
+            user: 'personTest',
+            title: self.$t('试卷'),
+            url: '',
+            data: self.formdata,
+            answer: ''
+          })
+        }
+      })
+    }
+  }
+}
+</script>
+<style scoped>
+.span {
+  margin-left: 10px;
+  margin-right: 5px;
+  font-family: 'Microsoft YaHei', 微软雅黑;
+  font-size: 18px;
+  color: #4daaff;
+}
+.span2 {
+  margin-left: 10px;
+  margin-right: 5px;
+  font-family: 'Microsoft YaHei', 微软雅黑;
+  font-size: 18px;
+  color: #f5222d;
+}
+</style>

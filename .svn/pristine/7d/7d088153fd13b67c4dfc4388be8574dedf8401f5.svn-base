@@ -1,0 +1,556 @@
+<template>
+  <a-modal :title="config.title" :width="900" :visible="visible" :destroyOnClose="true" @cancel="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form" @submit="handleSubmit">
+        <a-divider style="margin-bottom: 15px" orientation="left">{{ $t('基础设置') }}</a-divider>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('技能组名称')">
+          <a-input
+            v-decorator="[
+              'info[name]',
+              { initialValue: data.name, rules: [{ required: true, message: $t('请输入技能组名称') }] }
+            ]"
+          ></a-input>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('接入模式')">
+          <a-select
+            v-decorator="[
+              'info[inrouteMode]',
+              { initialValue: data.inrouteMode, rules: [{ required: true, message: $t('请选择接入模式') }] }
+            ]"
+            style="width: 120px"
+            @change="(e) => (data.inrouteMode = e)"
+          >
+            <a-select-option value="human">{{ $t('人工优先') }}</a-select-option>
+            <a-select-option value="robot">{{ $t('机器人优先') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item
+          v-if="data.inrouteMode === 'robot'"
+          :labelCol="labelCol"
+          :wrapperCol="wrapperCol"
+          :label="$t('机器人')"
+        >
+          <a-select
+            v-decorator="[
+              'info[robotId]',
+              { initialValue: String(data.robotId || ''), rules: [{ required: true, message: $t('请选择机器人') }] }
+            ]"
+            showSearch
+            :placeholder="$t('请选择机器人')"
+            :filterOption="filterOption"
+            allowClear
+          >
+            <a-select-option v-for="item in data.robotList" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('访客分配模式')">
+          <a-radio-group
+            v-decorator="[
+              'info[distributionMode]',
+              { initialValue: data.distributionMode, rules: [{ required: true, message: $t('请选择访客分配模式') }] }
+            ]"
+          >
+            <a-row>
+              <a-col style="margin: 8px 0">
+                <a-radio value="auto">{{ $t('自动分配') }}</a-radio>
+              </a-col>
+              <a-col>
+                <a-radio value="manual">{{ $t('手动抓取') }}</a-radio>
+              </a-col>
+            </a-row>
+          </a-radio-group>
+        </a-form-item>
+        <a-divider style="margin-bottom: 15px" orientation="left">{{ $t('访客分配规则') }}</a-divider>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('熟客优先') }}
+            <a-tooltip
+              :title="
+                $t(
+                  '开启后，访客分配时，将优先分配给{熟客判定时长}内，最后接待他的客服，若最后接待客服不可用（离线、示忙或超过接待上限），则按基本分配方式分配'
+                )
+              "
+            >
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-switch
+            v-decorator="[
+              'info[setting[visiterDistributeMemory]]',
+              {
+                initialValue: setting.visiterDistributeMemory === true,
+                valuePropName: 'checked',
+                rules: [{ required: true, message: $t('请选择是否开启熟客优先') }]
+              }
+            ]"
+            checked-children="开"
+            un-checked-children="关"
+            @change="(e) => (setting.visiterDistributeMemory = e)"
+          />
+        </a-form-item>
+        <a-form-item v-if="setting.visiterDistributeMemory === true" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('熟客判定时长') }}
+            <a-tooltip :title="$t('设置判定为熟客的时长范围。默认值24，设置范围12~168，整数')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input-number
+            v-decorator="[
+              'info[setting[visiterDistributeMemoryTime]]',
+              {
+                initialValue: parseInt(setting.visiterDistributeMemoryTime) || 24,
+                rules: [{ required: true, message: $t('请输入熟客判定时长') }]
+              }
+            ]"
+            :min="12"
+            :max="168"
+            @change="
+              (val) => {
+                setting.visiterDistributeMemoryTime = val
+              }
+            "
+          />
+          {{ $t('小时') }}
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('基础分配方式')">
+          <a-radio-group
+            v-decorator="[
+              'info[setting[visiterDistributeAuto]]',
+              {
+                initialValue: setting.visiterDistributeAuto,
+                rules: [{ required: true, message: $t('请选择基础分配方式') }]
+              }
+            ]"
+          >
+            <a-row :gutter="[0, 8]">
+              <a-col style="margin-top: 8px">
+                <a-radio value="saturation">
+                  {{ $t('按客服饱和度分') }}
+                  <a-tooltip
+                    :title="
+                      $t('优先分配给当前饱和度最低的客服，若多个客服饱和度相同则随机分配(饱和度=当前接待/接待上限)')
+                    "
+                  >
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </a-radio>
+              </a-col>
+              <a-col>
+                <a-radio value="random">
+                  {{ $t('随机分配') }}
+                  <a-tooltip :title="$t('随机分配给当前在线客服')"><a-icon type="question-circle" /></a-tooltip>
+                </a-radio>
+              </a-col>
+              <a-col>
+                <a-radio value="longest">
+                  {{ $t('最久未分配') }}
+                  <a-tooltip :title="$t('将分配给最久未分配的当前在线客服')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </a-radio>
+              </a-col>
+            </a-row>
+          </a-radio-group>
+        </a-form-item>
+        <a-divider style="margin-bottom: 15px" orientation="left">
+          {{ $t('工作时间设置') }}
+          <a-tooltip :title="$t('{基础上班设置}时间组最多设置5个，{特殊上班设置}、{特殊放假设置}最多设置20个')">
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </a-divider>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('基础上班设置')">
+          <a-checkbox-group
+            v-decorator="['info[setting[basicWorkSetting]]', { initialValue: setting.basicWorkSetting || [] }]"
+            name="checkboxgroup"
+            :options="basicWorkSettingOptions"
+          />
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="{ span: 10, offset: 5 }">
+          <a-row v-for="(itemWorkTime, indexWorkTime) in workTimeList" :key="indexWorkTime" type="flex" :gutter="8">
+            <a-col>
+              <a-form-item>
+                <a-time-picker
+                  v-model="itemWorkTime.firstTime"
+                  :disabledHours="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemWorkTime, 'hour', 'lastTime')
+                    }
+                  "
+                  :disabledMinutes="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemWorkTime, 'minutes', 'lastTime')
+                    }
+                  "
+                  format="HH:mm"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col>{{ $t('至') }}</a-col>
+            <a-col>
+              <a-form-item>
+                <a-time-picker
+                  v-model="itemWorkTime.lastTime"
+                  :disabledHours="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemWorkTime, 'hour', 'firstTime')
+                    }
+                  "
+                  :disabledMinutes="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemWorkTime, 'minutes', 'firstTime')
+                    }
+                  "
+                  format="HH:mm"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col>
+              <a-space>
+                <a-icon type="plus" style="cursor: pointer" @click="addTime('basicWork')" />
+                <a-icon
+                  v-if="workTimeList.length > 1"
+                  type="minus"
+                  style="cursor: pointer"
+                  @click="removeTime('basicWork', itemWorkTime, indexWorkTime)"
+                />
+              </a-space>
+            </a-col>
+          </a-row>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('特殊上班设置')">
+          <a-row
+            v-for="(itemSpecialWork, indexSpecialWork) in specialWorkList"
+            :key="indexSpecialWork"
+            type="flex"
+            :gutter="8"
+          >
+            <a-col>
+              <a-form-item>
+                <a-date-picker v-model="itemSpecialWork.date" />
+              </a-form-item>
+            </a-col>
+            <a-col>
+              <a-form-item>
+                <a-time-picker
+                  v-model="itemSpecialWork.firstTime"
+                  :disabledHours="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemSpecialWork, 'hour', 'lastTime')
+                    }
+                  "
+                  :disabledMinutes="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemSpecialWork, 'minutes', 'lastTime')
+                    }
+                  "
+                  format="HH:mm"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col>{{ $t('至') }}</a-col>
+            <a-col>
+              <a-form-item>
+                <a-time-picker
+                  v-model="itemSpecialWork.lastTime"
+                  :disabledHours="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemSpecialWork, 'hour', 'firstTime')
+                    }
+                  "
+                  :disabledMinutes="
+                    (hour, minutes) => {
+                      return disabledHour(hour, minutes, itemSpecialWork, 'minutes', 'firstTime')
+                    }
+                  "
+                  format="HH:mm"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col>
+              <a-space>
+                <a-icon type="plus" style="cursor: pointer" @click="addTime('specialWork')" />
+                <a-icon
+                  v-if="specialWorkList.length > 1"
+                  type="minus"
+                  style="cursor: pointer"
+                  @click="removeTime('specialWork', itemSpecialWork, indexSpecialWork)"
+                />
+              </a-space>
+            </a-col>
+          </a-row>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('特殊放假设置')">
+          <a-row
+            v-for="(itemSpecialHoliday, indexSpecialHoliday) in specialHolidayList"
+            :key="indexSpecialHoliday"
+            type="flex"
+            :gutter="8"
+          >
+            <a-col>
+              <a-form-item>
+                <a-date-picker v-model="itemSpecialHoliday.date" />
+              </a-form-item>
+            </a-col>
+            <a-col>
+              <a-space>
+                <a-icon type="plus" style="cursor: pointer" @click="addTime('specialHoliday')" />
+                <a-icon
+                  v-if="specialHolidayList.length > 1"
+                  type="minus"
+                  style="cursor: pointer"
+                  @click="removeTime('specialHoliday', itemSpecialHoliday, indexSpecialHoliday)"
+                />
+              </a-space>
+            </a-col>
+          </a-row>
+        </a-form-item>
+      </a-form>
+    </a-spin>
+    <div slot="footer">
+      <a-button type="primary" :loading="loading" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-modal>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  data () {
+    return {
+      data: {},
+      config: {},
+      setting: {},
+      visible: false,
+      loading: false,
+      labelCol: { span: 5 },
+      wrapperCol: { span: 18 },
+      form: this.$form.createForm(this),
+      basicWorkSettingOptions: [{
+        label: this.$t('周一'),
+        value: 'Monday'
+      }, {
+        label: this.$t('周二'),
+        value: 'Tuesday'
+      }, {
+        label: this.$t('周三'),
+        value: 'Wednesday'
+      }, {
+        label: this.$t('周四'),
+        value: 'Thursday'
+      }, {
+        label: this.$t('周五'),
+        value: 'Friday'
+      }, {
+        label: this.$t('周六'),
+        value: 'Saturday'
+      }, {
+        label: this.$t('周日'),
+        value: 'Sunday'
+      }],
+      basicWorkSetting: [],
+      value1: '',
+      workTimeList: [{
+        firstTime: null,
+        lastTime: null
+      }],
+      specialWorkList: [{
+        date: null,
+        firstTime: null,
+        lastTime: null
+      }],
+      specialHolidayList: [{
+        date: null
+      }]
+    }
+  },
+  methods: {
+    // 设置初始值
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.resetTime()
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', id: config.record ? config.record.id : 0 })
+      }).then((res) => {
+        this.data = res.result
+        this.setting = JSON.parse(this.data.setting)
+        if (this.setting && Object.keys(this.setting).length > 0) {
+          if (this.setting.workTimeList && this.setting.workTimeList.length > 0) {
+            this.setting.workTimeList.forEach(item => {
+              if (item.firstTime) this.$set(item, 'firstTime', this.moment(item.firstTime, 'HH:mm'))
+              if (item.lastTime) this.$set(item, 'lastTime', this.moment(item.lastTime, 'HH:mm'))
+            })
+            this.workTimeList = this.setting.workTimeList
+          }
+          if (this.setting.workTimeList && this.setting.specialWorkList.length > 0 && this.setting.specialWorkList[0].firstTime) {
+            this.setting.specialWorkList.forEach(item => {
+              if (item.date) this.$set(item, 'date', this.moment(item.date, 'YYYY-MM-DD'))
+              if (item.firstTime) this.$set(item, 'firstTime', this.moment(item.firstTime, 'HH:mm'))
+              if (item.lastTime) this.$set(item, 'lastTime', this.moment(item.lastTime, 'HH:mm'))
+            })
+            this.specialWorkList = this.setting.specialWorkList
+          }
+          if (this.setting.workTimeList && this.setting.specialHolidayList.length > 0 && this.setting.specialHolidayList[0].date) {
+            this.setting.specialHolidayList.forEach(item => {
+              if (item.date) this.$set(item, 'date', this.moment(item.date, 'YYYY-MM-DD'))
+            })
+            this.specialHolidayList = this.setting.specialHolidayList
+          }
+        }
+        this.loading = false
+      })
+    },
+    resetTime () {
+      this.workTimeList = [{ firstTime: null, lastTime: null }]
+      this.specialWorkList = [{ date: null, firstTime: null, lastTime: null }]
+      this.specialHolidayList = [{ date: null }]
+    },
+    // 限制时间
+    disabledHour (hour, minute, record, type, key) {
+      const Hours = new Array(24)
+      const Minutes = new Array(60)
+      let timeArr = {}
+      let timeKey = ''
+      if (record[key]) {
+        timeKey = record[key]
+        if (typeof (timeKey) !== 'string') {
+          timeKey = this.moment(timeKey).format('HH:mm')
+        }
+        timeArr = timeKey.split(':')
+      }
+      if (type === 'hour') {
+        for (let i = 0; i < Hours.length; i++) {
+          Hours[i] = i
+        }
+        const hours = []
+        if (timeKey && timeKey.length > 0) {
+          if (key === 'lastTime') {
+            for (let i = 24; i > parseInt(timeArr[0]); i--) {
+              hours.push(i)
+            }
+          } else {
+            for (let i = 0; i < parseInt(timeArr[0]); i++) {
+              hours.push(i)
+            }
+          }
+          return hours
+        }
+        return []
+      } else {
+        for (let i = 0; i < Minutes.length; i++) {
+          Minutes[i] = i
+        }
+        const minutes = []
+        if (timeKey && timeKey.length > 0) {
+          if (hour === parseInt(timeArr[0])) {
+            if (key === 'lastTime') {
+              for (let i = 60; i >= parseInt(timeArr[1]); i--) {
+                minutes.push(i)
+              }
+            } else {
+              for (let i = 0; i <= parseInt(timeArr[1]); i++) {
+                minutes.push(i)
+              }
+            }
+            return minutes
+          }
+        }
+        return []
+      }
+    },
+    // 时间增加
+    addTime (type) {
+      if (type === 'basicWork') {
+        if (this.workTimeList.length >= 5) {
+          this.$message.warning(this.$t('基础上班时间请控制在5条之内'))
+          return
+        }
+        this.workTimeList.push({
+          firstTime: null,
+          lastTime: null
+        })
+      } else if (type === 'specialWork') {
+        if (this.specialWorkList.length >= 20) {
+          this.$message.warning(this.$t('特殊上班时间请控制在20条之内'))
+          return
+        }
+        this.specialWorkList.push({
+          date: null,
+          firstTime: null,
+          lastTime: null
+        })
+      } else {
+        if (this.specialHolidayList.length >= 20) {
+          this.$message.warning(this.$t('特殊放假时间请控制在20条之内'))
+          return
+        }
+        this.specialHolidayList.push({
+          date: null
+        })
+      }
+    },
+    // 时间移除
+    removeTime (type, item, index) {
+      if (type === 'basicWork') {
+        this.workTimeList.splice(index, 1)
+      } else if (type === 'specialWork') {
+        this.specialWorkList.splice(index, 1)
+      } else {
+        this.specialHolidayList.splice(index, 1)
+      }
+    },
+    filterOption (input, option) {
+      return (
+        option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      )
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          values.info.setting.workTimeList = this.workTimeList.map(item => {
+            const obj = JSON.parse(JSON.stringify(item))
+            obj.firstTime = obj.firstTime ? this.moment(obj.firstTime).format('HH:mm') : null
+            obj.lastTime = obj.lastTime ? this.moment(obj.lastTime).format('HH:mm') : null
+            return obj
+          })
+          values.info.setting.specialWorkList = this.specialWorkList.map(item => {
+            const obj = JSON.parse(JSON.stringify(item))
+            obj.firstTime = obj.firstTime ? this.moment(obj.firstTime).format('HH:mm') : null
+            obj.lastTime = obj.lastTime ? this.moment(obj.lastTime).format('HH:mm') : null
+            obj.date = obj.date ? this.moment(obj.date).format('YYYY-MM-DD') : null
+            return obj
+          })
+          values.info.setting.specialHolidayList = this.specialHolidayList.map(item => {
+            const obj = JSON.parse(JSON.stringify(item))
+            obj.date = obj.date ? this.moment(obj.date).format('YYYY-MM-DD') : null
+            return obj
+          })
+          values.info.setting = JSON.stringify(values.info.setting)
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { action: 'submit', id: this.data.id })
+          }).then((res) => {
+            this.loading = false
+            if (res.code === 0) {
+              this.visible = false
+              this.$emit('ok')
+              this.form.resetFields()
+              this.resetTime()
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

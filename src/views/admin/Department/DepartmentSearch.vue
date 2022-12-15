@@ -1,0 +1,115 @@
+<template>
+  <div>
+    <a-select
+      showSearch
+      :value="undefined"
+      :placeholder="$t('请输入部门关键字进行搜索')"
+      allowClear
+      :filter-option="false"
+      :mode="data.mode"
+      :not-found-content="fetching ? undefined : null"
+      @search="getDepartment"
+      @popupScroll="popupScroll"
+      @change="
+        (e) => {
+          if (!e) {
+            department = []
+          }
+        }
+      "
+    >
+      <a-spin v-if="fetching" slot="notFoundContent" size="small" />
+      <a-select-option
+        v-for="dep in department"
+        :key="dep.departmentId"
+        :value="dep.departmentId"
+        @click="
+          (e) => {
+            $emit('ok', dep.departmentId, dep)
+          }
+        "
+      >
+        {{ dep.fullDepartmentName }}
+      </a-select-option>
+    </a-select>
+  </div>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+export default {
+  i18n: window.lang('admin'),
+  props: {
+    data: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    this.getDepartment = debounce(this.getDepartment, 800)
+    return {
+      lastFetchId: 0,
+      department: [],
+      fetching: false,
+      scrollStats: true,
+      page: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      searchData: '',
+      totalCount: 0
+    }
+  },
+  methods: {
+    getDepartment (e) {
+      this.searchData = e
+      this.page.pageNo = 1
+      this.totalCount = 0
+      this.scrollStats = true
+      if (e) {
+        this.lastFetchId += 1
+        const fetchId = this.lastFetchId
+        this.fetching = true
+        this.axios({
+          url: '/admin/search/departmentSearch',
+          data: Object.assign(this.page, { searchName: e })
+        }).then(res => {
+          if (fetchId !== this.lastFetchId) {
+            return
+          }
+          this.department = res.result.data
+          this.fetching = false
+          this.totalCount = res.result.totalCount
+        })
+      } else {
+        this.department = []
+      }
+    },
+    getDepartmentScroll () {
+      this.axios({
+        url: '/admin/search/departmentSearch',
+        data: Object.assign(this.page, { searchName: this.searchData })
+      }).then(res => {
+        this.department = [...this.department, ...res.result.data]
+      })
+    },
+    popupScroll (e) {
+      const scrollTop = e.target.scrollTop
+      const scrollHeight = e.target.scrollHeight
+      const clientHeight = e.target.clientHeight
+      const scrollBottom = scrollHeight - clientHeight - scrollTop
+      if (this.page.pageNo * this.page.pageSize >= this.totalCount) {
+        this.scrollStats = false
+      }
+      if (scrollBottom < 1 && this.scrollStats && this.searchData) {
+        this.page.pageNo++
+        this.getDepartmentScroll()
+      }
+    }
+  }
+}
+</script>

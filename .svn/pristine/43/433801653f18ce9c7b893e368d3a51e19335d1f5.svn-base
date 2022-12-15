@@ -1,0 +1,1365 @@
+<template>
+  <div class="properties-centent kk-checkbox">
+    <div class="head-title">
+      {{ $t('控件属性设置') }} -
+      <span v-if="selectItem.formType === 'text'">{{ $t('单行文本') }}</span>
+      <span v-else-if="selectItem.formType === 'combobox'">{{ $t('下拉框') }}</span>
+      <span v-else-if="selectItem.formType === 'associated'">{{ $t('关联数据') }}</span>
+      <span v-else-if="selectItem.formType === 'datetime'">{{ $t('日期时间') }}</span>
+      <span v-else-if="selectItem.formType === 'textarea'">{{ $t('多行文本') }}</span>
+      <span v-else-if="selectItem.formType === 'radio'">{{ $t('单选框') }}</span>
+      <span v-else-if="selectItem.formType === 'checkbox'">{{ $t('复选框') }}</span>
+      <span v-else-if="selectItem.formType === 'editor'">{{ $t('编辑器') }}</span>
+      <span v-else-if="selectItem.formType === 'image'">{{ $t('图片') }}</span>
+      <span v-else-if="selectItem.formType === 'file'">{{ $t('附件') }}</span>
+      <span v-else-if="selectItem.formType === 'cascader'">{{ $t('级联选择') }}</span>
+      <span v-else-if="selectItem.formType === 'switch'">{{ $t('开关') }}</span>
+      <span v-else-if="selectItem.formType === 'score'">{{ $t('评分') }}</span>
+      <span v-else-if="selectItem.formType === 'serialnumber'">{{ $t('流水号') }}</span>
+      <span v-else-if="selectItem.formType === 'organization'">{{ $t('组织结构') }}</span>
+      <span v-else-if="selectItem.formType === 'web_sub_data_window'">{{ $t('子表') }}</span>
+      <span v-else-if="selectItem.formType === 'autocomplete'">{{ $t('自动完成') }}</span>
+      <span v-else-if="selectItem.formType === 'number'">{{ $t('数字') }}</span>
+      <span v-else-if="selectItem.formType === 'address'">{{ $t('地址') }}</span>
+      <span v-else-if="selectItem.formType === 'treeselect'">{{ $t('树选择') }}</span>
+      <span v-else-if="selectItem.formType === 'tag'">{{ $t('标签') }}</span>
+      <span v-else-if="selectItem.formType === 'location'">{{ $t('地图选点') }}</span>
+      <span v-else-if="selectItem.type === 'grid'">{{ $t('栅格布局') }}</span>
+      <span v-else-if="selectItem.type === 'web_sub_data_window'">{{ $t('数据窗口') }}</span>
+      <span v-else-if="selectItem.type === 'web_sub_form_view'">{{ $t('子表') }}</span>
+      <span v-else-if="selectItem.type === 'flowlog'">{{ $t('流程日志') }}</span>
+      <span v-else-if="selectItem.type === 'urgelog'">{{ $t('催办日志') }}</span>
+      <span v-else-if="selectItem.type === 'component'">{{ $t('自定义组件') }}</span>
+      <span v-else-if="selectItem.type === 'editor'">{{ $t('富文本编辑器') }}</span>
+      <span v-else-if="selectItem.type === 'html'">html</span>
+      <span v-else-if="selectItem.type === 'button'">{{ $t('按钮') }}</span>
+      <span v-else-if="selectItem.type === 'alert'">{{ $t('警告提示') }}</span>
+      <span v-else-if="selectItem.type === 'formmark'">{{ $t('表单留痕') }}</span>
+      <span v-else-if="selectItem.type === 'text'">{{ $t('文字') }}</span>
+      <span v-else-if="selectItem.type === 'placeholder'">{{ $t('占位符') }}</span>
+      <span v-else-if="selectItem.type === 'divider'">{{ $t('分割线') }}</span>
+      <span v-else-if="selectItem.type === 'card'">{{ $t('卡片布局') }}</span>
+      <span v-else-if="selectItem.type === 'tabs'">{{ $t('标签页布局') }}</span>
+      <span v-else-if="selectItem.type === 'table'">{{ $t('表格布局') }}</span>
+      <span v-else-if="selectItem.type === 'work'">{{ $t('流程办理方式') }}</span>
+      <span v-else-if="selectItem.type === 'workRemark'">{{ $t('流程办理备注') }}</span>
+      <span v-else-if="selectItem.type === 'portrait'">{{ $t('客户画像') }}</span>
+      <span v-else-if="selectItem.type === 'lifeCycle'">{{ $t('生命周期') }}</span>
+      <span v-else-if="selectItem.type === 'dividerTag'">{{ $t('分割标签') }}</span>
+      <span v-else>{{ $t('未选中控件') }}</span>
+    </div>
+    <div class="properties-body">
+      <a-form v-show="selectItem.key !== ''">
+        <a-form-item :label="$t('名称')">
+          <a-input v-if="selectItem.type === 'field' || selectItem.alias" v-model="selectItem.name" :disabled="true" />
+          <a-input v-if="selectItem.type === 'placeholder'" v-model="selectItem.label" :disabled="true" />
+          <a-input
+            v-else-if="selectItem.type === 'divider' && selectItem.dividerText"
+            v-model="selectItem.dividerText"
+            :disabled="true"
+          />
+          <a-input v-else-if="selectItem.type !== 'field'" v-model="selectItem.label" :placeholder="$t('请输入')" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'field'" :label="$t('修改字段名称')">
+          <a-input v-model="selectItem.changeTitle">
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'field'" :label="$t('label是否显示')">
+          <a-radio-group v-model="selectItem.labelShow" buttonStyle="solid" defaultValue="1">
+            <a-radio value="1">{{ $t('显示') }}</a-radio>
+            <a-radio value="0">{{ $t('隐藏') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'field'" :label="$t('label显示结构')">
+          <a-radio-group v-model="selectItem.labelLocal" buttonStyle="solid" defaultValue="0">
+            <a-radio value="0">{{ $t('左右') }}</a-radio>
+            <a-radio value="1">{{ $t('上下') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <div v-if="tableType">
+          <a-form-item v-if="selectItem.alias && selectItem.formType !== 'image'">
+            <a-space>
+              <a-button @click="styleChange('0')">{{ $t('默认样式') }}</a-button>
+              <a-button @click="styleChange('1')">{{ $t('标签样式') }}</a-button>
+            </a-space>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias" :label="$t('是否显示label')">
+            <a-radio-group v-model="selectItem.labelShow" defaultValue="1">
+              <a-radio value="1">{{ $t('是') }}</a-radio>
+              <a-radio value="0">{{ $t('否') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias" :label="$t('label颜色')">
+            <a-radio-group v-model="selectItem.labelColor" defaultValue="">
+              <a-radio v-for="itemColor in colorType" :key="itemColor.value" :value="itemColor.value">
+                <span :style="{ background: itemColor.color, color: itemColor.color }">{{ itemColor.type }}</span>
+              </a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias && selectItem.formType !== 'image'" :label="$t('字体大小')">
+            <a-radio-group v-model="selectItem.fontSize" defaultValue="0">
+              <a-radio value="0">{{ $t('普通文本') }}</a-radio>
+              <a-radio value="1"><span style="font-weight: bold; font-size: 2em">h1</span></a-radio>
+              <a-radio value="2"><h2 style="display: inline">h2</h2></a-radio>
+              <a-radio value="3"><h3 style="display: inline">h3</h3></a-radio>
+              <a-radio value="4"><h4 style="display: inline">h4</h4></a-radio>
+              <a-radio value="5"><h5 style="display: inline">h5</h5></a-radio>
+              <a-radio value="6"><h6 style="display: inline">h6</h6></a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias && selectItem.formType !== 'image'" :label="$t('正文颜色')">
+            <a-radio-group v-model="selectItem.color" defaultValue="">
+              <a-radio value="#fafafa">{{ $t('白色') }}</a-radio>
+              <a-radio v-for="itemColor in colorType" :key="itemColor.value" :value="itemColor.value">
+                <span :style="{ background: itemColor.color, color: itemColor.color }">{{ itemColor.type }}</span>
+              </a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias && selectItem.formType !== 'image'" :label="$t('正文背景颜色')">
+            <a-radio-group v-model="selectItem.backGroundColor" defaultValue="">
+              <a-radio value="">{{ $t('无色') }}</a-radio>
+              <a-radio
+                v-for="itemColor in colorType"
+                v-show="itemColor.color !== '#000'"
+                :key="itemColor.value"
+                :value="itemColor.value"
+              >
+                <span :style="{ background: itemColor.color, color: itemColor.color }">{{ itemColor.type }}</span>
+              </a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias && selectItem.formType === 'image'" :label="$t('图片展示效果')">
+            <a-radio-group v-model="selectItem.borderRadius" defaultValue="0">
+              <a-radio value="0">{{ $t('方形') }}</a-radio>
+              <a-radio value="1">{{ $t('圆形') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias" :label="$t('内边距')">
+            <div>
+              {{ $t('上 :') }}
+              <a-input-number v-model="selectItem.topPadding" :min="0" />
+              px
+            </div>
+            <div>
+              {{ $t('下 :') }}
+              <a-input-number v-model="selectItem.bottomPadding" :min="0" />
+              px
+            </div>
+            <div>
+              {{ $t('左 :') }}
+              <a-input-number v-model="selectItem.leftPadding" :min="0" />
+              px
+            </div>
+            <div>
+              {{ $t('右 :') }}
+              <a-input-number v-model="selectItem.rightPadding" :min="0" />
+              px
+            </div>
+          </a-form-item>
+          <a-form-item v-if="selectItem.alias" :label="$t('外边距')">
+            <div>
+              {{ $t('上 :') }}
+              <a-input-number v-model="selectItem.topMargin" :min="0" />
+              px
+            </div>
+            <div>
+              {{ $t('下 :') }}
+              <a-input-number v-model="selectItem.bottomMargin" :min="0" />
+              px
+            </div>
+            <div>
+              {{ $t('左 :') }}
+              <a-input-number v-model="selectItem.leftMargin" :min="0" />
+              px
+            </div>
+            <div>
+              {{ $t('右 :') }}
+              <a-input-number v-model="selectItem.rightMargin" :min="0" />
+              px
+            </div>
+          </a-form-item>
+        </div>
+        <div v-else>
+          <!-- 子表设置start -->
+          <a-form-item v-if="selectItem.type === 'web_sub_data_window'" :label="$t('数据窗口')">
+            <a-button @click="subFormShow">
+              <a-badge
+                v-if="selectItem.relationSetting.subTable && selectItem.relationSetting.subTable.length !== 0"
+                status="success"
+              />
+              <a-badge v-else status="default" />
+              {{ $t('选择') }}
+            </a-button>
+            <SubtableSetForm
+              ref="subtableSetForm"
+              :params="{
+                relationSetting: selectItem.relationSetting,
+                fieldColumns: params.fieldColumns,
+                tableList: params.tableList
+              }"
+              @func="
+                (data) => {
+                  $set(selectItem, 'relationSetting', data)
+                }
+              "
+            />
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'web_sub_data_window'" :label="$t('是否启用')">
+            <a-radio-group v-model="selectItem.relationSetting.enable">
+              <a-radio value="1">{{ $t('是') }}</a-radio>
+              <a-radio value="0">{{ $t('否') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <!-- 访问权限 -->
+          <a-form-item v-if="selectItem.type === 'web_sub_data_window'" :label="$t('访问权限')">
+            <a-button @click="handleFieldPriv">
+              <a-badge
+                v-if="selectItem.relationSetting.usePermissions && selectItem.relationSetting.usePermissions.length > 0"
+                status="success"
+              />
+              <a-badge v-else status="default" />
+              {{ $t('访问权限') }}
+            </a-button>
+            <priv-visit-form
+              ref="privVisitForm"
+              :params="{ formView: selectItem.relationSetting }"
+              @func="
+                (e) => {
+                  const config = JSON.parse(JSON.stringify(selectItem))
+                  config.relationSetting.usePermissions = e
+                  $set(selectItem, 'relationSetting', config.relationSetting)
+                }
+              "
+            />
+          </a-form-item>
+          <!-- 子表设置end -->
+          <!-- 子表设置 -->
+          <template v-else-if="selectItem.type === 'web_sub_form_view'">
+            <a-form-item :label="$t('子表')">
+              <a-button @click="subFormShow">
+                <a-badge
+                  v-if="selectItem.relationSetting.subTable && selectItem.relationSetting.subTable.length !== 0"
+                  status="success"
+                />
+                <a-badge v-else status="default" />
+                {{ $t('选择') }}
+              </a-button>
+              <SubtableSetForm
+                ref="subtableSetForm"
+                :params="{
+                  relationSetting: selectItem.relationSetting,
+                  fieldColumns: params.fieldColumns,
+                  tableList: params.tableList,
+                  type: 'web_sub_form_view'
+                }"
+                @func="
+                  (data) => {
+                    $set(selectItem, 'relationSetting', data)
+                  }
+                "
+              />
+            </a-form-item>
+          </template>
+          <!-- 客户画像设置start -->
+          <a-form-item v-if="selectItem.type === 'portrait'" :label="$t('客户画像设置')">
+            <a-button @click="portraitSet">{{ $t('客户画像设置') }}</a-button>
+            <portrait-set
+              ref="portraitSet"
+              :params="{ fieldColumns: params.fieldColumns, tableList: params.tableList }"
+              @ok="(data) => (selectItem.portraitData = data)"
+            />
+          </a-form-item>
+          <!-- 流程办理方式start -->
+          <a-form-item v-if="selectItem.type === 'work'" :label="$t('是否使用分隔符')">
+            <a-radio-group v-model="selectItem.workDivider">
+              <a-radio value="1">{{ $t('是') }}</a-radio>
+              <a-radio value="0">{{ $t('否') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <!-- 流程办理方式end -->
+          <!-- 组织结构start -->
+          <a-form-item v-if="selectItem.formType === 'organization'" :label="$t('自定义数据源')">
+            <a-input v-model="selectItem.dataSourceUrl" />
+          </a-form-item>
+          <!-- 组织结构end -->
+          <!-- 字段附加属性start -->
+          <a-form-item v-if="selectItem.type === 'field'">
+            <span slot="label">
+              {{ $t('附加属性') }}
+              <a-tooltip>
+                <template slot="title">
+                  {{ $t('实例说明连接：') }}
+                  <a href="https://www.yuque.com/xqyyng/lnwitk/wzhdd4" target="_blank">
+                    https://www.yuque.com/xqyyng/lnwitk/wzhdd4
+                  </a>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-row v-for="(list, index) in attrList" :key="index" type="flex" align="middle" :gutter="10">
+              <a-col :span="10">
+                <a-select
+                  v-model="list.eventName"
+                  :dropdownMatchSelectWidth="false"
+                  showSearch
+                  :placeholder="$t('请选择触发事件')"
+                  @dropdownVisibleChange="onDropdownVisibleChange"
+                >
+                  <a-select-option v-for="(selItem, selIndex) in dataSource" :key="selIndex" :value="selItem">
+                    {{ selItem }}
+                  </a-select-option>
+                </a-select>
+              </a-col>
+              <a-col flex="auto">
+                <a-button @click="codeEditor(list, index)">
+                  <a-badge v-if="list.attribute" status="success" :text="$t('设置')" />
+                  <a-badge v-else status="default" :text="$t('设置')" />
+                </a-button>
+              </a-col>
+              <a-col :span="4" style="display: flex; justify-content: center; align-items: center">
+                <a-icon
+                  style="font-size: 22px; color: #52c41a; margin-right: 8px"
+                  type="plus-square"
+                  theme="filled"
+                  @click="add"
+                />
+                <a-icon
+                  :style="{ fontSize: '22px', color: attrList.length !== 1 ? '#ff4d4f' : '#bfbfbf' }"
+                  type="minus-square"
+                  theme="filled"
+                  @click="del(index)"
+                />
+              </a-col>
+            </a-row>
+          </a-form-item>
+          <!-- 字段附加属性end -->
+          <!-- 自定义组件附加属性start -->
+          <a-form-item v-if="selectItem.type === 'component'" :label="$t('自定义文件路径')">
+            <a-input v-model="selectItem.filePath" />
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'component'">
+            <span slot="label">{{ $t('附加属性') }}</span>
+            <a-button type="primary" size="small" @click="codeEditor">{{ $t('设置') }}</a-button>
+            <a-tag
+              v-if="selectItem.attribute != null && selectItem.attribute != ''"
+              color="green"
+              style="margin-left: 8px"
+            >
+              {{ $t('已设置') }}
+            </a-tag>
+            <a-tag v-else style="margin-left: 8px">{{ $t('未设置') }}</a-tag>
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'flowlog'" :label="$t('展现形式')">
+            <a-radio-group v-model="selectItem.showType">
+              <a-radio value="table" style="display: block">{{ $t('表格') }}</a-radio>
+              <a-radio value="card" style="display: block">{{ $t('卡片') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'flowlog'" :label="$t('快捷筛选')">
+            <a-radio-group v-model="selectItem.screenDefault">
+              <draggable
+                v-model="selectItem.screenList"
+                animation="200"
+                handle=".handle"
+                @start="drag = true"
+                @end="drag = false"
+              >
+                <a-row
+                  v-for="element in selectItem.screenList"
+                  :key="element.value"
+                  class="list-item"
+                  :gutter="8"
+                  type="flex"
+                  align="middle"
+                >
+                  <a-col :span="4" class="handle">
+                    <a-icon type="drag" />
+                  </a-col>
+                  <a-col :span="20" class="handle">
+                    <a-radio :value="element.value" style="display: block">
+                      {{ $t(element.label) }}
+                    </a-radio>
+                  </a-col>
+                </a-row>
+              </draggable>
+            </a-radio-group>
+          </a-form-item>
+          <!-- 自定义组件附加属性end -->
+          <!-- <a-form-item
+          v-if="!hideModel && typeof selectItem.model !== 'undefined'"
+          :label="$t('数据字段')"
+        >
+          <a-input v-model="selectItem.model" :placeholder="$t('请输入')" />
+        </a-form-item> -->
+          <!-- input type start -->
+          <!-- <a-form-item v-if="selectItem.formType === 'text'" :label="$t('输入框type')">
+          <a-input v-model="options.type" :placeholder="$t('请输入')" />
+        </a-form-item> -->
+          <!-- input type end -->
+          <!-- <a-form-item
+          v-if="
+            typeof options.rangePlaceholder !== 'undefined' && options.range
+          "
+          :label="$t('占位内容')"
+        >
+          <a-input :placeholder="$t('请输入')" v-model="options.rangePlaceholder[0]" />
+          <a-input :placeholder="$t('请输入')" v-model="options.rangePlaceholder[1]" />
+        </a-form-item>
+        <a-form-item
+          v-else-if="typeof options.placeholder !== 'undefined'"
+          :label="$t('占位内容')"
+        >
+          <a-input :placeholder="$t('请输入')" v-model="options.placeholder" />
+        </a-form-item> -->
+          <!-- <a-form-item
+          v-if="selectItem.formType === 'textarea'"
+          :label="$t('自适应内容高度')"
+        >
+          <a-input-number
+            style="width:100%"
+            v-model="options.minRows"
+            :placeholder="$t('最小高度')"
+          />
+          <a-input-number
+            style="width:100%"
+            v-model="options.maxRows"
+            :placeholder="$t('最大高度')"
+          />
+        </a-form-item> -->
+          <!-- <a-form-item v-if="typeof options.width !== 'undefined'" :label="$t('宽度')">
+          <a-input :placeholder="$t('请输入')" v-model="options.width" />
+        </a-form-item>
+        <a-form-item v-if="typeof options.height !== 'undefined'" :label="$t('高度')">
+          <a-input-number v-model="options.height" />
+        </a-form-item>
+        <a-form-item v-if="typeof options.step !== 'undefined'" :label="$t('步长')">
+          <a-input-number v-model="options.step" :placeholder="$t('请输入')" />
+        </a-form-item>
+        <a-form-item v-if="typeof options.min !== 'undefined'" :label="$t('最小值')">
+          <a-input-number v-model="options.min" :placeholder="$t('请输入')" />
+        </a-form-item>
+        <a-form-item v-if="typeof options.max !== 'undefined'" :label="$t('最大值')">
+          <a-input-number v-model="options.max" :placeholder="$t('请输入')" />
+        </a-form-item> -->
+          <!-- <a-form-item
+          v-if="typeof options.precision !== 'undefined'"
+          :label="$t('数值精度')"
+        >
+          <a-input-number
+            :min="0"
+            :max="50"
+            v-model="options.precision"
+            :placeholder="$t('请输入')"
+          />
+        </a-form-item> -->
+          <!-- <a-form-item
+          v-if="typeof options.dictCode !== 'undefined'"
+          label="dictCode"
+        >
+          <a-input v-model="options.dictCode"></a-input>
+        </a-form-item> -->
+          <!-- 选项配置及动态数据配置 start -->
+          <!-- <a-form-item
+          v-if="typeof options.options !== 'undefined'"
+          :label="$t('选项配置')"
+        >
+          <a-radio-group buttonStyle="solid" v-model="options.dynamic">
+            <a-radio-button :value="false">{{ $t('静态数据') }}</a-radio-button>
+            <a-radio-button :value="true">{{ $t('动态数据') }}</a-radio-button>
+          </a-radio-group>
+
+          <a-input
+            v-show="options.dynamic"
+            v-model="options.dynamicKey"
+            :placeholder="$t('动态数据变量名')"
+          ></a-input>
+
+          <KChangeOption v-show="!options.dynamic" v-model="options.options" />
+        </a-form-item> -->
+          <!-- 选项配置及动态数据配置 end -->
+          <!-- 日期选择器默认值 start -->
+          <!-- <a-form-item v-if="selectItem.type === 'date'" :label="$t('默认值')">
+          <a-input
+            v-if="!options.range"
+            v-model="options.defaultValue"
+            :placeholder="
+              typeof options.format === 'undefined' ? '' : options.format
+            "
+          />
+          <a-input
+            v-if="options.range"
+            v-model="options.rangeDefaultValue[0]"
+            :placeholder="
+              typeof options.format === 'undefined' ? '' : options.format
+            "
+          />
+          <a-input
+            v-if="options.range"
+            v-model="options.rangeDefaultValue[1]"
+            :placeholder="
+              typeof options.format === 'undefined' ? '' : options.format
+            "
+          />
+        </a-form-item> -->
+          <!-- 日期选择器默认值 start -->
+          <!-- <a-form-item
+          v-if="
+            ![
+              'number',
+              'radio',
+              'checkbox',
+              'date',
+              'rate',
+              'select',
+              'switch',
+              'slider',
+              'html'
+            ].includes(selectItem.type) &&
+              typeof options.defaultValue !== 'undefined'
+          "
+          :label="$t('默认值')"
+        >
+          <a-input
+            v-model="options.defaultValue"
+            :placeholder="
+              typeof options.format === 'undefined' ? $t('请输入') : options.format
+            "
+          />
+        </a-form-item> -->
+          <!-- 修改html -->
+          <a-form-item v-if="selectItem.type === 'html'" :label="$t('默认值')">
+            <a-textarea v-model="options.defaultValue" :autoSize="{ minRows: 4, maxRows: 8 }" />
+          </a-form-item>
+          <!-- <a-form-item
+          v-if="typeof options.format !== 'undefined'"
+          :label="$t('时间格式')"
+        >
+          <a-input
+            v-model="options.format"
+            :placeholder="$t('时间格式如：YYYY-MM-DD HH:mm:ss')"
+          />
+        </a-form-item> -->
+          <!-- 下载方式 start -->
+          <!-- <a-form-item
+          v-if="typeof options.downloadWay !== 'undefined'"
+          label="下载方式"
+        >
+          <a-radio-group buttonStyle="solid" v-model="options.downloadWay">
+            <a-radio-button value="a">{{ $t('a标签') }}</a-radio-button>
+            <a-radio-button value="ajax">ajax</a-radio-button>
+            <a-radio-button value="dynamic">{{ $t('动态函数') }}</a-radio-button>
+          </a-radio-group>
+          <a-input
+            v-show="options.downloadWay === 'dynamic'"
+            v-model="options.dynamicFun"
+            :placeholder="$t('动态函数名')"
+          ></a-input>
+        </a-form-item> -->
+          <!-- 下载方式 end -->
+          <a-form-item v-if="selectItem.type === 'button'" :label="$t('按钮操作')">
+            <a-radio-group v-model="options.handle" buttonStyle="solid">
+              <a-radio-button value="submit">{{ $t('提交') }}</a-radio-button>
+              <a-radio-button value="reset">{{ $t('重置') }}</a-radio-button>
+              <a-radio-button value="dynamic">{{ $t('动态函数') }}</a-radio-button>
+            </a-radio-group>
+            <a-button @click="buttoCodeEditor">{{ $t('附加属性') }}</a-button>
+            <!-- <a-input
+              v-show="options.handle === 'dynamic'"
+              v-model="options.dynamicFun"
+              :placeholder="$t('动态函数名')"
+            ></a-input> -->
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'alert'" :label="$t('辅助描述')">
+            <a-textarea v-model="options.description" :auto-size="{ minRows: 5, maxRows: 10 }" />
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'alert'" :label="$t('类型')">
+            <a-radio-group v-model="options.type">
+              <a-radio value="success" style="display: block">success</a-radio>
+              <a-radio value="info" style="display: block">info</a-radio>
+              <a-radio value="warning" style="display: block">warning</a-radio>
+              <a-radio value="error" style="display: block">error</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'alert'" :label="$t('操作属性')">
+            <kCheckbox v-model="options.showIcon" style="display: block" :label="$t('显示图标')" />
+            <kCheckbox v-model="options.banner" style="display: block" :label="$t('无边框')" />
+            <kCheckbox v-model="options.closable" style="display: block" :label="$t('可关闭')" />
+          </a-form-item>
+          <!-- 上传图片 -->
+          <!-- <a-form-item v-if="selectItem.type === 'uploadImg'" :label="$t('样式')">
+          <a-radio-group buttonStyle="solid" v-model="options.listType">
+            <a-radio-button value="text">text</a-radio-button>
+            <a-radio-button value="picture">picture</a-radio-button>
+            <a-radio-button value="picture-card">card</a-radio-button>
+          </a-radio-group>
+        </a-form-item> -->
+          <!-- 上传数量 -->
+          <!-- <a-form-item
+          v-if="typeof options.limit !== 'undefined'"
+          :label="$t('最大上传数量')"
+        >
+          <a-input-number :min="1" v-model="options.limit" />
+        </a-form-item> -->
+
+          <!-- scrollY -->
+          <!-- <a-form-item
+          v-if="typeof options.scrollY !== 'undefined'"
+          label="scrollY"
+        >
+          <a-input-number :min="0" v-model="options.scrollY" />
+        </a-form-item> -->
+
+          <!-- 上传地址 -->
+          <!-- <a-form-item
+          v-if="typeof options.action !== 'undefined'"
+          :label="$t('上传地址')"
+        >
+          <a-input v-model="options.action" :placeholder="$t('请输入')"></a-input>
+        </a-form-item> -->
+
+          <!-- 文件name -->
+          <!-- <a-form-item
+          v-if="typeof options.fileName !== 'undefined'"
+          :label="$t('文件name')"
+        >
+          <a-input v-model="options.fileName" :placeholder="$t('请输入')"></a-input>
+        </a-form-item> -->
+          <!-- 上传额外参数 -->
+          <!-- <a-form-item
+          v-if="typeof options.data !== 'undefined'"
+          :label="$t('额外参数（JSON格式）')"
+        >
+          <a-input v-model="options.data" :placeholder="$t('严格JSON格式')"></a-input>
+        </a-form-item> -->
+          <!-- 文字对齐方式 -->
+          <a-form-item v-if="selectItem.type === 'text'" :label="$t('文字对齐方式')">
+            <a-radio-group v-model="options.textAlign" buttonStyle="solid">
+              <a-radio-button value="left">{{ $t('左') }}</a-radio-button>
+              <a-radio-button value="center">{{ $t('居中') }}</a-radio-button>
+              <a-radio-button value="right">{{ $t('右') }}</a-radio-button>
+            </a-radio-group>
+          </a-form-item>
+          <!-- <a-form-item v-if="selectItem.type === 'text'" :label="$t('操作属性')">
+          <kCheckbox v-model="options.showRequiredMark" :label="$t('显示必选标记')" />
+        </a-form-item> -->
+          <a-form-item
+            v-if="selectItem.type === 'field' && selectItem.formType !== 'serialnumber'"
+            :label="$t('操作属性')"
+          >
+            <a-radio-group v-model="selectItem.fieldRule">
+              <a-radio value="allow">{{ $t('可见可编') }}</a-radio>
+              <a-radio value="readonly">{{ $t('可见不可编') }}</a-radio>
+              <a-radio value="hidden">{{ $t('不可见可提交') }}</a-radio>
+              <a-radio value="disabled">{{ $t('不可见不可提交') }}</a-radio>
+            </a-radio-group>
+            <!-- <kCheckbox
+            v-if="typeof options.hidden !== 'undefined'"
+            v-model="options.hidden"
+            :label="$t('隐藏')"
+          />
+          <kCheckbox
+            v-if="typeof options.disabled !== 'undefined'"
+            v-model="options.disabled"
+            :label="$t('禁用')"
+          />
+          <kCheckbox
+            v-if="typeof options.readonly !== 'undefined'"
+            v-model="options.readonly"
+            :label="$t('只读')"
+          />
+          <kCheckbox
+            v-if="typeof options.clearable !== 'undefined'"
+            v-model="options.clearable"
+            :label="$t('可清除')"
+          />
+          <kCheckbox
+            v-if="typeof options.multiple !== 'undefined'"
+            v-model="options.multiple"
+            :label="$t('多选')"
+          />
+          <kCheckbox
+            v-if="typeof options.range !== 'undefined'"
+            v-model="options.range"
+            :label="$t('范围选择')"
+          />
+          <kCheckbox
+            v-if="typeof options.showTime !== 'undefined'"
+            v-model="options.showTime"
+            :label="$t('时间选择器')"
+          />
+          <kCheckbox
+            v-if="typeof options.allowHalf !== 'undefined'"
+            v-model="options.allowHalf"
+            :label="$t('允许半选')"
+          />
+          <kCheckbox
+            v-if="typeof options.showInput !== 'undefined'"
+            v-model="options.showInput"
+            :label="$t('显示输入框')"
+          />
+          <kCheckbox
+            v-if="typeof options.showLabel !== 'undefined'"
+            v-model="options.showLabel"
+            :label="$t('显示Label')"
+          />
+          <kCheckbox
+            v-if="typeof options.chinesization !== 'undefined'"
+            v-model="options.chinesization"
+            :label="$t('汉化')"
+          />
+          <kCheckbox
+            v-if="typeof options.hideSequence !== 'undefined'"
+            v-model="options.hideSequence"
+            :label="$t('隐藏序号')"
+          />
+          <kCheckbox
+            v-if="typeof options.drag !== 'undefined'"
+            v-model="options.drag"
+            :label="$t('允许拖拽')"
+          />
+          <kCheckbox
+            v-if="typeof options.showSearch !== 'undefined'"
+            v-model="options.showSearch"
+            :label="$t('可搜索')"
+          />
+          <kCheckbox
+            v-if="typeof options.treeCheckable !== 'undefined'"
+            v-model="options.treeCheckable"
+            :label="$t('可勾选')"
+          />
+          <kCheckbox
+            v-if="typeof options.animated !== 'undefined'"
+            v-model="options.animated"
+            :label="$t('动画切换')"
+          /> -->
+          </a-form-item>
+          <!-- <a-form-item
+          v-if="
+            typeof selectItem.rules !== 'undefined' &&
+              selectItem.rules.length > 0
+          "
+          :label="$t('校验')"
+        >
+          <kCheckbox v-model="selectItem.rules[0].required" :label="$t('必填')" />
+          <a-input
+            v-model="selectItem.rules[0].message"
+            :placeholder="$t('必填校验提示信息')"
+          />
+          <KChangeOption v-model="selectItem.rules" type="rules" />
+        </a-form-item> -->
+
+          <!-- 表格选项 -->
+          <a-form-item v-if="selectItem.type === 'table'" :label="$t('表格样式CSS')">
+            <a-input v-model="selectItem.options.customStyle" />
+          </a-form-item>
+          <a-form-item v-if="selectItem.type === 'table'" :label="$t('属性')">
+            <kCheckbox v-model="selectItem.options.bordered" :label="$t('显示边框')" />
+            <kCheckbox v-model="selectItem.options.bright" :label="$t('鼠标经过点亮')" />
+            <kCheckbox v-model="selectItem.options.small" :label="$t('紧凑型')" />
+          </a-form-item>
+
+          <a-form-item v-if="selectItem.type === 'table'" :label="$t('提示')">
+            <p style="line-height: 26px">{{ $t('请点击右键增加行列，或者合并单元格') }}</p>
+          </a-form-item>
+        </div>
+        <!-- 卡片设置 -->
+        <a-form-item v-if="selectItem.type === 'card'" :label="$t('边框设置')">
+          <a-radio-group v-model="selectItem.bordered" buttonStyle="solid">
+            <a-radio value="1">{{ $t('显示') }}</a-radio>
+            <a-radio value="0">{{ $t('隐藏') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'card'" :label="$t('添加按钮设置')">
+          <a-radio-group v-model="selectItem.addShow" buttonStyle="solid" defaultValue="0">
+            <a-radio value="1">{{ $t('显示') }}</a-radio>
+            <a-radio value="0">{{ $t('隐藏') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <!-- tabs配置 start -->
+        <a-form-item v-if="options.tabBarGutter" :label="$t('页签间距')">
+          <a-input-number v-model="options.tabBarGutter" :placeholder="$t('请输入')" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'tabs'">
+          <span slot="label">
+            {{ $t('页签配置') }}
+            <a-tooltip :title="$t('点击【添加】在最上方添加一行，点击行添加，紧跟当前行下方添加一行')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <KChangeOption v-model="selectItem.columns" type="tab" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'tabs'" :label="$t('页签高度')">
+          <a-input-number v-model="selectItem.height" :placeholder="$t('请输入')" />
+        </a-form-item>
+        <!-- tabs配置 end -->
+        <a-form-item v-if="selectItem.type === 'grid'" :label="$t('栅格间距')">
+          <a-input-number v-model="selectItem.options.gutter" :placeholder="$t('请输入')" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'grid'">
+          <span slot="label">
+            {{ $t('栅格配置项') }}
+            <a-tooltip :title="$t('点击【添加】在最上方添加一行，点击行添加，紧跟当前行下方添加一行')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <KChangeOption v-model="selectItem.columns" type="colspan" :nowArray="nowArray" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'switch'" :label="$t('默认值')">
+          <a-switch v-model="options.defaultValue" />
+        </a-form-item>
+        <a-form-item v-if="['number', 'slider'].indexOf(selectItem.type) >= 0" :label="$t('默认值')">
+          <a-input-number
+            v-model="options.defaultValue"
+            :step="options.step"
+            :min="options.min || -Infinity"
+            :max="options.max || Infinity"
+          />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'rate'" :label="$t('默认值')">
+          <a-rate v-model="options.defaultValue" :allowHalf="options.allowHalf" :count="options.max" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'select'" :label="$t('默认值')">
+          <a-select v-model="options.defaultValue" :options="options.options" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'radio'" :label="$t('默认值')">
+          <a-radio-group v-model="options.defaultValue" :options="options.options" />
+        </a-form-item>
+        <a-form-item v-if="selectItem.type === 'checkbox'" :label="$t('默认值')">
+          <a-checkbox-group v-model="options.defaultValue" :options="options.options" />
+        </a-form-item>
+        <a-form-item v-if="String(options.orientation) !== 'undefined'" :label="$t('标签位置')">
+          <a-radio-group v-model="options.orientation" buttonStyle="solid">
+            <a-radio-button value="left">{{ $t('左') }}</a-radio-button>
+            <a-radio-button value="">{{ $t('居中') }}</a-radio-button>
+            <a-radio-button value="right">{{ $t('右') }}</a-radio-button>
+          </a-radio-group>
+        </a-form-item>
+        <!-- 页签位置 start -->
+        <a-form-item v-if="selectItem.type === 'tabs'" :label="$t('页签位置')">
+          <a-radio-group v-model="options.tabPosition">
+            <a-radio value="top" style="display: block">top</a-radio>
+            <a-radio value="right" style="display: block">right</a-radio>
+            <a-radio value="bottom" style="display: block">bottom</a-radio>
+            <a-radio value="left" style="display: block">left</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <!-- 页签位置 end -->
+        <!-- 页签类型 start -->
+        <a-form-item v-if="String(options.type) !== 'undefined' && selectItem.type === 'tabs'" :label="$t('页签类型')">
+          <a-radio-group v-model="options.type">
+            <a-radio value="line" style="display: block">line</a-radio>
+            <a-radio value="card" style="display: block">card</a-radio>
+            <a-radio value="editable-card" style="display: block">editable-card</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <!-- 页签类型 end -->
+        <!-- 页签大小 start -->
+        <a-form-item v-if="String(options.size) !== 'undefined'" :label="$t('页签大小')">
+          <a-radio-group v-model="options.size">
+            <a-radio value="large" style="display: block">large</a-radio>
+            <a-radio value="default" style="display: block">default</a-radio>
+            <a-radio value="small" style="display: block">small</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <!-- 页签大小 end -->
+        <a-form-item v-if="selectItem.type === 'button'" :label="$t('类型')">
+          <a-radio-group v-model="options.type">
+            <a-radio value="primary" style="display: block">Primary</a-radio>
+            <a-radio value="default" style="display: block">Default</a-radio>
+            <a-radio value="dashed" style="display: block">Dashed</a-radio>
+            <a-radio value="danger" style="display: block">Danger</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item
+          v-if="selectItem.type === 'card' || selectItem.type === 'tabs' || selectItem.type === 'table'"
+          :label="$t('外边距设置')"
+        >
+          <a-row>
+            <a-col :span="3">{{ $t('上 :') }}</a-col>
+            <a-col :span="21">
+              <a-input-number v-model="selectItem.topMargin" />
+              px
+            </a-col>
+            <a-col :span="3">{{ $t('下 :') }}</a-col>
+            <a-col :span="21">
+              <a-input-number v-model="selectItem.downMargin" />
+              px
+            </a-col>
+            <a-col :span="3">{{ $t('左 :') }}</a-col>
+            <a-col :span="21">
+              <a-input-number v-model="selectItem.leftMargin" />
+              px
+            </a-col>
+            <a-col :span="3">{{ $t('右 :') }}</a-col>
+            <a-col :span="21">
+              <a-input-number v-model="selectItem.rightMargin" />
+              px
+            </a-col>
+          </a-row>
+        </a-form-item>
+      </a-form>
+    </div>
+    <!-- 附加属性 -->
+    <code-editor ref="codeEditor" @func="getCode" />
+  </div>
+</template>
+<script>
+/*
+ * author kcz
+ * date 2019-11-20
+ * description 表单控件属性设置组件,因为配置数据是引用关系，所以可以直接修改
+ */
+export default {
+  name: 'FormItemProperties',
+  i18n: window.lang('admin'),
+  components: {
+    KChangeOption: () => import('../../KChangeOption/index.vue'),
+    kCheckbox: () => import('../../KCheckbox/index.vue'),
+    CodeEditor: () => import('@/views/admin/CodeEditor'),
+    Editor: () => import('@/views/admin/Formula/Editor'),
+    SubtableSetForm: () => import('@/views/admin/Table/SubtableSetForm'),
+    PrivVisitForm: () => import('@/views/admin/Table/PrivVisitForm'),
+    PortraitSet: () => import('./PortraitSet'),
+    draggable: () => import('vuedraggable'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  props: {
+    selectItem: {
+      type: Object,
+      required: true
+    },
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    basicsArray: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
+    myArray: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
+    nowArray: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
+    tableType: {
+      type: String,
+      default () {
+        return ''
+      }
+    }
+  },
+  data () {
+    return {
+      options: {},
+      attrList: [
+        { eventName: 'change', attribute: '' }
+      ], // 附加属性列表
+      listIndex: 0, // 被选中
+      dataInit: ['change', 'blur', 'focus', 'click', 'pressEnter', 'search', 'select', 'popupVisibleChange', 'deselect', 'inputKeydown', 'mouseenter', 'mouseleave', 'popupScroll', 'dropdownVisibleChange'],
+      dataSource: ['change', 'blur', 'focus', 'click', 'pressEnter', 'search', 'select', 'popupVisibleChange', 'deselect', 'inputKeydown', 'mouseenter', 'mouseleave', 'popupScroll', 'dropdownVisibleChange'],
+      componentData: [],
+      reg: [['', this.$t('--无--')],
+      ['email', this.$t('Email地址')],
+      ['url', this.$t('URL地址')],
+      ['idcar', this.$t('身份证号')],
+      ['postal', this.$t('邮政编码')],
+      ['text_min', this.$t('文本最小长度')],
+      ['text_max', this.$t('文本最大长度')],
+      ['number_max', this.$t('数值最大值')],
+      ['number_min', this.$t('数值最小值')],
+      ['number_scope', this.$t('数值范围')],
+      ['regular', this.$t('正则表达式')],
+      ['javascript', this.$t('JavaScript脚本')]],
+      regType: 0, // 0:---无--- ; 1：email、url、idcar、postal; 2：text_min text_max number_max number_min; 3：number_scope; 4： regular 5：javascript;
+      regChoice: [],
+      regularValue: [['/^\\w+((-\\w+)|(\\.\\w+))*\\@[A-Za-z0-9]+((\\.|-)[A-Za-z0-9]+)*\\.[A-Za-z0-9]+$/', this.$t('邮箱')],
+      ['/^(1)[0-9]{10}$/', this.$t('手机')],
+      ['/^[A-Za-z]+$/', this.$t('字母')],
+      ['/^([+-]?)\\d*\\.?\\d+$/', this.$t('数字')]],
+      regKey: [],
+      number_scope_min: '',
+      number_scope_max: '',
+      number_scope_max_flag: false,
+      number_scope_min_flag: false,
+      regText: '',
+      colorType: [{
+        value: '',
+        color: '#000',
+        type: this.$t('默认')
+      }, {
+        value: '#8c8c8c',
+        color: '#8c8c8c',
+        type: this.$t('浅灰')
+      }, {
+        value: '#F5222D',
+        color: '#F5222D',
+        type: this.$t('薄暮')
+      }, {
+        value: '#FA541C',
+        color: '#FA541C',
+        type: this.$t('火山')
+      }, {
+        value: '#FAAD14',
+        color: '#FAAD14',
+        type: this.$t('日暮')
+      }, {
+        value: '#13C2C2',
+        color: '#13C2C2',
+        type: this.$t('明青')
+      }, {
+        value: '#52C41A',
+        color: '#52C41A',
+        type: this.$t('极光')
+      }, {
+        value: '#1890FF',
+        color: '#1890FF',
+        type: this.$t('拂晓')
+      }, {
+        value: '#2F54EB',
+        color: '#2F54EB',
+        type: this.$t('极客')
+      }, {
+        value: '#722ED1',
+        color: '#722ED1',
+        type: this.$t('酱紫')
+      }]
+    }
+  },
+  watch: {
+    selectItem: {
+      handler (val) {
+        this.options = val.options || {}
+        let attriObj = {}
+        if (val.attribute) {
+          if (val.attribute[0] === '{' && val.attribute.substring(0, 9) !== '{template') {
+            attriObj = JSON.parse(val.attribute)
+            const attriList = []
+            for (const key in attriObj) {
+              attriList.push({
+                eventName: key,
+                attribute: attriObj[key]
+              })
+            }
+            this.attrList = attriList
+          } else {
+            attriObj = val.attribute
+          }
+        } else {
+          this.attrList = [{ eventName: 'change', attribute: '' }]
+        }
+        if (val.validity) {
+          for (var key in val.validity) {
+            if (key !== 'error_msg') {
+              if (key === 'number_scope_min') {
+                this.regType = 3
+                this.number_scope_min = val.validity.number_scope_min
+              }
+              if (key === 'number_scope_max') {
+                this.number_scope_max = val.validity.number_scope_max
+              }
+              this.getReg(key)
+            }
+          }
+        } else {
+          this.regType = 0
+          val.validity = {}
+        }
+        this.componentData = this.basicsArray.filter(item => !item.getType && item.type !== 'component')
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    // 触发事件的可选值
+    onDropdownVisibleChange () {
+      this.dataSource = JSON.parse(JSON.stringify(this.dataInit))
+      this.attrList.forEach(item => {
+        const index = this.dataSource.indexOf(item.eventName)
+        this.dataSource.splice(index, 1)
+      })
+    },
+    // 打开代码编辑器
+    codeEditor (list, index) {
+      if (this.selectItem.type === 'field') {
+        this.listIndex = index
+        this.$refs.codeEditor.show({
+          value: list.attribute
+        })
+      } else {
+        this.$refs.codeEditor.show({
+          value: this.selectItem.attribute || ''
+        })
+      }
+    },
+    buttoCodeEditor (list, index) {
+      this.$refs.codeEditor.show({
+        value: this.options.dynamicFun || ''
+      })
+    },
+    // 有效性判断
+    getReg (e) {
+      if (!e) {
+        this.regType = 0
+      } else if (['email', 'url', 'idcar', 'postal'].indexOf(e) > -1) {
+        this.regType = 1
+      } else if (['text_min', 'text_max', 'number_max', 'number_min'].indexOf(e) > -1) {
+        this.regType = 2
+        this.regKey = [e]
+      } else if (['number_scope'].indexOf(e) > -1) {
+        this.regType = 3
+        this.regKey = ['number_scope_min', 'number_scope_min']
+      } else if (['regular'].indexOf(e) > -1) {
+        this.regType = 4
+        this.regKey = ['regular', 'combo-1623-inputEl']
+      } else if (['javascript'].indexOf(e) > -1) {
+        this.regType = 5
+        this.regKey = [e]
+      }
+      var arr = this.reg.filter((item) => {
+        return e === item[0]
+      })
+      this.regChoice = arr[0]
+    },
+    getRegText (e) {
+      this.regText = e
+    },
+    subFormShow () {
+      // if (!this.selectItem.relationSetting.tableidSon) {
+      const subTable = this.selectItem.relationSetting.subTable
+      if (subTable && subTable.length === 0) {
+        this.$refs.subtableSetForm.show({
+          action: 'add',
+          title: this.$t('选择'),
+          record: {
+            id: (new Date()).valueOf(),
+            listOrder: 1,
+            name: '',
+            buttonType: 0,
+            priv: '',
+            enable: '1',
+            pattern: '1'
+          }
+        })
+      } else {
+        this.$refs.subtableSetForm.show({
+          action: 'edit',
+          title: `${this.$t('选择')}`,
+          record: this.selectItem.relationSetting
+        })
+      }
+    },
+    portraitSet () {
+      this.$refs.portraitSet.show({
+        title: this.$t('客户画像设置'),
+        data: this.selectItem.portraitData
+      })
+    },
+    handleFieldPriv () {
+      const subTable = this.selectItem.relationSetting.subTable
+      if (subTable && subTable.length !== 0) {
+        this.$refs.privVisitForm.show({
+          action: 'edit',
+          title: `${this.$t('访问权限')}`,
+          record: this.selectItem.relationSetting,
+          key: 'usePermissions',
+          selectType: 'radio',
+          privArr: {
+            visit: this.$t('可访问')
+          },
+          defaultpriv: 'visit'
+        })
+      } else {
+        this.$message.info(this.$t('请设置子表菜单'))
+      }
+    },
+    // 获取代码编辑器数据
+    getCode (value) {
+      if (this.selectItem.type === 'field') {
+        const list = this.attrList[this.listIndex]
+        list.attribute = value
+        this.attrList.splice(this.listIndex, 1, list)
+        const attriObj = {}
+        this.attrList.forEach(item => {
+          attriObj[item.eventName] = item.attribute
+        })
+        this.$set(this.selectItem, 'attribute', JSON.stringify(attriObj))
+      } else if (this.selectItem.type === 'button') {
+        this.selectItem.options.dynamicFun = value
+      } else {
+        this.selectItem.attribute = value
+        this.$set(this.selectItem, 'attribute', value)
+      }
+    },
+    preinstchange (e) {
+      if (e === 'divider') {
+        this.selectItem.formType = ''
+        this.selectItem.options = {
+          orientation: 'left'
+        }
+      } else if (e === 'card') {
+        this.selectItem.formType = ''
+        this.selectItem.topMargin = 0
+        this.selectItem.downMargin = 10
+        this.selectItem.leftMargin = 0
+        this.selectItem.rightMargin = 0
+        this.selectItem.bordered = '1'
+        this.selectItem.list = []
+        this.selectItem.options = undefined
+      } else if (e === 'tabs') {
+        this.selectItem.options = {
+          tabBarGutter: null,
+          type: 'line',
+          tabPosition: 'top',
+          size: 'default',
+          animated: true
+        }
+        this.selectItem.columns = [{
+          value: '1',
+          label: this.$t('选项1'),
+          list: []
+        }, {
+          value: '2',
+          label: this.$t('选项2'),
+          list: []
+        }]
+      } else if (e === 'grid') {
+        this.selectItem.columns = [{
+          span: 6,
+          list: []
+        }, {
+          span: 6,
+          list: []
+        }, {
+          span: 6,
+          list: []
+        }, {
+          span: 6,
+          list: []
+        }]
+        this.selectItem.options = {
+          gutter: 0
+        }
+      }
+    },
+    componentChange (e) {
+      this.selectItem.formType = ''
+      if (e === 'button') {
+        this.selectItem.options = {
+          type: 'primary',
+          handle: 'submit',
+          dynamicFun: '',
+          hidden: false,
+          disabled: false
+        }
+      } else if (e === 'alert') {
+        this.selectItem.options = {
+          type: 'success',
+          description: '',
+          showIcon: false,
+          banner: false,
+          hidden: false,
+          closable: false
+        }
+      } else if (e === 'text') {
+        this.selectItem.options = {
+          textAlign: 'left',
+          hidden: false, // 是否隐藏，false显示，true隐藏
+          showRequiredMark: false
+        }
+      } else if (e === 'web_sub_data_window') {
+        this.selectItem.relationSetting = {
+          enable: '1'
+        }
+      } else if (e === 'html') {
+        this.selectItem.options = {
+          hidden: false,
+          defaultValue: '<strong>HTML</strong>'
+        }
+      } else if (e === 'work') {
+        this.selectItem.column = '24'
+        this.selectItem.fieldRule = ''
+        this.selectItem.formType = ''
+        // this.selectItem.key = ''
+        // this.selectItem.model=''
+        // this.selectItem.name = '流程办理方式'
+        // this.selectItem.typename = '流程办理方式'
+        this.selectItem.value = ''
+        this.selectItem.workDivider = '1'
+      }
+    },
+    fieldChange (val) {
+      this.selectItem.attribute = val.attribute
+      this.selectItem.changeTitle = val.changeTitle
+      this.selectItem.componentName = val.componentName
+      this.selectItem.fieldId = val.fieldId
+      this.selectItem.fieldRule = val.fieldRule
+      this.selectItem.formType = val.formType
+      this.selectItem.labelShow = val.labelShow
+      this.selectItem.name = val.name
+      this.selectItem.placeholder = val.placeholder
+      this.selectItem.type = val.type
+      this.selectItem.validationType = val.validationType
+    },
+    styleChange (type) {
+      if (type === '0') {
+        this.$set(this.selectItem, 'labelShow', '1')
+        this.$set(this.selectItem, 'labelColor', '')
+        this.$set(this.selectItem, 'fontSize', '0')
+        this.$set(this.selectItem, 'color', '')
+        this.$set(this.selectItem, 'backGroundColor', '')
+        this.$set(this.selectItem, 'topPadding', 0)
+        this.$set(this.selectItem, 'bottomPadding', 0)
+        this.$set(this.selectItem, 'leftPadding', 0)
+        this.$set(this.selectItem, 'rightPadding', 0)
+        this.$set(this.selectItem, 'topMargin', 0)
+        this.$set(this.selectItem, 'bottomMargin', 0)
+        this.$set(this.selectItem, 'leftMargin', 0)
+        this.$set(this.selectItem, 'rightMargin', 0)
+      } else {
+        this.$set(this.selectItem, 'labelShow', '0')
+        this.$set(this.selectItem, 'labelColor', '')
+        this.$set(this.selectItem, 'fontSize', '0')
+        this.$set(this.selectItem, 'color', '#fafafa')
+        this.$set(this.selectItem, 'backGroundColor', '#2F54EB')
+        this.$set(this.selectItem, 'topPadding', 0)
+        this.$set(this.selectItem, 'bottomPadding', 0)
+        this.$set(this.selectItem, 'leftPadding', 5)
+        this.$set(this.selectItem, 'rightPadding', 5)
+        this.$set(this.selectItem, 'topMargin', 0)
+        this.$set(this.selectItem, 'bottomMargin', 0)
+        this.$set(this.selectItem, 'leftMargin', 0)
+        this.$set(this.selectItem, 'rightMargin', 0)
+      }
+    },
+    add () {
+      this.attrList.push({
+        eventName: undefined,
+        attribute: ''
+      })
+    },
+    del (index) {
+      if (this.attrList.length !== 1) {
+        this.attrList.splice(index, 1)
+      }
+    },
+    setSubTable (data, selectItem) {
+      console.log('data', data)
+      console.log('selectItem', selectItem)
+      this.$set(selectItem, 'relationSetting', data)
+    }
+  }
+}
+</script>

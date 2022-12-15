@@ -1,0 +1,1392 @@
+<template>
+  <a-spin :spinning="loading" style="height: 100%" class="container">
+    <a-form :form="form" style="display: flex; height: 100%" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-card
+        :bordered="false"
+        :title="$t('系统设置')"
+        :headStyle="{ 'background-color': 'unset' }"
+        :bodyStyle="{ 'flex-grow': 1, overflow: 'auto' }"
+        class="left"
+      >
+        <a-menu mode="inline" :default-selected-keys="[0]">
+          <a-menu-item v-for="(value, key) in menu" :key="key" @click="changeMenu">
+            {{ $t(`${value.name}`) }}
+          </a-menu-item>
+        </a-menu>
+      </a-card>
+      <a-card
+        :bordered="false"
+        :title="$t(`${menu[activeMenuIndex]['name']}`)"
+        :headStyle="{ 'background-color': 'unset', 'border-bottom': 'none', 'font-weight': 500, 'font-size': '16px' }"
+        :bodyStyle="{ 'flex-grow': 1, overflow: 'auto' }"
+        class="right"
+      >
+        <div>
+          <template v-if="menu[activeMenuIndex]['value'] == 'basic'">
+            <a-form-item
+              :label="$t('系统地址')"
+              :help="$t('如系统地址为http://ip/css/，则前端地址为http://ip/css/web/，后端接口为http://ip/css/myapi/')"
+            >
+              <a-input v-decorator="['adminCommonSetting[webUrl]', { initialValue: data.adminCommonSetting.webUrl }]">
+                <div slot="addonAfter" style="cursor: pointer" @click="getLocation">{{ $t('自动获取') }}</div>
+              </a-input>
+            </a-form-item>
+            <a-form-item :label="$t('管理员邮箱')">
+              <a-input
+                v-decorator="['adminCommonSetting[adminEmail]', { initialValue: data.adminCommonSetting.adminEmail }]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('最大登录失败次数')" :help="$t('登录系统失败的最大尝试次数')">
+              <a-input-number
+                v-decorator="[
+                  'adminCommonSetting[maxLoginFailedTimes]',
+                  { initialValue: data.adminCommonSetting.maxLoginFailedTimes }
+                ]"
+                :min="1"
+              />
+            </a-form-item>
+            <a-form-item>
+              <span slot="label">
+                {{ $t('密码组成') }}
+                <a-tooltip :title="$t('设置密码的组成，必须包含数字，可以选择是否需要包含字母、符号。')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-checkbox-group
+                v-decorator="[
+                  'adminCommonSetting[passwordRule]',
+                  {
+                    initialValue: data.adminCommonSetting.passwordRule || ['number'],
+                    rules: [{ required: true, message: $t('请选择密码组成') }]
+                  }
+                ]"
+                @change="
+                  (e) => {
+                    data.adminCommonSetting.passwordRule = e
+                  }
+                "
+              >
+                <a-checkbox value="number" :disabled="true">{{ $t('数字') }}</a-checkbox>
+                <a-checkbox value="letter">{{ $t('字母') }}</a-checkbox>
+                <a-checkbox value="special">
+                  {{ $t('字符') }}
+                  <a-tooltip :title="chatMessage">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </a-checkbox>
+              </a-checkbox-group>
+              <a-form-item
+                v-if="data.adminCommonSetting.passwordRule && data.adminCommonSetting.passwordRule.includes('letter')"
+                :labelCol="{ span: 20 }"
+                :wrapperCol="{ span: 4 }"
+                style="display: inline-block"
+              >
+                <span slot="label">
+                  {{ $t('必须包含大写字母') }}
+                  <a-tooltip :title="$t('密码中是否必须包含大写字母。')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch
+                  v-decorator="[
+                    'adminCommonSetting[capitalLetterEnable]',
+                    { initialValue: data.adminCommonSetting.capitalLetterEnable, valuePropName: 'checked' }
+                  ]"
+                  :checked-children="$t('开')"
+                  :un-checked-children="$t('关')"
+                />
+              </a-form-item>
+            </a-form-item>
+            <a-form-item>
+              <span slot="label">
+                {{ $t('密码长度') }}
+                <a-tooltip :title="$t('设置密码的长度，最小值6，最大值24。默认6~12。')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-input-number
+                v-decorator="[
+                  'adminCommonSetting[passwordLength][0]',
+                  {
+                    initialValue: data.adminCommonSetting.passwordLength
+                      ? data.adminCommonSetting.passwordLength[0]
+                      : 6,
+                    rules: [{ required: true, message: $t('请输入最小密码长度') }]
+                  }
+                ]"
+                :min="6"
+                :max="
+                  data.adminCommonSetting.passwordLength && data.adminCommonSetting.passwordLength[1] < 12
+                    ? data.adminCommonSetting.passwordLength[1]
+                    : 12
+                "
+                @change="
+                  (e) => {
+                    data.adminCommonSetting.passwordLength = data.adminCommonSetting.passwordLength
+                      ? [e, data.adminCommonSetting.passwordLength[1]]
+                      : [e, 12]
+                  }
+                "
+              />
+              ~
+              <a-form-item style="display: inline-block">
+                <a-input-number
+                  v-decorator="[
+                    'adminCommonSetting[passwordLength][1]',
+                    {
+                      initialValue: data.adminCommonSetting.passwordLength
+                        ? data.adminCommonSetting.passwordLength[1]
+                        : 12,
+                      rules: [{ required: true, message: $t('请输入最大密码长度') }]
+                    }
+                  ]"
+                  :min="
+                    data.adminCommonSetting.passwordLength && data.adminCommonSetting.passwordLength[0] > 6
+                      ? data.adminCommonSetting.passwordLength[0]
+                      : 6
+                  "
+                  :max="24"
+                  @change="
+                    (e) => {
+                      data.adminCommonSetting.passwordLength = data.adminCommonSetting.passwordLength
+                        ? [data.adminCommonSetting.passwordLength[0], e]
+                        : [6, e]
+                    }
+                  "
+                />
+              </a-form-item>
+            </a-form-item>
+            <a-form-item
+              :label="$t('重置密码提示')"
+              :help="$t('在启用之后，新建的用户或用户密码被系统管理员修改过，之后用户第一次登录系统将强制要求修改密码')"
+            >
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[resetPassword]',
+                  { initialValue: data.adminCommonSetting.resetPassword, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('登录验证码')" :help="$t('启用后用户登录系统时将要求输入验证码')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[enableCaptchaImage]',
+                  { initialValue: data.adminCommonSetting.enableCaptchaImage, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('记住密码')" :help="$t('启用后登录界面将出现记住密码的选项')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[rememberPassword]',
+                  { initialValue: data.adminCommonSetting.rememberPassword, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('系统水印')" :help="$t('开启后系统界面将出现水印')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[watermarkEnable]',
+                  { initialValue: data.adminCommonSetting.watermarkEnable, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('浏览器检测')" :help="$t('兼容谷歌、360极速模式、Safari')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[browserDetection]',
+                  { initialValue: data.adminCommonSetting.browserDetection, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('浏览器下载地址')" :help="$t('浏览器下载地址')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[browserDownloadUrl]',
+                  { initialValue: data.adminCommonSetting.browserDownloadUrl }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('小号计费单价')">
+              <a-input-number
+                v-decorator="[
+                  'adminCommonSetting[smallNumberPrice]',
+                  { initialValue: data.adminCommonSetting.smallNumberPrice }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('百度地图开放平台AK(浏览器端)')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[baiduAkBrowser]',
+                  { initialValue: data.adminCommonSetting.baiduAkBrowser }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="websocket" :help="$t('动态获取请留空，默认留空')">
+              <a-input
+                v-decorator="['adminCommonSetting[websocket]', { initialValue: data.adminCommonSetting.websocket }]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('心跳设置')" :help="$t('设置范围30~600，默认值60。')">
+              <a-input-number
+                v-decorator="['adminCommonSetting[heartbeat]', { initialValue: data.adminCommonSetting.heartbeat }]"
+                :min="30"
+                :max="600"
+              />
+              {{ $t('秒') }}
+            </a-form-item>
+            <a-form-item :label="$t('客户端延时断开时间')" :help="$t('设置范围30~600，默认值60。')">
+              <a-input-number
+                v-decorator="[
+                  'adminCommonSetting[delayCloseTime]',
+                  { initialValue: data.adminCommonSetting.delayCloseTime || 60 }
+                ]"
+                :min="30"
+                :max="600"
+              />
+              {{ $t('秒') }}
+            </a-form-item>
+            <a-form-item :label="$t('启用sendgrid')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[enableSendGrid]',
+                  { initialValue: data.adminCommonSetting.enableSendGrid, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'chat'">
+            <a-form-item :label="$t('登录时设置客服状态')" :help="$t('登录时设置客服状态')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[serviceStatusEnable]',
+                  { initialValue: data.adminCommonSetting.serviceStatusEnable, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item
+              :label="$t('访客地址')"
+              :help="
+                $t('相对路径或绝对路径，相对路径：/dospaas/app/，绝对路径：http://ip/dospaas/app/，实际情况以项目为准')
+              "
+            >
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[chatNetworkUrl]',
+                  { initialValue: data.adminCommonSetting.chatNetworkUrl }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('消息存储')" :help="$t('开启后会话记录将储存到redis中,供第三方系统获取')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[recordCheck]',
+                  { initialValue: data.adminCommonSetting.recordCheck, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('在线客服对接方')" :help="$t('关闭时后面的参数设置将无效')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[dockingParty]',
+                  { initialValue: data.adminCommonSetting.dockingParty, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('全量接口地址')" :help="$t('获取历史聊天记录时的查询地址')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[dockingQueryUrl]',
+                  { initialValue: data.adminCommonSetting.dockingQueryUrl }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('增量接口地址')" :help="$t('会话结束时对当次会话聊天内容进行插入的地址')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[dockingInsertUrl]',
+                  { initialValue: data.adminCommonSetting.dockingInsertUrl }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('Asr接口地址')" :help="$t('Asr接口地址')">
+              <a-input v-decorator="['adminCommonSetting[asrUrl]', { initialValue: data.adminCommonSetting.asrUrl }]" />
+            </a-form-item>
+            <a-form-item :label="$t('访客资料接口地址')" :help="$t('系统将从访客资料中获取渠道信息')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[userMessageUrl]',
+                  { initialValue: data.adminCommonSetting.userMessageUrl }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('坐席助手接口地址')" :help="$t('坐席助手接口地址')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[transferMessageUrl]',
+                  { initialValue: data.adminCommonSetting.transferMessageUrl }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'callcenter'">
+            <a-form-item :label="$t('呼叫中心IP地址')">
+              <a-input v-decorator="['adminCommonSetting[CCIP]', { initialValue: data.adminCommonSetting.CCIP }]" />
+            </a-form-item>
+            <a-form-item :label="$t('呼叫中心端口号')">
+              <a-input-number
+                v-decorator="['adminCommonSetting[CCPort]', { initialValue: data.adminCommonSetting.CCPort }]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('接口账号')">
+              <a-input
+                v-decorator="['adminCommonSetting[AMIUser]', { initialValue: data.adminCommonSetting.AMIUser }]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('接口密码')">
+              <a-input
+                v-decorator="['adminCommonSetting[AMIPassword]', { initialValue: data.adminCommonSetting.AMIPassword }]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('本地区号')">
+              <a-input
+                v-decorator="['adminCommonSetting[areaCode]', { initialValue: data.adminCommonSetting.areaCode }]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('接口地址')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[interfaceurl]',
+                  { initialValue: data.adminCommonSetting.interfaceurl }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('弹屏地址')" :help="$t('该弹屏地址仅针对于当前坐席系统有效')">
+              <a-input v-decorator="['adminCommonSetting[popurl]', { initialValue: data.adminCommonSetting.popurl }]" />
+            </a-form-item>
+            <a-form-item :label="$t('弹屏设置')">
+              <a-radio-group
+                v-decorator="['adminCommonSetting[popmethod]', { initialValue: data.adminCommonSetting.popmethod }]"
+              >
+                <a-radio value="">{{ $t('禁用弹屏') }}</a-radio>
+                <a-radio value="Dialin">{{ $t('呼入弹屏') }}</a-radio>
+                <a-radio value="Dialout">{{ $t('呼出弹屏') }}</a-radio>
+                <a-radio value="All">{{ $t('呼入呼出弹屏') }}</a-radio>
+              </a-radio-group>
+            </a-form-item>
+            <a-form-item :label="$t('弹屏时间')">
+              <a-radio-group
+                v-decorator="['adminCommonSetting[poptime]', { initialValue: data.adminCommonSetting.poptime }]"
+              >
+                <a-radio value="Ring">{{ $t('振铃时弹屏') }}</a-radio>
+                <a-radio value="Link">{{ $t('接通时弹屏') }}</a-radio>
+              </a-radio-group>
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'pay'">
+            <a-form-item :label="$t('Adapay平台App_ID')">
+              <a-input
+                v-decorator="['adminCommonSetting[adapayAppId]', { initialValue: data.adminCommonSetting.adapayAppId }]"
+              />
+            </a-form-item>
+            <a-form-item label="apiKeyLive" :help="$t('从配置文件merchantConfig.json获取')">
+              <a-input
+                v-decorator="['adminCommonSetting[apiKeyLive]', { initialValue: data.adminCommonSetting.apiKeyLive }]"
+              />
+            </a-form-item>
+            <a-form-item label="apiKeyTest" :help="$t('从配置文件merchantConfig.json获取')">
+              <a-input
+                v-decorator="['adminCommonSetting[apiKeyTest]', { initialValue: data.adminCommonSetting.apiKeyTest }]"
+              />
+            </a-form-item>
+            <a-form-item label="rsaPublicKey" :help="$t('从配置文件merchantConfig.json获取')">
+              <a-textarea
+                v-decorator="[
+                  'adminCommonSetting[rsaPublicKey]',
+                  { initialValue: data.adminCommonSetting.rsaPublicKey }
+                ]"
+                :autoSize="{ minRows: 2, maxRows: 6 }"
+              />
+            </a-form-item>
+            <a-form-item label="rsaPrivateKey" :help="$t('从配置文件merchantConfig.json获取')">
+              <a-textarea
+                v-decorator="[
+                  'adminCommonSetting[rsaPrivateKey]',
+                  { initialValue: data.adminCommonSetting.rsaPrivateKey }
+                ]"
+                :autoSize="{ minRows: 2, maxRows: 6 }"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('手续费率')">
+              <a-input-number
+                v-decorator="[
+                  'adminCommonSetting[adapayPoundage]',
+                  { initialValue: data.adminCommonSetting.adapayPoundage }
+                ]"
+                :min="0"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'copyright'">
+            <a-form-item :label="$t('浏览器标题')" :help="$t('浏览器上显示的系统标题，必填，2~20个字符')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[title]',
+                  {
+                    initialValue: data.adminCommonSetting.title,
+                    rules: [
+                      { required: true, message: $t('请输入浏览器标题') },
+                      { min: 2, message: $t('请输入至少两个字符') },
+                      { max: 20, message: $t('请输入少于二十个字符') }
+                    ]
+                  }
+                ]"
+              >
+                <set-lang slot="addonAfter" value="系统设置" />
+              </a-input>
+            </a-form-item>
+            <a-form-item :label="$t('登录界面版权信息')" :help="$t('系统登录界面底部的版权信息，非必填，2~20个字符')">
+              <a-input
+                v-decorator="[
+                  'adminCommonSetting[copyright]',
+                  {
+                    initialValue: data.adminCommonSetting.copyright,
+                    rules: [
+                      { min: 2, message: $t('请输入至少两个字符') },
+                      { max: 20, message: $t('请输入少于二十个字符') }
+                    ]
+                  }
+                ]"
+              >
+                <set-lang slot="addonAfter" value="系统设置" />
+              </a-input>
+            </a-form-item>
+            <a-form-item :label="$t('主框架左上角LOGO')" :help="$t('系统主框架左上角显示的LOGO信息，必填')">
+              <a-radio-group
+                v-decorator="[
+                  'adminCommonSetting[logoType]',
+                  { initialValue: data.adminCommonSetting.logoType || 'text' }
+                ]"
+                @change="
+                  (e) => {
+                    data.adminCommonSetting.logoType = e.target.value
+                  }
+                "
+              >
+                <a-radio value="text">{{ $t('仅文字') }}</a-radio>
+                <a-radio value="img">{{ $t('仅图片') }}</a-radio>
+                <a-radio value="all">{{ $t('图片+文字') }}</a-radio>
+              </a-radio-group>
+            </a-form-item>
+            <template v-if="data.adminCommonSetting.logoType !== 'img'">
+              <a-form-item :label="$t('文字内容')" :labelCol="{ span: 6 }" :wrapperCol="{ span: 6 }">
+                <a-input
+                  v-decorator="[
+                    'adminCommonSetting[name]',
+                    {
+                      initialValue: data.adminCommonSetting.name,
+                      rules: [
+                        { required: true, message: $t('请输入文字内容') },
+                        { min: 2, message: $t('请输入至少两个字符') },
+                        { max: 10, message: $t('请输入少于10个字符') }
+                      ]
+                    }
+                  ]"
+                >
+                  <set-lang slot="addonAfter" value="'系统设置'" />
+                </a-input>
+              </a-form-item>
+              <a-form-item :label="$t('文字外观')" :labelCol="{ span: 6 }" :wrapperCol="{ span: 6 }">
+                <a-radio-group
+                  v-decorator="[
+                    'adminCommonSetting[logoStyle]',
+                    {
+                      initialValue: data.adminCommonSetting.logoStyle || 'dark',
+                      rules: [{ required: true, message: $t('请选择显示样式') }]
+                    }
+                  ]"
+                >
+                  <a-radio value="dark">{{ $t('适用于深色') }}</a-radio>
+                  <a-radio value="light">{{ $t('适用于浅色') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item :label="$t('文字大小')" :labelCol="{ span: 6 }" :wrapperCol="{ span: 6 }">
+                <a-select
+                  v-decorator="[
+                    'adminCommonSetting[logoTextSize]',
+                    {
+                      initialValue: data.adminCommonSetting.logoTextSize || '24px',
+                      rules: [{ required: true, message: $t('请选择文字大小') }]
+                    }
+                  ]"
+                >
+                  <a-select-option v-for="sizeItem in logoSizeList" :key="sizeItem" :value="sizeItem">
+                    {{ sizeItem }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :label="$t('文字粗细')" :labelCol="{ span: 6 }" :wrapperCol="{ span: 6 }">
+                <a-select
+                  v-decorator="[
+                    'adminCommonSetting[logoTextWeight]',
+                    {
+                      initialValue: data.adminCommonSetting.logoTextWeight || '600',
+                      rules: [{ required: true, message: $t('请选择文字粗细') }]
+                    }
+                  ]"
+                >
+                  <a-select-option v-for="weightItem in logoWeightList" :key="weightItem" :value="weightItem">
+                    {{ weightItem }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :label="$t('文字字体')" :labelCol="{ span: 6 }" :wrapperCol="{ span: 6 }">
+                <a-select
+                  v-decorator="[
+                    'adminCommonSetting[logoTextFont]',
+                    {
+                      initialValue: data.adminCommonSetting.logoTextFont || 'Microsoft YaHei',
+                      rules: [{ required: true, message: $t('请选择文字字体') }]
+                    }
+                  ]"
+                >
+                  <a-select-option v-for="fontItem in logoFontList" :key="fontItem.value" :value="fontItem.value">
+                    {{ fontItem.label }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </template>
+            <a-form-item
+              v-if="data.adminCommonSetting.logoType && data.adminCommonSetting.logoType !== 'text'"
+              :label="$t('图片')"
+              :help="$t('必填，png格式，高度48px，长度不限，请注意配合主题色')"
+              :labelCol="{ span: 6 }"
+              :wrapperCol="{ span: 6 }"
+            >
+              <a-upload
+                v-decorator="[
+                  'adminCommonSetting[logoUrl]',
+                  { initialValue: logoUrl, rules: [{ required: true, message: $t('请上传头像') }] }
+                ]"
+                name="logo"
+                listType="picture-card"
+                class="logo-uploader"
+                :showUploadList="false"
+                :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/index/uploadLogo`"
+                :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                :beforeUpload="beforeUpload"
+                @change="handleChange"
+              >
+                <img :src="logoSrc" style="width: 32px; height: 32px" />
+              </a-upload>
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'mobile'">
+            <a-form-item :label="$t('强制绑定微信')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[bindingWechat]',
+                  { initialValue: data.adminCommonSetting.bindingWechat, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('强制人脸识别')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[faceRecognition]',
+                  { initialValue: data.adminCommonSetting.faceRecognition, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'weChat'">
+            <a-form-item label="appId" :help="$t('appId')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[weChat][appId]',
+                  {
+                    initialValue: data.adminAdvancedSetting.weChat ? data.adminAdvancedSetting.weChat.appId : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="appSecret" :help="$t('appSecret')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[weChat][appSecret]',
+                  {
+                    initialValue: data.adminAdvancedSetting.weChat ? data.adminAdvancedSetting.weChat.appSecret : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="token" :help="$t('token')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[weChat][token]',
+                  {
+                    initialValue: data.adminAdvancedSetting.weChat ? data.adminAdvancedSetting.weChat.token : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="encodingAesKey" :help="$t('encodingAesKey')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[weChat][encodingAesKey]',
+                  {
+                    initialValue: data.adminAdvancedSetting.weChat
+                      ? data.adminAdvancedSetting.weChat.encodingAesKey
+                      : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'workWeChat'">
+            <a-form-item :label="$t('开启应用')">
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[workWeChatEnable]',
+                  { initialValue: data.adminCommonSetting.workWeChatEnable, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="appId" :help="$t('企业ID')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[workWeChat][appId]',
+                  {
+                    initialValue: data.adminAdvancedSetting.workWeChat ? data.adminAdvancedSetting.workWeChat.appId : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="appSecret">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[workWeChat][appSecret]',
+                  {
+                    initialValue: data.adminAdvancedSetting.workWeChat
+                      ? data.adminAdvancedSetting.workWeChat.appSecret
+                      : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="agentId" :help="$t('授权方的网页应用ID')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[workWeChat][agentId]',
+                  {
+                    initialValue: data.adminAdvancedSetting.workWeChat
+                      ? data.adminAdvancedSetting.workWeChat.agentId
+                      : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'avatar'">
+            <a-row>
+              <a-col :span="2"></a-col>
+              <a-col :span="20">
+                <a-alert type="info" :message="$t('温馨提示')" :description="description" show-icon />
+              </a-col>
+            </a-row>
+            <a-form-item :label="$t('男性头像')">
+              <a-upload
+                v-decorator="[
+                  'adminCommonSetting[maleHeadImage]',
+                  {
+                    initialValue: data.adminCommonSetting.maleHeadImage,
+                    rules: [{ required: true, message: $t('请上传男性头像') }]
+                  }
+                ]"
+                :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+                :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                :fileList="maleImageFileList"
+                name="upload"
+                listType="picture-card"
+                accept="image/*"
+                :multiple="true"
+                :beforeUpload="beforeHeadUpload"
+                @preview="handleImagePreview"
+                @change="handleMaleImageChange"
+              >
+                <div v-if="maleImageFileList.length < 10">
+                  <a-icon type="plus" />
+                  <div>Upload</div>
+                </div>
+              </a-upload>
+            </a-form-item>
+            <a-form-item :label="$t('女性头像')">
+              <a-upload
+                v-decorator="[
+                  'adminCommonSetting[femaleHeadImage]',
+                  {
+                    initialValue: data.adminCommonSetting.femaleHeadImage,
+                    rules: [{ required: true, message: $t('请上传女性头像') }]
+                  }
+                ]"
+                :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+                :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                name="upload"
+                listType="picture-card"
+                :fileList="imageFileList"
+                :multiple="true"
+                accept="image/*"
+                :beforeUpload="beforeHeadUpload"
+                @preview="handleImagePreview"
+                @change="handleImageChange"
+              >
+                <div v-if="imageFileList.length < 10">
+                  <a-icon type="plus" />
+                  <div>Upload</div>
+                </div>
+              </a-upload>
+            </a-form-item>
+            <a-modal :visible="imagePreviewVisible" :footer="null" @cancel="imagePreviewVisible = !imagePreviewVisible">
+              <img alt="example" style="width: 100%" :src="imagePreviewUrl" />
+            </a-modal>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'busy'">
+            <a-form-item>
+              <span slot="label">
+                {{ $t('示忙细分状态') }}
+              </span>
+              <a-switch
+                v-decorator="[
+                  'adminCommonSetting[userBusyEnable]',
+                  {
+                    initialValue: data.adminCommonSetting.userBusyEnable,
+                    valuePropName: 'checked'
+                  }
+                ]"
+                @change="(e) => $set(data, 'userBusyEnable', e)"
+              />
+            </a-form-item>
+            <a-form-item v-if="data.adminCommonSetting.userBusyEnable">
+              <span slot="label">
+                {{ $t('细分状态') }}
+                <a-tooltip :title="$t('至少勾选1个细分状态，状态文案必填，输入范围2-6个字符')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <draggable
+                v-model="userFurtherStates"
+                animation="200"
+                handle=".handle"
+                @start="drag = true"
+                @end="drag = false"
+              >
+                <a-row v-for="(element, key) in userFurtherStates" :key="key" :gutter="8" type="flex">
+                  <a-col flex="30px">
+                    <span style="display: inline-block">
+                      <a-icon type="drag" />
+                    </span>
+                  </a-col>
+                  <a-col flex="30px">
+                    <a-form-item>
+                      <a-checkbox
+                        :value="element.value"
+                        :checked="element.check"
+                        @change="
+                          (e) => {
+                            element.check = e.target.checked
+                            if (element.check) {
+                              busyValue.push(element.value)
+                            } else {
+                              busyValue = busyValue.filter((item) => item !== element.value)
+                            }
+                            form.setFieldsValue({
+                              furtherStates: busyValue.join(',')
+                            })
+                          }
+                        "
+                      ></a-checkbox>
+                    </a-form-item>
+                  </a-col>
+                  <a-col flex="140px">
+                    <a-form-item
+                      :validate-status="element.status ? element.status : 'success'"
+                      :help="element.msg ? element.msg : ''"
+                    >
+                      <a-input
+                        v-model="element.label"
+                        @change="
+                          (e) => {
+                            if (!e.target.value) {
+                              $set(element, 'status', 'error')
+                              $set(element, 'msg', $t('请输入细分状态名称'))
+                            } else {
+                              if (e.target.value.length < 2) {
+                                $set(element, 'status', 'error')
+                                $set(element, 'msg', $t('请输入至少两个字符'))
+                              } else if (e.target.value.length > 6) {
+                                $set(element, 'status', 'error')
+                                $set(element, 'msg', $t('请输入少于六个字符'))
+                              } else {
+                                $set(element, 'status', undefined)
+                                $set(element, 'msg', undefined)
+                              }
+                            }
+                          }
+                        "
+                      >
+                        <set-lang slot="addonAfter" value="系统设置" />
+                      </a-input>
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </draggable>
+              <a-input
+                v-show="false"
+                v-decorator="[
+                  'furtherStates',
+                  {
+                    initialValue: busyValue.length ? busyValue.join(',') : '',
+                    rules: [{ required: true, message: $t('请选择细分状态') }]
+                  }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'pdd'">
+            <a-form-item label="clientId">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[pdd][pddClientId]',
+                  { initialValue: data.adminAdvancedSetting.pdd ? data.adminAdvancedSetting.pdd.pddClientId : '' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="clientSecret">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[pdd][pddClientSecret]',
+                  {
+                    initialValue: data.adminAdvancedSetting.pdd ? data.adminAdvancedSetting.pdd.pddClientSecret : ''
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="url">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[pdd][pddUrl]',
+                  { initialValue: data.adminAdvancedSetting.pdd ? data.adminAdvancedSetting.pdd.pddUrl : '' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('拼多多对接渠道编号')" :help="$t('拼多多对接渠道编号')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[pdd][pddChannelNumber]',
+                  { initialValue: data.adminAdvancedSetting.pdd.pddChannelNumber }
+                ]"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'proxy'">
+            <a-form-item :label="$t('开启代理')" :help="$t('配置调整后要重启服务才能生效')">
+              <a-switch
+                v-decorator="[
+                  'adminAdvancedSetting[proxyEnable]',
+                  { initialValue: data.adminAdvancedSetting.proxyEnable, valuePropName: 'checked' }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="httpProxyHost">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[httpProxyHost]',
+                  {
+                    initialValue: data.adminAdvancedSetting.httpProxyHost
+                  }
+                ]"
+              />
+            </a-form-item>
+
+            <a-form-item label="httpProxyPort">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[httpProxyPort]',
+                  {
+                    initialValue: data.adminAdvancedSetting.httpProxyPort
+                  }
+                ]"
+              />
+            </a-form-item>
+
+            <a-form-item label="httpNonProxyHosts" :help="$t('一行一个，请不要添加空行')">
+              <a-textarea
+                v-decorator="[
+                  'adminAdvancedSetting[httpNonProxyHosts]',
+                  {
+                    initialValue: data.adminAdvancedSetting.httpNonProxyHosts
+                  }
+                ]"
+                :autoSize="{ minRows: 3, maxRows: 6 }"
+              />
+            </a-form-item>
+
+            <a-form-item label="httpsProxyHost">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[httpsProxyHost]',
+                  {
+                    initialValue: data.adminAdvancedSetting.httpsProxyHost
+                  }
+                ]"
+              />
+            </a-form-item>
+
+            <a-form-item label="httpsProxyPort">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[httpsProxyPort]',
+                  {
+                    initialValue: data.adminAdvancedSetting.httpsProxyPort
+                  }
+                ]"
+              />
+            </a-form-item>
+
+            <a-form-item label="httpsNonProxyHosts" :help="$t('一行一个，请不要添加空行')">
+              <a-textarea
+                v-decorator="[
+                  'adminAdvancedSetting[httpsNonProxyHosts]',
+                  {
+                    initialValue: data.adminAdvancedSetting.httpsNonProxyHosts
+                  }
+                ]"
+                :autoSize="{ minRows: 3, maxRows: 6 }"
+              />
+            </a-form-item>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'login'">
+            <a-form-item :label="$t('其他登录方式')" :help="$t('开启后，登录页会显示“其他登录方式”的入口')">
+              <a-switch
+                v-decorator="[
+                  'adminAdvancedSetting[loginPlatform][status]',
+                  { initialValue: data.adminAdvancedSetting.loginPlatform.status || false, valuePropName: 'checked' }
+                ]"
+                :checked-children="$t('开')"
+                :un-checked-children="$t('关')"
+                @change="
+                  (e) => {
+                    data.adminAdvancedSetting.loginPlatform.status = e
+                  }
+                "
+              />
+            </a-form-item>
+            <template v-if="data.adminAdvancedSetting.loginPlatform.status">
+              <a-form-item :label="$t('其他登录方案')" :help="$t('选择其他登录的方式，只能选择一种方式')">
+                <a-select
+                  v-decorator="[
+                    'adminAdvancedSetting[loginPlatform][type]',
+                    {
+                      initialValue: data.adminAdvancedSetting.loginPlatform.type || 'custom',
+                      rules: [{ required: true, message: $t('请选择其他登录方案') }]
+                    }
+                  ]"
+                >
+                  <a-select-option
+                    v-for="typeItem in loginPlatformTypeList"
+                    :key="typeItem.value"
+                    :value="typeItem.value"
+                  >
+                    {{ typeItem.label }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :label="$t('显示文案')" :help="$t('自定义其他登录方式链接的显示文案')">
+                <a-input
+                  v-decorator="[
+                    'adminAdvancedSetting[loginPlatform][custom][name]',
+                    {
+                      initialValue: data.adminAdvancedSetting.loginPlatform.custom
+                        ? data.adminAdvancedSetting.loginPlatform.custom.name
+                        : '',
+                      rules: [{ required: true, message: $t('请输入显示文案') }]
+                    }
+                  ]"
+                >
+                  <set-lang slot="addonAfter" value="系统设置" />
+                </a-input>
+              </a-form-item>
+              <a-form-item
+                :label="$t('显示样式')"
+                :help="$t('选择“其他登录方式”的显示样式，以适配不同的登录页背景图片')"
+              >
+                <a-radio-group
+                  v-decorator="[
+                    'adminAdvancedSetting[loginPlatform][custom][style]',
+                    {
+                      initialValue: data.adminAdvancedSetting.loginPlatform.custom
+                        ? data.adminAdvancedSetting.loginPlatform.custom.style
+                        : 'dark',
+                      rules: [{ required: true, message: $t('请选择显示样式') }]
+                    }
+                  ]"
+                >
+                  <a-radio value="dark">{{ $t('适用于深色背景') }}</a-radio>
+                  <a-radio value="light">{{ $t('适用于浅色背景') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item :label="$t('备注')" :help="$t('自定义对接时，备注自定义内容的参数')">
+                <a-textarea
+                  v-decorator="[
+                    'adminAdvancedSetting[loginPlatform][custom][remarks]',
+                    {
+                      initialValue: data.adminAdvancedSetting.loginPlatform.custom
+                        ? data.adminAdvancedSetting.loginPlatform.custom.remarks
+                        : ''
+                    }
+                  ]"
+                  :autoSize="{ minRows: 6, maxRows: 10 }"
+                />
+              </a-form-item>
+            </template>
+          </template>
+          <template v-else-if="menu[activeMenuIndex]['value'] == 'business'">
+            <a-form-item :label="$t('项目相关')" :help="$t('项目相关配置，多个参数以英文逗号分隔，修改后要重启应用')">
+              <a-input
+                v-decorator="[
+                  'adminAdvancedSetting[relevantProject]',
+                  { initialValue: data.adminAdvancedSetting.relevantProject }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('自定义配置')" :help="$t('请输入标准的json数据')">
+              <a-textarea
+                v-decorator="[
+                  'adminAdvancedSetting[projectCustomConfig]',
+                  {
+                    initialValue: data.adminAdvancedSetting.projectCustomConfig
+                      ? JSON.stringify(data.adminAdvancedSetting.projectCustomConfig, null, 4)
+                      : ''
+                  }
+                ]"
+                :autoSize="{ minRows: 8, maxRows: 12 }"
+              />
+            </a-form-item>
+          </template>
+        </div>
+        <a-row>
+          <a-col :span="4"></a-col>
+          <a-col :span="20">
+            <a-button htmlType="submit" type="primary" style="margin: 32px 0 24px 0" @click="handleSubmit">
+              {{ $t('保存设置') }}
+            </a-button>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+  </a-spin>
+</template>
+<script>
+function getBase64 (img, callback) {
+  const reader = new FileReader()
+  reader.addEventListener('load', () => callback(reader.result))
+  reader.readAsDataURL(img)
+}
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    draggable: () => import('vuedraggable'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    return {
+      loading: false,
+      form: this.$form.createForm(this),
+      data: {
+        adminAdvancedSetting: {
+          workWeChat: {},
+          pdd: {}
+        },
+        adminCommonSetting: {}
+      },
+      logoSrc: null,
+      logoUrl: null,
+      labelCol: { span: 4 },
+      wrapperCol: { span: 8 },
+      // eslint-disable-next-line no-useless-escape
+      chatMessage: `${this.$t('仅可使用以下符号')}!"#$%&'()*+,-./:;<=>?@[\]^_{|}~`,
+      maleImageFileList: [],
+      imageFileList: [],
+      imagePreviewVisible: false,
+      imagePreviewUrl: '',
+      description: (<div><div>1、添加用户时，按性别从此处获取用户的默认头像（有多个头像时，随机选择1个）。</div><div>2、不同性别必须有1个默认头像，最多可添加10个头像。</div></div>),
+      userFurtherStates: [{
+        value: 11,
+        label: this.$t('就餐'),
+        check: false
+      }, {
+        value: 12,
+        label: this.$t('会议'),
+        check: false
+      }, {
+        value: 13,
+        label: this.$t('培训'),
+        check: false
+      }, {
+        value: 14,
+        label: this.$t('休息'),
+        check: false
+      }, {
+        value: 15,
+        label: this.$t('洗手间'),
+        check: false
+      }, {
+        value: 16,
+        label: this.$t('其他'),
+        check: false
+      }],
+      busyValue: [],
+      menu: [
+        { name: this.$t('基本配置'), value: 'basic' },
+        { name: this.$t('在线客服'), value: 'chat' },
+        { name: this.$t('接口配置'), value: 'callcenter' },
+        { name: this.$t('支付配置'), value: 'pay' },
+        { name: this.$t('版权信息'), value: 'copyright' },
+        { name: this.$t('移动端'), value: 'mobile' },
+        { name: this.$t('微信开放平台'), value: 'weChat' },
+        { name: this.$t('企业微信'), value: 'workWeChat' },
+        { name: this.$t('头像配置'), value: 'avatar' },
+        { name: this.$t('示忙配置'), value: 'busy' },
+        { name: this.$t('拼多多配置'), value: 'pdd' },
+        { name: this.$t('代理上网'), value: 'proxy' },
+        { name: this.$t('第三方登录'), value: 'login' },
+        { name: this.$t('业务配置'), value: 'business' }
+      ],
+      logoSizeList: ['22px', '24px', '26px', '28px'],
+      logoWeightList: ['400', '500', '600'],
+      logoFontList: [{
+        label: '微软雅黑',
+        value: 'Microsoft YaHei'
+      }, {
+        label: '楷体',
+        value: '楷体'
+      }, {
+        label: '宋体',
+        value: '宋体'
+      }, {
+        label: '隶书',
+        value: 'LiSu'
+      }, {
+        label: '仿宋',
+        value: '仿宋'
+      }],
+      loginPlatformTypeList: [{
+        label: '自定义',
+        value: 'custom'
+      }],
+      activeMenuIndex: 0
+    }
+  },
+  created () {
+    this.loading = true
+    this.axios({
+      url: '/admin/index/setting',
+      data: {
+        action: 'get'
+      }
+    }).then((res) => {
+      this.loading = false
+      if (res.result.adminCommonSetting.maleHeadImage) {
+        res.result.adminCommonSetting.maleHeadImage = res.result.adminCommonSetting.maleHeadImage.map((item, index) => {
+          const floor = Math.floor(Math.random() * (100000 - 1000 + 1) + 1000)
+          return {
+            uid: String(floor),
+            name: item.fileName,
+            status: 'done',
+            url: this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + item.filePath,
+            response: { result: item }
+          }
+        })
+        this.maleImageFileList = res.result.adminCommonSetting.maleHeadImage
+      }
+      if (res.result.adminCommonSetting.femaleHeadImage) {
+        res.result.adminCommonSetting.femaleHeadImage = res.result.adminCommonSetting.femaleHeadImage.map((item, index) => {
+          const floor = Math.floor(Math.random() * (100000 - 1000 + 1) + 1000)
+          return {
+            uid: String(floor),
+            name: item.fileName,
+            status: 'done',
+            url: this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + item.filePath,
+            response: { result: item }
+          }
+        })
+        this.imageFileList = res.result.adminCommonSetting.femaleHeadImage
+      }
+      if (res.result.adminCommonSetting.userFurtherStates) {
+        this.userFurtherStates = res.result.adminCommonSetting.userFurtherStates
+      }
+      this.busyValue = this.userFurtherStates.map(item => {
+        if (item.check) {
+          return item.value
+        }
+      }).filter(item => item)
+      this.data = res.result
+      if (!this.data.adminAdvancedSetting.loginPlatform) {
+        this.data.adminAdvancedSetting.loginPlatform = {}
+      }
+      this.logoUrl = this.data.adminCommonSetting.logoUrl
+      const filePath = encodeURIComponent(this.logoUrl)
+      this.logoSrc = this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + filePath
+    })
+  },
+  methods: {
+    changeMenu (e) {
+      this.activeMenuIndex = e.key
+    },
+    handleChange (fileList) {
+      if (fileList.file.status === 'done') {
+        getBase64(fileList.file.originFileObj, imageUrl => {
+          this.logoSrc = imageUrl
+          this.logoUrl = fileList.file.response.result.filePath
+        })
+      }
+    },
+    beforeHeadUpload (file) {
+      return new Promise((resolve, reject) => {
+        const fileType = '.png,.jpg,.jpeg,.gif,.bmp'
+        const suffix = file.name.substring(file.name.lastIndexOf('.'), file.name.length)
+        if (!fileType.includes(suffix)) {
+          this.$message.error(this.$('上传文件格式错误'))
+          return reject(file)
+        }
+        const isLt2M = file.size / 1024 / 1024 < 2
+        if (!isLt2M) {
+          this.$message.error(this.$t('上传文件大小超过2M'))
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    beforeUpload (file) {
+      const isJPG = file.type === 'image/png'
+      if (!isJPG) {
+        this.$message.error(this.$t('只能上传png格式的图片'))
+      }
+      const isLt2M = file.size / 1024 / 1024 < 2
+      if (!isLt2M) {
+        this.$message.error(this.$t('图片必须小于2MB'))
+      }
+      return isJPG && isLt2M
+    },
+    // 获取当前地址
+    getLocation () {
+      const url = location.origin + process.env.VUE_APP_URL
+      this.form.setFieldsValue({
+        'adminCommonSetting[webUrl]': url
+      })
+    },
+    handleMaleImageChange ({ fileList }) {
+      this.maleImageFileList = fileList
+    },
+    handleImageChange ({ fileList }) {
+      this.imageFileList = fileList
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.url || file.thumbUrl
+      this.imagePreviewVisible = true
+    },
+    handleSubmit () {
+      const activeMenu = this.menu[this.activeMenuIndex]?.value
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          if (activeMenu === 'avatar') {
+            values.adminCommonSetting.maleHeadImage = values.adminCommonSetting.maleHeadImage && values.adminCommonSetting.maleHeadImage.fileList ? values.adminCommonSetting.maleHeadImage.fileList.map(item => {
+              return item.response.result
+            }) : values.adminCommonSetting.maleHeadImage.length ? values.adminCommonSetting.maleHeadImage.map(item => {
+              return item.response.result
+            }) : []
+            values.adminCommonSetting.femaleHeadImage = values.adminCommonSetting.femaleHeadImage && values.adminCommonSetting.femaleHeadImage.fileList ? values.adminCommonSetting.femaleHeadImage.fileList.map(item => {
+              return item.response.result
+            }) : values.adminCommonSetting.femaleHeadImage.length ? values.adminCommonSetting.femaleHeadImage.map(item => {
+              return item.response.result
+            }) : []
+          } else if (activeMenu === 'busy') {
+            this.userFurtherStates.forEach((item, index) => {
+              if (!item.label) {
+                this.$set(item, 'status', 'error')
+                this.$set(item, 'msg', this.$t('请输入细分状态名称'))
+              } else {
+                if (item.label.length < 2) {
+                  this.$set(item, 'status', 'error')
+                  this.$set(item, 'msg', this.$t('请输入至少两个字符'))
+                } else if (item.label.length > 6) {
+                  this.$set(item, 'status', 'error')
+                  this.$set(item, 'msg', this.$t('请输入少于六个字符'))
+                } else {
+                  this.$set(item, 'status', undefined)
+                  this.$set(item, 'msg', undefined)
+                }
+              }
+            })
+            if (this.userFurtherStates.some(item => item.status === 'error')) {
+              return
+            }
+            values.adminCommonSetting.userFurtherStates = this.userFurtherStates
+          } else if (activeMenu === 'business') {
+            try {
+              const str = 'return' + values.adminAdvancedSetting.projectCustomConfig
+              // eslint-disable-next-line no-new-func
+              const func = new Function(str)
+              values.adminAdvancedSetting.projectCustomConfig = func()
+            } catch (err) {
+              console.error(err)
+              this.$message.warning(this.$t('自定义配置填写不符合规范'))
+              return
+            }
+          }
+          this.loading = true
+          this.axios({
+            url: '/admin/index/setting',
+            data: this.$deepmerge(values, { action: 'submit', 'adminCommonSetting': { logoUrl: this.logoUrl } })
+          }).then((res) => {
+            this.loading = false
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$message.success(res.message)
+            }
+          })
+        } else {
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.container {
+  /deep/ .ant-card-head {
+    min-height: unset;
+  }
+  .left {
+    width: 250px;
+    display: flex;
+    flex-direction: column;
+    /deep/ .ant-menu-inline {
+      border-right-color: white;
+      margin-top: 1px;
+    }
+    /deep/ .ant-card-body {
+      padding: 0;
+    }
+  }
+  .right {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    margin-left: 16px;
+  }
+}
+</style>

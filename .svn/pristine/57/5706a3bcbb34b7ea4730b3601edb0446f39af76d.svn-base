@@ -1,0 +1,89 @@
+<template>
+  <a-modal
+    :destroyOnClose="true"
+    :title="$t('催办')"
+    :width="600"
+    :visible="visible"
+    :maskClosable="!buttonLoading"
+    :confirmLoading="buttonLoading"
+    :closable="!buttonLoading"
+    @cancel="visible = !visible"
+    @ok="handleSubmit"
+  >
+    <a-form :form="form">
+      <a-form-item :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }" :label="$t('催办原因')">
+        <a-select
+          v-decorator="['action', { rules: [{ required: true, message: $t('催办原因不能为空') }] }]"
+          show-search
+        >
+          <a-select-option v-for="(myitem, myindex) in urgeReasons" :key="myindex" :value="myitem.name">
+            {{ myitem.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }" :label="$t('催办备注')">
+        <a-textarea v-model="remark" :rows="6"></a-textarea>
+      </a-form-item>
+    </a-form>
+  </a-modal>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      buttonLoading: false,
+      form: this.$form.createForm(this),
+      config: {},
+      remark: '',
+      urgeReasons: [],
+      record: {}
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.record = config.record
+      this.axios({
+        url: '/admin/workflow/getWorkflowSet',
+        data: { caseId: this.config.caseId, type: 'urgeReasons' }
+      }).then(res => {
+        this.urgeReasons = res.result.data
+      })
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.buttonLoading = true
+          this.axios({
+            url: '/admin/workitem/processing',
+            data: {
+              action: 'submit',
+              caseId: this.config.caseId,
+              handleWay: values.action,
+              handleRemarks: this.remark,
+              operation: 'urge'
+            }
+          }).then(res => {
+            this.buttonLoading = false
+            if (res.code > 0) {
+              this.$message.error(res.message)
+            } else {
+              // const record = res.result
+              // const complainNum = res.result.complainNum
+              // const arcUrge = res.result.arcUrge
+              this.visible = false
+              this.$message.success(res.message)
+              // record.complainNum = complainNum
+              // record.arcUrge = arcUrge
+              this.$emit('ok')
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,241 @@
+<template>
+  <a-drawer :title="config.title" :destroyOnClose="true" :width="1000" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('作者')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-row>
+            <a-col :span="6">
+              <a-radio-group
+                :defaultValue="authorShow ? '1' : ''"
+                @change="
+                  (e) => {
+                    authorShow = e.target.value
+                    if (!e.target.value) {
+                      form.setFieldsValue({ 'info[author]': '' })
+                    }
+                  }
+                "
+              >
+                <a-radio style="width: 100px" value="">{{ $t('使用用户名') }}</a-radio>
+                <a-radio value="1">{{ $t('自定义') }}</a-radio>
+              </a-radio-group>
+            </a-col>
+            <a-col v-if="authorShow" :span="12">
+              <a-form-item>
+                <a-input
+                  v-decorator="[
+                    'info[author]',
+                    { initialValue: data.author, rules: [{ required: true, message: $t('请输入作者名称') }] }
+                  ]"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form-item>
+        <a-form-item :label="$t('发送时间')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-row>
+            <a-col :span="6">
+              <a-radio-group
+                :defaultValue="timeShow ? '1' : ''"
+                @change="
+                  (e) => {
+                    timeShow = e.target.value
+                    if (!e.target.value) {
+                      form.setFieldsValue({ 'info[sendTime]': null })
+                    }
+                  }
+                "
+              >
+                <a-radio style="width: 100px" value="">{{ $t('立即发送') }}</a-radio>
+                <a-radio value="1">{{ $t('定时发送') }}</a-radio>
+              </a-radio-group>
+            </a-col>
+            <a-col v-if="timeShow" :span="12">
+              <a-form-item>
+                <a-date-picker
+                  v-decorator="[
+                    'info[sendTime]',
+                    {
+                      initialValue: data.sendTime ? moment(data.sendTime) : null,
+                      rules: [{ required: true, message: this.$t('请选择定时发送时间') }]
+                    }
+                  ]"
+                  format="YYYY-MM-DD HH:mm:ss"
+                  :disabled-date="disabledDate"
+                  :disabled-time="disabledDateTime"
+                  :show-time="{ defaultValue: moment('00:00:00', 'HH:mm:ss') }"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form-item>
+        <a-form-item :label="$t('发送范围')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a v-if="!receiver.length" @click="getUser">{{ $t('选择') }}</a>
+          <a-card v-else size="small" :bodyStyle="{ paddingBottom: '0px' }">
+            <a-tag v-for="(userItem, userIndex) in receiver" :key="userIndex" style="margin-bottom: 6px">
+              <a-icon v-if="userItem.type === 'user'" type="user" />
+              <a-icon v-else-if="userItem.type === 'depart'" type="apartment" />
+              <a-icon v-else type="team" />
+              {{ userItem.name }}
+            </a-tag>
+            <a style="position: absolute; top: 0px; right: 5px" @click="getUser">{{ $t('修改') }}</a>
+          </a-card>
+          <a-input
+            v-show="false"
+            v-decorator="[
+              'info[receiver]',
+              {
+                initialValue: JSON.stringify(data.receiver),
+                rules: [{ required: true, message: this.$t('请选择用户') }]
+              }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('标题')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[title]',
+              {
+                initialValue: data.title,
+                rules: [
+                  { required: true, message: this.$t('请输入标题') },
+                  { max: 20, message: this.$t('标题长度不得超过20') }
+                ]
+              }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('内容')" :labelCol="labelCol" :wrapperCol="wrapperCol" class="tinyStyle">
+          <tiny-mce
+            v-if="tinyShow"
+            v-decorator="[
+              'info[content]',
+              { initialValue: data.content, rules: [{ required: true, message: this.$t('请输入内容') }] }
+            ]"
+            :newOptions="{ height: '550px' }"
+          />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit('1')">{{ $t('发送') }}</a-button>
+        <a-button @click="handleSubmit('0')">{{ $t('保存为草稿') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+      <inform-visit ref="informVisit" @func="getUserData" />
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    InformVisit: () => import('./InformVisit')
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 2 },
+      wrapperCol: { span: 22 },
+      visible: false,
+      loading: false,
+      data: {},
+      authorShow: false,
+      timeShow: false,
+      form: this.$form.createForm(this),
+      receiver: [],
+      tinyShow: false,
+      toolbar: [
+        [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'align': [] }],
+        [{ 'indent': '-1' }, { 'indent': '+1' }],
+        [{ 'color': [] }, { 'background': [] }],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        ['blockquote', 'code-block'],
+        ['image']
+      ]
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.receiver = []
+      this.config = config
+      this.data = {}
+      if (config.action === 'edit') {
+        this.data = config.record || {}
+        this.authorShow = !!this.data.author
+        this.receiver = JSON.parse(this.data.receiverData)
+        this.timeShow = this.data.sendTime
+      }
+      this.$nextTick(() => {
+        this.tinyShow = true
+      })
+    },
+    handleSubmit (type) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        values.info.receiver = this.receiver
+        values.info.id = this.data.id
+        values.info.tab = this.data.id ? 0 : undefined
+        if (!errors) {
+          this.loading = true
+          values.info.sendTime = values.info.sendTime ? values.info.sendTime.format('YYYY-MM-DD HH:mm:ss') : null
+          this.axios({
+            url: type === '1' ? this.config.url : '/base/Inform/draft',
+            data: Object.assign(values)
+          }).then((res) => {
+            this.visible = false
+            this.loading = false
+            this.$emit('ok', values)
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$message.success(res.message)
+              this.form.resetFields()
+              this.content = ''
+            }
+          })
+        }
+      })
+    },
+    getUser () {
+      this.$refs.informVisit.show({
+        title: this.$t('选择用户'),
+        record: this.receiver
+      })
+    },
+    range (start, end) {
+      const result = []
+      for (let i = start; i < end; i++) {
+        result.push(i)
+      }
+      return result
+    },
+    disabledDate (current) {
+      return current < this.moment().subtract(1, 'day')// 今天之前的年月日不可选，不包括今天
+    },
+    disabledDateTime (current) {
+      return {
+        disabledHours: () => this.range(0, 24).splice(0, new Date().getHours()), // ban小时
+        disabledMinutes: () => this.moment(current).hour() <= new Date().getHours() ? this.range(0, new Date().getMinutes()) : [], // ban分
+        disabledSeconds: () => this.moment(current).hour() <= new Date().getHours() && this.moment(current).minutes() <= new Date().getMinutes() ? this.range(0, new Date().getSeconds()) : []
+      }
+    },
+    getUserData (data) {
+      this.receiver = data
+      this.form.setFieldsValue({
+        'info[receiver]': this.receiver.toString()
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/ .tinyStyle {
+  .ant-form-explain {
+    margin-top: 1px;
+  }
+}
+</style>

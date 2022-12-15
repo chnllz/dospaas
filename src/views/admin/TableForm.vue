@@ -1,0 +1,446 @@
+<template>
+  <div>
+    <a-modal :title="config.title" :width="600" :visible="visible" :destroyOnClose="true" @cancel="visible = !visible">
+      <a-spin :spinning="loading">
+        <a-alert
+          v-if="!aliasDisabled"
+          :message="$t('数据表命名提示')"
+          type="warning"
+          show-icon
+          style="margin-bottom: 10px"
+        >
+          <template slot="description">
+            <p style="margin-bottom: 2px">1、最后不要加“表”字。正确叫法：“客户信息”，错误叫法：“客户信息表”。</p>
+            <p style="margin-bottom: 2px">
+              2、数据表的{显示名称}尽量控制在6个汉字以内。显示名字超长的，可以考虑使用表单规则，修改显示名称。
+            </p>
+            <p style="margin-bottom: 2px">
+              3、数据表的{系统名称}默认由系统自动生成，不允许修改。{系统名称}由{显示名称}的全拼，采用小驼峰写法自动生成，如：客户信息，自动命名为：keHuXinXi。
+            </p>
+          </template>
+        </a-alert>
+        <a-form :form="form">
+          <a-form-item
+            v-if="config.action === 'edit'"
+            :label="$t('编号')"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+          >
+            <a-input v-decorator="['tableId', { initialValue: data.tableId }]" :disabled="true" />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('显示名称') }}
+              <a-tooltip :title="$t('同一模块下，不允许重复。输入范围：2-20个字符。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-auto-complete
+              v-decorator="[
+                'name',
+                {
+                  initialValue: data.name,
+                  rules: [
+                    { required: true, message: $t('请输入显示名称') },
+                    { min: 2, max: 20, message: $t('请输入2~20个字符') },
+                    {
+                      validator: (rule, value, callback) => {
+                        if (!checkName) {
+                          callback()
+                        } else {
+                          checkName(rule, value, callback)
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]"
+              @blur="handleBlur"
+              @change="handleChangeName"
+            >
+              <!-- @focus="getNameList('focus')" -->
+              <template slot="dataSource">
+                <a-select-option v-for="d in nameList" :key="d.c" :value="d.c">{{ d.c }}</a-select-option>
+              </template>
+              <a-input>
+                <set-lang slot="addonAfter" />
+              </a-input>
+            </a-auto-complete>
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('系统名称') }}
+              <a-tooltip placement="top">
+                <template slot="title">
+                  <span>
+                    {{
+                      $t(
+                        '系统名称创建时由{显示名称}拼音全拼组成，使用小驼峰命名法。如：{显示名称}="我爱祖国"，自动生成的{系统名称}为"woAiZuGuo"。同一模块下，不允许重复。一旦创建，不允许修改。'
+                      )
+                    }}
+                  </span>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-auto-complete
+              v-decorator="[
+                'alias',
+                {
+                  initialValue: data.alias,
+                  rules: [
+                    { required: true, message: $t('请输入系统名称') },
+                    { max: 48, message: $t('最多请输入48个字符') }
+                  ]
+                }
+              ]"
+              :disabled="aliasDisabled"
+            >
+              <a-input v-if="config.action === 'add'">
+                <set-alias
+                  slot="addonAfter"
+                  ref="setAlias"
+                  :name="form.getFieldValue('name')"
+                  :aliasDisabled="aliasDisabled"
+                  @setAlias="setAlias"
+                />
+              </a-input>
+            </a-auto-complete>
+            <div
+              v-if="aliasPinyingObj.hasMultiPinYin && !aliasDisabled"
+              style="height: 20px; position: relative; left: 0; top: -16px; font-size: 12px; color: #faad14"
+            >
+              {{ $t('{显示名称}中存在多音字，请注意检查') }}
+            </div>
+          </a-form-item>
+          <a-form-item :label="$t('分类名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-auto-complete
+              v-decorator="[
+                'category',
+                {
+                  initialValue: data.category || '未分类',
+                  rules: [{ required: true, message: $t('请输入分类名称') }]
+                }
+              ]"
+              :data-source="usingCategories"
+              @search="onSearch"
+              @change="onSearch"
+              @focus="clickCategory"
+            ></a-auto-complete>
+          </a-form-item>
+          <a-form-item :label="$t('ES')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-switch
+              v-decorator="['enableEs', { initialValue: data.enableEs || false, valuePropName: 'checked' }]"
+              :checkedChildren="$t('启用')"
+              :unCheckedChildren="$t('禁用')"
+            />
+          </a-form-item>
+          <a-form-item
+            v-if="config.action === 'edit'"
+            :label="$t('最后修改人')"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+          >
+            <a-input v-decorator="['updateUser', { initialValue: data.updateUser }]" :disabled="true" />
+          </a-form-item>
+          <a-form-item
+            v-if="config.action === 'edit'"
+            :label="$t('最后修改时间')"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+          >
+            <a-input v-decorator="['updateTime', { initialValue: data.updateTime }]" :disabled="true" />
+          </a-form-item>
+          <a-form-item v-if="userInfo.superAdmin" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('访问级别') }}
+              <a-tooltip placement="top">
+                <template slot="title">
+                  <span>
+                    {{
+                      $t(
+                        '请慎重修改。访问级别是为了保护系统重要配置项而设计的，防止因修改系统必须的某些配置内容，而导致系统错误。'
+                      )
+                    }}
+                  </span>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-select v-decorator="['accessLevel', { initialValue: data.accessLevel || 0 }]">
+              <a-select-option :key="0" :value="0">{{ $t('可见可编可删') }}</a-select-option>
+              <a-select-option :key="1" :value="1">{{ $t('可见可编不可删') }}</a-select-option>
+              <a-select-option :key="2" :value="2">{{ $t('可见不可编不可删') }}</a-select-option>
+              <a-select-option :key="3" :value="3">{{ $t('不可见不可编不可删') }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-decorator="['remarks', { initialValue: data.remarks }]"
+              :autoSize="{ minRows: 3, maxRows: 6 }"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+      <div slot="footer" class="bbar">
+        <a-spin :spinning="loading">
+          <span slot="indicator"></span>
+          <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+          <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+        </a-spin>
+      </div>
+    </a-modal>
+    <a-modal :title="$t('提示')" :width="600" :visible="confirmModalShow" :closable="false">
+      <p>{{ $t(confirmModalMsg) }}</p>
+      <template slot="footer">
+        <a-button key="back" @click="handleCancel">{{ $t('继续保存') }}</a-button>
+        <a-button key="submit" type="primary" :loading="loading" @click="handleOk">{{ $t('返回修改') }}</a-button>
+      </template>
+    </a-modal>
+  </div>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    SetLang: () => import('@/components/SetLang'),
+    SetAlias: () => import('@/components/SetAlias/SetAlias')
+  },
+  data () {
+    this.handleChangeName = debounce(this.handleChangeName, 500)
+    return {
+      config: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      visible: false,
+      loading: false,
+      aliasDisabled: false,
+      data: {},
+      form: this.$form.createForm(this),
+      editable: false,
+      usingCategories: [],
+      protoCategories: [],
+      noMore: false,
+      nameLoading: false,
+      nameList: [],
+      nameParams: {
+        pageNo: 1,
+        pageSize: 20
+      },
+      action: 'add',
+      confirmModalShow: false,
+      confirmModalMsg: '',
+      valuesObj: null,
+      aliasPinyingObj: {},
+      checkName: null // 【显示名称】动态校验规则
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    // 添加弹窗
+    showAdd (config) {
+      this.visible = true
+      this.loading = true
+      this.aliasPinyingObj = {}
+      this.config = config
+      this.aliasDisabled = false
+      this.action = 'add'
+      this.nameList = []
+      // 清空数据
+      this.data = {}
+      // 目录分类
+      this.axios({
+        url: '/admin/table/category',
+        params: { category: '', module: this.config.module }
+      }).then(res => {
+        this.protoCategories = res.result
+        this.usingCategories = res.result.filter(item => item)
+        this.loading = false
+      })
+    },
+    // 编辑弹窗
+    showEdit (config) {
+      this.visible = true
+      this.loading = true
+      this.aliasPinyingObj = {}
+      this.config = config
+      this.aliasDisabled = true
+      this.action = 'edit'
+      this.nameList = []
+      // 获取数据
+      this.axios({
+        url: '/admin/table/get',
+        params: { tableId: config.record.tableId }
+      }).then((res) => {
+        this.data = res.result
+        this.loading = false
+      })
+      // 目录分类
+      this.axios({
+        url: '/admin/table/category',
+        params: { category: '', module: this.config.module }
+      }).then(res => {
+        this.protoCategories = res.result
+        this.usingCategories = res.result.filter(item => item)
+      })
+    },
+    // 自动完成搜索
+    onSearch (val) {
+      if (val) {
+        this.usingCategories = this.protoCategories.filter(item => item && item.includes(val))
+      } else {
+        this.usingCategories = JSON.parse(JSON.stringify(this.protoCategories))
+      }
+    },
+    clickCategory () {
+      const val = this.$t(this.form.getFieldValue('category'))
+      this.usingCategories = this.protoCategories.filter(item => item && item.includes(val))
+    },
+    getNameList (type) {
+      const val = this.$t(this.form.getFieldValue('name'))
+      if (!type || !this.nameList.length) {
+        this.nameLoading = true
+        this.axios({
+          url: '/admin/systemLibrary/list',
+          data: {
+            pageNo: this.nameParams.pageNo,
+            pageSize: this.nameParams.pageSize,
+            sortField: 'id',
+            sortOrder: 'descend',
+            init: 'true',
+            name: val
+          }
+        }).then(res => {
+          this.nameLoading = false
+          if (!res.code) {
+            this.nameList = this.nameList.concat(res.result.data)
+            this.nameList.forEach(item => {
+              item.c = item.langZhCn
+            })
+            this.noMore = res.result.data.length < this.nameParams.pageSize
+          } else {
+            this.setAlias({})
+          }
+        })
+      }
+    },
+    setAlias (item) {
+      if (this.config.action === 'add') {
+        this.aliasPinyingObj = item
+        const { setFieldsValue } = this.form
+        setFieldsValue({ 'alias': item.pinYin })
+      }
+    },
+    // 根据显示名称赋值系统名称
+    handleChangeName (e) {
+      this.nameParams = {
+        pageNo: 1,
+        pageSize: 20
+      }
+      this.nameList = []
+      this.getNameList()
+    },
+    handleBlur () {
+      if (!this.form.getFieldValue('alias')) {
+        this.$refs.setAlias.searchAlias()
+      }
+    },
+    getMoreNameList () {
+      this.nameParams.pageNo++
+      // this.getNameList()
+    },
+    // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    async handleSubmit () {
+      const { form: { validateFields, getFieldValue } } = this
+      // 动态设置【显示名称】校验规则
+      const value = getFieldValue('name')
+      if (!value) {
+        validateFields()
+        return
+      }
+      let validateName = true
+      await this.axios({
+        url: '/admin/table/checkUnique',
+        data: {
+          id: this.config.record ? this.config.record.id : null,
+          module: this.config.module,
+          name: value
+        },
+        tips: false
+      }).then(res => {
+        if (res.code) {
+          validateName = false
+          this.checkName = (rule, value, callback) => {
+            callback(res.message)
+          }
+          this.$nextTick(() => {
+            validateFields(['name'], { force: true })
+            this.checkName = null // 确保【显示名称】的验证只在提交时触发
+          })
+        }
+      })
+      if (!validateName) { return }
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.confirmModalShow = true
+          this.valuesObj = values
+          if (values.name.length > 6) {
+            this.confirmModalMsg = '{显示名称}超过6个字，建议优化到6个字以内。'
+          } else if (values.name[values.name.length - 1] === '表') {
+            this.confirmModalMsg = '{显示名称}最后一个字是“表”字，建议去掉。'
+          } else {
+            this.toSubmit(values)
+          }
+        }
+      })
+    },
+    toSubmit (values) {
+      this.confirmModalShow = false
+      this.loading = true
+      values.module = this.config.module
+      values.category = values.category ? values.category.replace(/\s+/g, '') : ''
+      const params = {
+        module: values.module,
+        name: values.name,
+        enableEs: values.enableEs,
+        category: values.category,
+        accessLevel: values.accessLevel ? values.accessLevel : this.data.accessLevel ? this.data.accessLevel : 0,
+        remarks: values.remarks
+      }
+      if (this.action === 'add') {
+        params.alias = values.alias
+      }
+      this.axios({
+        url: this.config.url,
+        data: Object.assign(params, { tableId: this.data.tableId }),
+        tips: false
+      }).then((res) => {
+        this.loading = false
+        if (res.code) {
+          this.$message.warning(res.message)
+        } else {
+          this.visible = false
+          this.$emit('ok', values)
+          this.$message.success(res.message)
+        }
+      })
+    },
+    handleOk () {
+      this.confirmModalShow = false
+    },
+    handleCancel () {
+      this.toSubmit(this.valuesObj)
+    }
+  }
+}
+</script>

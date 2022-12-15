@@ -1,0 +1,384 @@
+<template>
+  <a-spin :spinning="loading">
+    <a-row v-if="cardData.length > 0" class="cardType" :gutter="[0, 10]">
+      <a-col v-for="(data, index) in cardData" :key="index" :span="24">
+        <a-col :span="24">
+          <user-table-card-build v-for="(item, indexs) in cardTemplate" :key="indexs" :data="data" :record="item" />
+        </a-col>
+        <a-col
+          v-if="toolButtons.every((item) => item.name !== $t('不显示选中'))"
+          :span="24"
+          style="text-align: right; margin-top: -16px; border: 1px solid #e8e8e8"
+        >
+          <a-space>
+            <a-button v-if="editAble" size="small" @click="showDetails(data)">{{ $t('详情') }}</a-button>
+            <a-button style="margin-right: 5px" size="small" @click="sendData(data)">{{ $t('选中') }}</a-button>
+          </a-space>
+        </a-col>
+      </a-col>
+      <a-col v-if="cardData.length !== 0 && cardData.length >= pageSize" :span="24" style="text-align: center">
+        <a v-if="mrorLoading" @click="getCardData">{{ $t('加载更多数据') }}</a>
+        <span v-else>{{ $t('没有更多数据') }}</span>
+      </a-col>
+    </a-row>
+    <a-empty v-else />
+    <!-- 数据表单 -->
+    <user-table-form
+      ref="userTableForm"
+      @ok="
+        () => {
+          cardData = []
+          sorter.pageNo = 1
+          getCardData()
+        }
+      "
+    />
+  </a-spin>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    UserTableCardBuild: () => import('./UserTableCardBuild'),
+    UserTableForm: () => import('./UserTableForm')
+  },
+  props: {
+    cardTemplate: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    dataSource: {
+      type: String,
+      default () {
+        return ''
+      },
+      required: false
+    },
+    params: {
+      type: Object,
+      default () {
+        return {
+          templateId: ''
+        }
+      },
+      required: true
+    },
+    sorter: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    templateId: {
+      type: String,
+      default () {
+        return ''
+      },
+      required: true
+    },
+    viewThis: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    pageSize: {
+      type: Number,
+      default () {
+        return 10
+      }
+    },
+    actionArray: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
+    toolButtons: {
+      type: Array,
+      default () {
+        return []
+      }
+    }
+  },
+  data () {
+    return {
+      mrorLoading: true,
+      loading: false,
+      editAble: false,
+      queryParam: {},
+      cardData: []
+    }
+  },
+  created () {
+    this.getCardData()
+    this.sorter.pageSize = this.pageSize
+    this.sorter.pageNo = 1
+    const array = this.actionArray[0] ? this.actionArray[0].inlineButtons : []
+    array.forEach(item => {
+      if (item.name === this.$t('编辑')) {
+        this.editAble = true
+      }
+    })
+  },
+  methods: {
+    // 加载表格数据
+    getCardData () {
+      this.loading = true
+      if (this.params.jointable && !this.params.jointable.fieldVal) {
+        this.viewThis.templateAll.forEach(item => {
+          if (item.field && item.field.alias === this.params.jointable.thmdField) {
+            this.params.jointable.fieldVal = item.field.value
+          }
+        })
+      }
+      if (this.viewThis.parentParams.popscreenType && this.viewThis.parentParams) {
+        this.sorter['gdlxdh'] = this.viewThis.form.getFieldsValue()['record']['gdlxdh']
+      }
+      this.axios({
+        url: this.dataSource || '/admin/general/list',
+        data: Object.assign(this.queryParam, this.params, this.sorter)
+      }).then(res => {
+        this.loading = false
+        if (res.result.data.length === 0) {
+          this.mrorLoading = false
+        } else {
+          this.cardData = [...this.cardData, ...res.result.data]
+          this.sorter.pageNo++
+        }
+      })
+    },
+    sendData (data) {
+      const obj = {}
+      const sendData = []
+      if (!this.viewThis.cardKey) {
+        this.$message.info(this.$t('请点击左侧需要被填充的客户产品信息标题'))
+      } else {
+        if (this.viewThis.aliasKey) {
+          for (const i in data) {
+            const arrData = {}
+            arrData.alias = i
+            arrData.value = data[i]
+            sendData.push(arrData)
+            obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[' + i + ']'] = data[i]
+          }
+          let sonmdField = ''
+          if (this.params.jointable.length === 0) {
+            this.viewThis.form.setFieldsValue(obj)
+          } else {
+            sonmdField = this.params.jointable.sonmdField + '_' + this.viewThis.aliasKey
+            const getTemplate = (array) => {
+              array.forEach((item, index) => {
+                const arr = item.columns || item.trs || item.tds || item.list
+                if (arr) {
+                  getTemplate(arr)
+                } else {
+                  if (sendData.find(sendItem => item.field && sendItem.alias === item.field.beforeAlias)) {
+                    if (item.formType === 'address') {
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.beforeAlias) {
+                          const data = {
+                            display: obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[' + item.field.beforeAlias + ']'],
+                            address: obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]']
+                          }
+                          this.$set(sendItem, 'value', data)
+                        }
+                      })
+                    } else if (item.formType === 'cascader') {
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.beforeAlias) {
+                          const data = {
+                            display: '',
+                            value: obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[' + item.field.beforeAlias + ']']
+                          }
+                          this.$set(sendItem, 'value', data)
+                        }
+                      })
+                    } else if (item.formType === 'combobox') {
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.beforeAlias) {
+                          const value = obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]']
+                          this.$set(sendItem, 'value', value)
+                        }
+                      })
+                    } else if (['image', 'file'].includes(item.formType)) {
+                      for (const i in obj) {
+                        if (item.field && ('record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]') === i) {
+                          const img = JSON.parse(JSON.stringify(obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]']))
+                          obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]'] = img.map((imgItem, imgIndex) => {
+                            const imageObj = {
+                              name: imgItem.fileName,
+                              response: {
+                                code: 0,
+                                message: '',
+                                result: {
+                                  fileName: imgItem.fileName,
+                                  filePath: imgItem.filePath
+                                },
+                                timestamp: new Date().valueOf()
+                              },
+                              status: 'done',
+                              uid: new Date().valueOf(),
+                              url: this.setting.rootUrl + imgItem.filePath
+                            }
+                            return imageObj
+                          })
+                        }
+                      }
+                    } else if (['datetime'].includes(item.formType)) {
+                      let time = null
+                      if (obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]']) {
+                        time = null
+                      } else if (obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]']) {
+                        time = this.moment(obj['record' + '[product_' + this.viewThis.aliasKey + ']' + '[_' + item.field.beforeAlias + '_]'])
+                      }
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.beforeAlias) {
+                          this.$set(sendItem, 'value', time)
+                        }
+                      })
+                    }
+                  }
+                  if (item.field && item.field.alias === sonmdField) {
+                    const screenData = {
+                      aliasKey: this.viewThis.aliasKey,
+                      beforeAlias: item.field.beforeAlias
+                    }
+                    this.$nextTick(() => {
+                      this.viewThis.$refs.buildBlocks[0].getVal(sendData, item.field.alias, item.field.setting, '', screenData)
+                    })
+                  }
+                }
+              })
+            }
+            getTemplate(this.viewThis.template)
+          }
+        } else {
+          for (const i in data) {
+            const arrData = {}
+            arrData.alias = i
+            arrData.value = data[i]
+            sendData.push(arrData)
+            obj['record' + '[' + i + ']'] = data[i]
+          }
+          let sonmdField = ''
+          if (this.params.jointable.length === 0) {
+            this.viewThis.form.setFieldsValue(obj)
+          } else {
+            sonmdField = this.params.jointable.sonmdField
+            const sonmdData = sendData.find(item => item.alias === sonmdField)
+            sendData.push({
+              alias: this.params.jointable.fieldSon,
+              value: sonmdData.value
+            })
+            const getTemplate = (array) => {
+              array.forEach((item, index) => {
+                const arr = item.columns || item.trs || item.tds || item.list
+                if (arr) {
+                  getTemplate(arr)
+                } else {
+                  if (sendData.find(sendItem => item.field && sendItem.alias === item.field.alias)) {
+                    if (item.formType === 'address') {
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.alias) {
+                          const data = {
+                            display: obj['record' + '[' + item.field.alias + ']'],
+                            address: obj['record' + '[_' + item.field.alias + '_]']
+                          }
+                          this.$set(sendItem, 'value', data)
+                        }
+                      })
+                    } else if (item.formType === 'cascader') {
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.alias) {
+                          const data = {
+                            display: '',
+                            value: obj['record' + '[' + item.field.alias + ']']
+                          }
+                          this.$set(sendItem, 'value', data)
+                        }
+                      })
+                    } else if (item.formType === 'combobox') {
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.alias) {
+                          const value = obj['record' + '[_' + item.field.alias + '_]']
+                          this.$set(sendItem, 'value', value)
+                        }
+                      })
+                    } else if (['image', 'file'].includes(item.formType)) {
+                      for (const i in obj) {
+                        if (item.field && ('record' + '[' + item.field.alias + ']') === i) {
+                          const img = JSON.parse(JSON.stringify(obj['record' + '[' + item.field.alias + ']']))
+                          obj['record' + '[' + item.field.alias + ']'] = img.map((imgItem, imgIndex) => {
+                            const imageObj = {
+                              name: imgItem.fileName,
+                              response: {
+                                code: 0,
+                                message: '',
+                                result: {
+                                  fileName: imgItem.fileName,
+                                  filePath: imgItem.filePath
+                                },
+                                timestamp: new Date().valueOf()
+                              },
+                              status: 'done',
+                              uid: new Date().valueOf(),
+                              url: this.setting.rootUrl + imgItem.filePath
+                            }
+                            return imageObj
+                          })
+                        }
+                      }
+                    } else if (['datetime'].includes(item.formType)) {
+                      let time = null
+                      if (obj['record' + '[' + item.field.alias + ']']) {
+                        time = null
+                      } else if (obj['record' + '[' + item.field.alias + ']']) {
+                        time = this.moment(obj['record' + '[' + item.field.alias + ']'])
+                      }
+                      sendData.forEach(sendItem => {
+                        if (sendItem.alias === item.field.alias) {
+                          this.$set(sendItem, 'value', time)
+                        }
+                      })
+                    }
+                  }
+                  if (item.field && item.field.alias === sonmdField) {
+                    this.$nextTick(() => {
+                      this.viewThis.$refs.buildBlocks[0].getVal(sendData, item.field.alias, item.field.setting)
+                    })
+                  }
+                }
+              })
+            }
+            getTemplate(this.viewThis.template)
+          }
+        }
+      }
+    },
+    showDetails (data) {
+      const parameter = {
+        title: '编辑', url: '/admin/general/edit', width: 1200, record: data, tpl: this.templateId, cardType: 'tableCardWindow'
+      }
+      this.$nextTick(() => {
+        this.$refs.userTableForm.show(parameter)
+      })
+    }
+  }
+}
+</script>
+<style scoped>
+.cardType::-webkit-scrollbar {
+  display: none;
+}
+.cardType {
+  height: calc(100vh - 140px);
+  overflow-x: hidden;
+  overflow: auto;
+}
+</style>

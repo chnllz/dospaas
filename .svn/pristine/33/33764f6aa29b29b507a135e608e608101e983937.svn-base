@@ -1,0 +1,624 @@
+<template>
+  <a-spin :spinning="loading">
+    <a-form :form="form" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-space direction="vertical" style="width: 100%">
+        <a-card size="small" :title="$t('基础设置')">
+          <a-form-item>
+            <span slot="label">
+              {{ $t('客服超时未回复提示') }}
+              <a-tooltip :title="$t('默认值60，设置范围30~600')"><a-icon type="question-circle" /></a-tooltip>
+            </span>
+            {{ $t('客服超过') }}
+            <a-input-number
+              v-decorator="[
+                'timeoutPromptNotReturn',
+                {
+                  initialValue: data.timeoutPromptNotReturn || 60,
+                  rules: [{ required: true, message: $t('请输入秒数') }]
+                }
+              ]"
+              style="margin: 0px 8px"
+              :min="30"
+              :max="600"
+            />
+            {{ $t('秒未回复，倒计时将变为红色') }}
+          </a-form-item>
+          <a-form-item>
+            <span slot="label">
+              {{ $t('正在输入信息查看') }}
+              <a-tooltip :title="$t('开启后，会话双方可以看到对方的输入状态')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'visiterInputing',
+                {
+                  initialValue: data.visiterInputing,
+                  valuePropName: 'checked'
+                }
+              ]"
+            />
+          </a-form-item>
+          <a-row>
+            <a-col :span="4">
+              <a-form-item :labelCol="{ span: 18 }" :wrapperCol="{ span: 6 }">
+                <span slot="label">
+                  {{ $t('客服手动结束会话') }}
+                  <a-tooltip :title="$t('开启后会话平台将出现【结束】按钮，客服可以手动结束会话')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch
+                  v-decorator="[
+                    'endSessionManually',
+                    {
+                      initialValue: data.endSessionManually,
+                      valuePropName: 'checked'
+                    }
+                  ]"
+                  @change="(e) => (data.endSessionManually = e)"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col :span="4">
+              <a-form-item v-if="data.endSessionManually" :labelCol="{ span: 18 }" :wrapperCol="{ span: 6 }">
+                <span slot="label">
+                  {{ $t('会话结束确认') }}
+                  <a-tooltip :title="$t('客服手动结束会话时，是否弹框让客服二次确认')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch
+                  v-decorator="[
+                    'endConfirm',
+                    {
+                      initialValue: data.endConfirm,
+                      valuePropName: 'checked'
+                    }
+                  ]"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-form-item>
+            <span slot="label">
+              {{ $t('所有会话tab页权限') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '设置《所有会话》tab页的权限，拥有该权限的客服可以查看所有正在进行的会话，并可以进行【强插】【结束】操作'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a @click="handlePriv">{{ $t('权限设置') }}</a>
+            <a-input v-show="false" v-decorator="['allTabsPriv', { initialValue: data.allTabsPriv }]" />
+          </a-form-item>
+          <a-form-item>
+            <span slot="label">
+              {{ $t('预览排队访客信息') }}
+              <a-tooltip :title="$t('默认关闭。开启后，客服可以提前预览排队中访客的会话内容。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'waitPreview',
+                {
+                  initialValue: data.waitPreview || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('重复咨询识别')">
+          <a-form-item>
+            <span slot="label">
+              {{ $t('重复咨询识别') }}
+              <a-tooltip :title="$t('开启后，系统将对{重复咨询时间范围}内的访客，标记为重复咨询')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'reconsult',
+                {
+                  initialValue: false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              :disabled="true"
+              @change="(e) => $set(data, 'reconsult', e)"
+            />
+          </a-form-item>
+          <a-form-item v-if="data.reconsult">
+            <span slot="label">
+              {{ $t('重复咨询时间范围') }}
+              <a-tooltip :title="$t('默认值24，设置范围1~120')"><a-icon type="question-circle" /></a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="[
+                'reconsultTime',
+                {
+                  initialValue: data.reconsultTime || 24,
+                  rules: [{ required: true, message: $t('请输入重复咨询时间范围') }]
+                }
+              ]"
+              style="margin-right: 8px"
+              :min="1"
+              :max="120"
+            />
+            {{ $t('小时') }}
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('示忙细分状态')">
+          <a-form-item>
+            <span slot="label">
+              {{ $t('是否启用') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '开启后，客服可选择示忙细分状态，对应的细分状态项会在数据报表及监控中体现。设置会立即生效，建议在非工作时间操作。'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'busyEnable',
+                {
+                  initialValue: data.busyEnable,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="(e) => $set(data, 'busyEnable', e)"
+            />
+          </a-form-item>
+          <a-form-item v-if="data.busyEnable">
+            <span slot="label">
+              {{ $t('细分状态') }}
+              <a-tooltip :title="$t('至少勾选1个细分状态，状态文案必填，输入范围2-6个字符')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <draggable v-model="busyList" animation="200" handle=".handle" @start="drag = true" @end="drag = false">
+              <a-row v-for="(element, key) in busyList" :key="key" :gutter="8" type="flex">
+                <a-col flex="30px" class="handle">
+                  <span style="display: inline-block">
+                    <a-icon type="drag" />
+                  </span>
+                </a-col>
+                <a-col flex="30px">
+                  <a-form-item>
+                    <a-checkbox
+                      :value="element.value"
+                      :checked="element.check"
+                      @change="
+                        (e) => {
+                          element.check = e.target.checked
+                          if (element.check) {
+                            busyValue.push(element.value)
+                          } else {
+                            busyValue = busyValue.filter((item) => item !== element.value)
+                          }
+                          form.setFieldsValue({
+                            furtherStates: busyValue.join(',')
+                          })
+                        }
+                      "
+                    ></a-checkbox>
+                  </a-form-item>
+                </a-col>
+                <a-col flex="140px">
+                  <a-form-item
+                    :validate-status="element.status ? element.status : 'success'"
+                    :help="element.msg ? element.msg : ''"
+                  >
+                    <a-input
+                      v-model="element.label"
+                      @change="
+                        (e) => {
+                          if (!e.target.value) {
+                            $set(element, 'status', 'error')
+                            $set(element, 'msg', $t('请输入细分状态名称'))
+                          } else {
+                            if (e.target.value.length < 2) {
+                              $set(element, 'status', 'error')
+                              $set(element, 'msg', $t('请输入至少两个字符'))
+                            } else if (e.target.value.length > 6) {
+                              $set(element, 'status', 'error')
+                              $set(element, 'msg', $t('请输入少于六个字符'))
+                            } else {
+                              $set(element, 'status', undefined)
+                              $set(element, 'msg', undefined)
+                            }
+                          }
+                        }
+                      "
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </draggable>
+            <a-input
+              v-show="false"
+              v-decorator="[
+                'furtherStates',
+                {
+                  initialValue: busyValue.length ? busyValue.join(',') : '',
+                  rules: [{ required: true, message: $t('请选择细分状态') }]
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('服务小结')">
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+          </div>
+          <a-table
+            ref="summaryLists"
+            rowKey="id"
+            :columns="summaryColumns"
+            :dataSource="summaryLists"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record)">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index)">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+          </a-table>
+        </a-card>
+      </a-space>
+    </a-form>
+    <priv-visit-form ref="privVisitForm" :params="{ formView: [] }" @func="getPriv" />
+    <a-button style="margin-top: 16px" type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+    <a-modal
+      :title="config.title"
+      :width="600"
+      :visible="visible"
+      :destroyOnClose="true"
+      :confirmLoading="loading"
+      @ok="modalSubmit"
+      @cancel="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <a-form :form="modalform" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+          <a-form-item :label="$t('模板名称')">
+            <a-input
+              v-decorator="[
+                'name',
+                {
+                  initialValue: config.data && config.data.name ? config.data.name : '',
+                  rules: [{ transform: (value) => value.trim() }, { required: true, message: $t('请输入模板名称') }]
+                }
+              ]"
+              :disabled="config.data && config.data.id === 1"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('适用技能组')">
+            <a-select
+              v-decorator="[
+                'group',
+                {
+                  initialValue: config.data && config.data.group ? config.data.group : undefined,
+                  rules: [{ required: config.data && config.data.id !== 1, message: $t('请选择适用技能组') }]
+                }
+              ]"
+              :disabled="config.data && config.data.id === 1"
+              allowClear
+              mode="multiple"
+              show-search
+              :filter-option="filterOption"
+            >
+              <a-select-option v-for="group in groupList" :key="group.id">{{ group.name }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('表单视图')">
+            <a-select
+              v-decorator="[
+                'templateId',
+                {
+                  initialValue: config.data && config.data.templateId ? config.data.templateId : undefined,
+                  rules: [{ required: true, message: $t('请选择视图') }]
+                }
+              ]"
+              allowClear
+              show-search
+              :filter-option="filterOption"
+            >
+              <a-select-option v-for="view in viewList" :key="view.uid">{{ view.name }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('备注')">
+            <a-textarea
+              v-decorator="['remarks', { initialValue: config.data && config.data.remarks ? config.data.remarks : '' }]"
+              :disabled="config.data && config.data.id === 1"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </a-modal>
+  </a-spin>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    PrivVisitForm: () => import('@/views/admin/Table/PrivVisitForm'),
+    draggable: () => import('vuedraggable')
+  },
+  props: {
+    baseAll: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    groupList: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      form: this.$form.createForm(this),
+      modalform: this.$form.createForm(this),
+      labelCol: { span: 3 },
+      wrapperCol: { span: 18 },
+      loading: false,
+      viewList: [],
+      data: {},
+      visible: false,
+      config: {},
+      busyList: [{
+        value: 11,
+        label: this.$t('就餐'),
+        check: false
+      }, {
+        value: 12,
+        label: this.$t('会议'),
+        check: false
+      }, {
+        value: 13,
+        label: this.$t('培训'),
+        check: false
+      }, {
+        value: 14,
+        label: this.$t('休息'),
+        check: false
+      }, {
+        value: 15,
+        label: this.$t('洗手间'),
+        check: false
+      }, {
+        value: 16,
+        label: this.$t('其他'),
+        check: false
+      }],
+      busyValue: [],
+      summaryColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('表单视图'),
+        dataIndex: 'templateId',
+        customRender: (text, record) => {
+          const view = this.viewList.find(item => item.uid === text)
+          return view ? view.name : '--'
+        }
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      summaryLists: [{ id: 1, name: this.$t('默认'), group: [], remarks: this.$t('系统默认模板，不可删除') }]
+    }
+  },
+  watch: {
+    baseAll: {
+      handler (newValue) {
+        this.data = newValue
+        if (newValue.furtherStates) {
+          this.data.furtherStates = JSON.parse(newValue.furtherStates)
+          this.busyList = this.data.furtherStates
+          this.busyValue = this.data.furtherStates.map(item => {
+            item.label = this.$t(item.label)
+            if (item.check) {
+              return item.value
+            }
+          }).filter(item => item)
+        }
+        if (newValue.summaryLists) {
+          this.summaryLists = JSON.parse(newValue.summaryLists)
+          this.summaryLists.forEach(item => { item.name = this.$t(item.name); item.remarks = this.$t(item.remarks) })
+        }
+      },
+      immediate: true
+    }
+  },
+  created () {
+    this.axios({
+      url: '/admin/userTable/tableTplviews',
+      data: {
+        tableId: 'c87721c7be6647cda354cb173e6cfda6',
+        type: 'tableFormView'
+      }
+    }).then(res => {
+      res.result.forEach(item => { item.name = this.$t(item.name) })
+      this.viewList = res.result
+    })
+  },
+  methods: {
+    handlePriv () {
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: this.$t('权限设置'),
+        record: this.data || [],
+        key: 'allTabsPriv',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    handleAdd () {
+      this.visible = true
+      this.config = {
+        title: this.$t('添加'),
+        data: {}
+      }
+    },
+    handleEdit (record) {
+      this.visible = true
+      this.config = {
+        title: this.$t('编辑'),
+        data: record
+      }
+    },
+    handleDelete (index) {
+      this.summaryLists.splice(index, 1)
+    },
+    modalSubmit () {
+      this.modalform.validateFields((error, values) => {
+        if (!error) {
+          if (this.config.data && this.config.data.id) {
+            values.id = this.config.data.id
+            this.summaryLists.splice(this.summaryLists.findIndex(item => item.id === this.config.data.id), 1, values)
+          } else {
+            values.id = new Date().valueOf()
+            this.summaryLists.push(values)
+          }
+          this.$message.success(this.$t('操作成功'))
+          this.visible = false
+        }
+      })
+    },
+    filterOption (input, option) {
+      return (
+        option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      )
+    },
+    getPriv (data) {
+      this.data.allTabsPriv = JSON.stringify(data)
+      this.form.setFieldsValue({
+        'allTabsPriv': JSON.stringify(data)
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((err, values) => {
+        if (!err) {
+          values.summaryLists = JSON.stringify(this.summaryLists)
+          this.busyList.forEach((item, index) => {
+            if (!item.label) {
+              this.$set(item, 'status', 'error')
+              this.$set(item, 'msg', this.$t('请输入细分状态名称'))
+            } else {
+              if (item.label.length < 2) {
+                this.$set(item, 'status', 'error')
+                this.$set(item, 'msg', this.$t('请输入至少两个字符'))
+              } else if (item.label.length > 6) {
+                this.$set(item, 'status', 'error')
+                this.$set(item, 'msg', this.$t('请输入少于六个字符'))
+              } else {
+                this.$set(item, 'status', undefined)
+                this.$set(item, 'msg', undefined)
+              }
+            }
+          })
+          if (this.busyList.some(item => item.status === 'error')) {
+            return
+          }
+          values.furtherStates = JSON.stringify(this.busyList)
+          values.busyList = undefined
+          this.loading = true
+          this.axios({
+            url: '/chat/setting/save',
+            data: { action: 'submit', info: values }
+          }).then(res => {
+            this.loading = false
+            if (res.code === 0) {
+              this.$emit('ok')
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.list-item {
+  padding: 0px 0;
+  margin-bottom: -1px;
+  background-color: #fff;
+  // border: 1px solid rgba(0, 0, 0, .125);
+}
+.list-item[draggable='true'] {
+  opacity: 0.5;
+  background: #c8ebfb;
+}
+.list-item .handle {
+  margin-right: 5px;
+  padding: 0 16px 0 0;
+  cursor: move;
+}
+.list-item .text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.list-item:first-child {
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+}
+.list-item:last-child {
+  margin-bottom: 0;
+  border-bottom-right-radius: 2px;
+  border-bottom-left-radius: 2px;
+}
+</style>

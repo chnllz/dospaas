@@ -1,0 +1,100 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('角色名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[roleName]',
+              { initialValue: data.roleName, rules: [{ required: true, message: $t('请输入角色名称') }] }
+            ]"
+          >
+            <set-lang slot="addonAfter" value="角色管理" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :label="$t('状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select v-decorator="['info[status]', { initialValue: data.status }]">
+            <a-select-option :value="1">{{ $t('启用') }}</a-select-option>
+            <a-select-option :value="0">{{ $t('禁用') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="userInfo.superAdmin" :label="$t('访问级别')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[accessLevel]', { initialValue: data.accessLevel || 0 }]">
+            <a-radio :value="0" style="width: 100%">{{ $t('可见可编可删') }}</a-radio>
+            <a-radio :value="1" style="width: 100%">{{ $t('可见可编不可删') }}</a-radio>
+            <a-radio :value="2" style="width: 100%">{{ $t('可见不可编不可删') }}</a-radio>
+            <a-radio :value="3" style="width: 100%">{{ $t('不可见不可编不可删') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea v-decorator="['info[remarks]', { initialValue: data.remarks }]" :autoSize="{ minRows: 6 }" />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  components: {
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      visible: false,
+      loading: false,
+      data: {},
+      form: this.$form.createForm(this)
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', roleId: config.record ? config.record.roleId : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = res.result.data
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { action: 'submit', roleId: this.data.roleId })
+          }).then((res) => {
+            this.visible = false
+            this.loading = false
+            this.$emit('ok', values)
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$message.success(res.message)
+              this.form.resetFields()
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

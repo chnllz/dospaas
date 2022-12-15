@@ -1,0 +1,289 @@
+<template>
+  <div>
+    <div class="table-operator">
+      <a-button v-action:add icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+      <a-button v-action:sort icon="sort-ascending" @click="handleSort">{{ $t('排序') }}</a-button>
+    </div>
+    <a-table ref="table" rowKey="id" :columns="columns" :dataSource="formView" size="small" :pagination="false">
+      <span slot="tplview" slot-scope="text, record" style="cursor: pointer; user-select: none">
+        <template v-if="!record.nameFlag">
+          <span v-for="(value, index) in tplviewArr" :key="index">
+            {{ value.value === text ? value.text : '' }}
+          </span>
+        </template>
+        <template v-else>
+          <a-select
+            v-model="record.tplview"
+            :placeholder="$t('请选择视图')"
+            size="small"
+            :show-search="true"
+            option-filter-prop="children"
+            @change="
+              (val) => {
+                handleTpl(record, val)
+              }
+            "
+          >
+            <a-select-option v-for="(value, key) in tplviewArr" :key="key" :value="value.value">
+              {{ value.text }}
+            </a-select-option>
+          </a-select>
+        </template>
+      </span>
+      <span slot="formCondition" slot-scope="text, record, index">
+        <a @click="handlePriv(record, index)">
+          <a-badge :status="record.condiFlag ? 'success' : 'default'" />
+          {{ $t('设置') }}
+        </a>
+      </span>
+      <span slot="formViewFieldPriv" slot-scope="text, record, index">
+        <a @click="handleFieldPriv(record, index)">
+          <a-badge :status="record.privFlag ? 'success' : 'default'" />
+          {{ $t('设置') }}
+        </a>
+      </span>
+      <div slot="action" slot-scope="text, record, index">
+        <a @click="handleEdit(record)">
+          <span v-if="!record.nameFlag">{{ $t('编辑') }}</span>
+          <span v-else>{{ $t('保存') }}</span>
+        </a>
+        <a-divider type="vertical" />
+        <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index)">
+          <a>{{ $t('删除') }}</a>
+        </a-popconfirm>
+      </div>
+    </a-table>
+    <!-- 启用条件 -->
+    <FormApplyRule ref="formApplyRule" @ok="getFormCondition" />
+    <!-- 操作权限 -->
+    <priv-action-form ref="privActionForm" :params="{ formView: formView }" @func="getFormview" />
+    <!-- 排序 -->
+    <drag-sort ref="dragSort" @ok="getList" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    PrivActionForm: () => import('./PrivActionForm'),
+    QuerierFormRule: () => import('./QuerierFormRule'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    FormApplyRule: () => import('./FormApplyRule')
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return []
+      },
+      required: true
+    },
+    formViewData: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    page: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    return {
+      advanced: false,
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('名称'),
+        dataIndex: 'tplview',
+        width: 260,
+        scopedSlots: { customRender: 'tplview' }
+      }, {
+        title: this.$t('启用条件'),
+        dataIndex: 'formCondition',
+        scopedSlots: { customRender: 'formCondition' }
+      }, {
+        title: this.$t('操作权限'),
+        dataIndex: 'formViewFieldPriv',
+        scopedSlots: { customRender: 'formViewFieldPriv' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 240,
+        scopedSlots: { customRender: 'action' }
+      }],
+      formView: [],
+      tplviewArr: [],
+      tplviewObj: {},
+      tableId: ''
+    }
+  },
+  watch: {
+    params: {
+      handler (newValue) {
+        this.tplviewArr = newValue.tplviewArr
+        this.tableId = this.params.tableId
+        this.tplviewArr.forEach(item => {
+          this.tplviewObj[item.value] = item
+        })
+      },
+      immediate: true
+    },
+    formViewData: {
+      handler (newValue) {
+        this.formView = JSON.parse(JSON.stringify(newValue)).filter(item => item.tplview)
+      },
+      immediate: true
+    },
+    formView: {
+      handler (newValue) {
+        newValue.forEach(item => {
+          if (!item.tplviewName && item.tplview) {
+            item.tplviewName = this.tplviewObj[item.tplview].text
+          }
+          if (item.formCondition && item.formCondition.conditionVisual && item.formCondition.conditionVisual.length > 0) {
+            if (item.formCondition.conditionVisual.length === 1) {
+              item.condiFlag = item.formCondition.conditionVisual[0].type !== 'notSet'
+            } else {
+              item.condiFlag = item.formCondition.conditionVisual.length !== 0
+            }
+          } else {
+            item.condiFlag = false
+          }
+          if (item.formViewFieldPriv) {
+            const priv = JSON.parse(item.formViewFieldPriv)
+            item.privFlag = priv.some(privItem => {
+              const flag1 = !!privItem.formViewFieldPriv
+              const flag2 = privItem.rule !== 'inherit'
+              if (flag1 || flag2) {
+                return true
+              } else {
+                return false
+              }
+            })
+          } else {
+            item.privFlag = false
+          }
+        })
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    handleAdd () {
+      const obj = {
+        nameFlag: true,
+        formViewFieldPriv: '',
+        id: (new Date()).valueOf(),
+        listOrder: this.formView.length * 10 + 10,
+        tplview: '',
+        tplviewName: ''
+      }
+      if (this.page === 'workflowForm') {
+        const tableId = this.tableId && this.tableId[1] ? this.tableId[1] : ''
+        this.axios({
+          url: `/admin/userTable/tableFields/${tableId}`
+        }).then((res) => {
+          const formViewFieldPriv = []
+          for (var k in res.result) {
+            formViewFieldPriv.push({
+              id: (new Date()).valueOf() + Math.random() * 1000,
+              alias: res.result[k].alias,
+              name: res.result[k].name,
+              formViewFieldPriv: '',
+              rule: 'readonly'
+            })
+          }
+          obj.formViewFieldPriv = JSON.stringify(formViewFieldPriv)
+          this.formView.push(obj)
+        })
+      } else {
+        this.formView.push(obj)
+      }
+    },
+    // 排序
+    handleSort () {
+      const data = this.formView.map(item => {
+        item.name = item.tplviewName
+        return item
+      })
+      this.$refs.dragSort.show({
+        action: 'sort',
+        title: this.$t('排序'),
+        sortData: data
+      })
+    },
+    // 获取重新排序列表
+    getList (data) {
+      data.forEach((item, index) => {
+        item.listOrder = String((index + 1) * 10)
+      })
+      this.formView = data.map(item => {
+        delete item.name
+        return item
+      })
+    },
+    handleTpl (record, val) {
+      record.tplviewName = this.tplviewObj[val].text
+      record.nameFlag = false
+      this.formView = JSON.parse(JSON.stringify(this.formView))
+    },
+    handleEdit (record) {
+      record.nameFlag = !record.nameFlag
+      if (!record.tplview) {
+        record.nameFlag = true
+        this.$message.error(this.$t('请选择视图'))
+      }
+      this.formView = JSON.parse(JSON.stringify(this.formView))
+    },
+    getFormview (data, index) {
+      this.formView.splice(index, 1, data)
+    },
+    handleDelete (index) {
+      this.formView.splice(index, 1)
+    },
+    handlePriv (record, index) {
+      this.tplviewArr.some(item => {
+        if (item.value === record.tplview) {
+          record.tplviewName = item.text
+          return true
+        }
+      })
+      this.$refs.formApplyRule.show({
+        title: `${this.$t('启用条件')}: ${record.tplviewName}`,
+        record: record,
+        index: index,
+        formView: this.formView,
+        page: 'dataForm',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    getFormCondition (index, data) {
+      this.formView[index].formCondition = data
+      this.formView = JSON.parse(JSON.stringify(this.formView))
+    },
+    handleFieldPriv (record, index) {
+      this.tplviewArr.some(item => {
+        if (item.value === record.tplview) {
+          record.tplviewName = item.text
+          return true
+        }
+      })
+      this.$refs.privActionForm.show({
+        action: 'add',
+        title: `${this.$t('操作权限')}': ${record.tplviewName}`,
+        page: this.page,
+        tableId: this.tableId,
+        record: record,
+        index: index
+      })
+    }
+  }
+}
+</script>

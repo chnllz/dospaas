@@ -1,0 +1,90 @@
+<template>
+  <a-card size="small" style="height: 100%">
+    <a-space>
+      <a-button @click="handleEvent">{{ $t('停止服务') }}</a-button>
+    </a-space>
+    <a-modal
+      :title="$t(title)"
+      :visible="visible"
+      :confirmLoading="loading"
+      :destroyOnClose="true"
+      :footer="false"
+      @cancel="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <a-space style="width: 100%" direction="vertical">
+          <a-alert :message="$t('您正在进行危险操作，请谨慎执行！')" type="warning" />
+          <a-form :form="form">
+            <a-form-item>
+              <span style="user-select: none">{{ message }}</span>
+              <a-input
+                v-decorator="['code', { rules: [{ required: true, message: $t('请输入验证码') }] }]"
+                :placeholder="code"
+              />
+            </a-form-item>
+          </a-form>
+          <a-button style="width: 100%" htmlType="submit" type="danger" @click="handleSubmit">
+            {{ $t('确认停止服务') }}
+          </a-button>
+        </a-space>
+      </a-spin>
+    </a-modal>
+  </a-card>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      loading: false,
+      visible: false,
+      form: this.$form.createForm(this),
+      code: '',
+      message: '',
+      title: '停止服务'
+    }
+  },
+  methods: {
+    randomString (e) {
+      e = e || 32
+      const t = 'ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz0123456789'
+      const a = t.length
+      let n = ''
+      for (let i = 0; i < e; i++) n += t.charAt(Math.floor(Math.random() * a))
+      return n
+    },
+    handleEvent () {
+      this.visible = true
+      this.code = this.randomString(6)
+      this.message = this.$t('请在下方输入框中输入"{0}"以确认操作', { 0: this.code })
+      this.title = '停止服务'
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          if (values.code === this.code) {
+            this.axios({
+              url: '/admin/dashboard/stopService',
+              data: {
+                publicKey: null,
+                encryptPassword: null,
+                sign: null,
+                timestamp: null
+              }
+            }).then(res => {
+              if (res.code) {
+                this.$message.warning(res.message)
+              } else {
+                this.$message.success(res.message)
+                this.visible = false
+              }
+            })
+          } else {
+            this.$message.warning(this.$t('请输入正确的验证码'))
+          }
+        }
+      })
+    }
+  }
+}
+</script>

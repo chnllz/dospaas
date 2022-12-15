@@ -1,0 +1,174 @@
+<template>
+  <div>
+    <a-row>
+      <a-col :span="5"></a-col>
+      <a-col :span="14">
+        <a-form layout="inline" style="display: flex; margin-bottom: 8px">
+          <a-form-item :label="$t('关键字')">
+            <a-input v-model="queryParam.searchString" allowClear style="width: 300px" />
+          </a-form-item>
+          <a-space>
+            <a-button
+              @click="
+                () => {
+                  queryParam.searchType = 'field'
+                  $refs.table.refresh(true)
+                }
+              "
+              @keyup.enter="
+                () => {
+                  return false
+                }
+              "
+            >
+              {{ $t('搜索字段') }}
+            </a-button>
+            <a-button
+              @click="
+                () => {
+                  queryParam.searchType = 'template'
+                  $refs.table.refresh(true)
+                }
+              "
+              @keyup.enter="
+                () => {
+                  return false
+                }
+              "
+            >
+              {{ $t('搜索视图') }}
+            </a-button>
+          </a-space>
+        </a-form>
+      </a-col>
+      <a-col :span="4" style="text-align: right"></a-col>
+    </a-row>
+    <s-table
+      ref="table"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :autoLoad="false"
+      :sorter="sorter"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="openTab(record)">{{ queryParam.searchType === 'field' ? $t('打开字段管理') : $t('打开视图') }}</a>
+        <a-divider type="vertical" />
+        <a @click="openTable(record)">{{ $t('左侧选中数据表') }}</a>
+      </div>
+    </s-table>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  props: {
+    search: {
+      type: Object,
+      required: true
+    }
+  },
+  data () {
+    return {
+      autoLoad: false,
+      searchType: '',
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 220,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '#',
+        dataIndex: 'key',
+        width: 40,
+        scopedSlots: {
+          customRender: 'key'
+        }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        sorter: true,
+        width: 60
+      }, {
+        title: this.$t('名称'),
+        dataIndex: 'name',
+        width: 450,
+        sorter: true
+      }, {
+        title: this.$t('类型'),
+        dataIndex: 'type',
+        width: 120
+      }, {
+        title: this.$t('所属数据表'),
+        dataIndex: 'tableName'
+      }],
+      helpNotes: '',
+      sorter: { field: 'id', order: 'descend' }
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      if (this.queryParam.searchString) {
+        return this.axios({
+          url: '/admin/table/search',
+          data: Object.assign(parameter, this.queryParam, { module: this.search.module })
+        }).then(res => {
+          for (let i = 0; i < res.result.data.length; i++) {
+            res.result.data[i]['key'] = i + 1
+          }
+          return res.result
+        })
+      } else {
+        return this.axios({
+          url: '/admin/table/search',
+          data: Object.assign(parameter, { searchType: this.queryParam.searchType, module: this.search.module })
+        }).then(res => {
+          for (let i = 0; i < res.result.data.length; i++) {
+            res.result.data[i]['key'] = i + 1
+          }
+          return res.result
+        })
+      }
+    },
+    getHelp () {
+      this.$setLoading({ spinning: true })
+      this.helpVisible = false
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: '22041616454402'
+        }
+      }).then(res => {
+        this.$setLoading({ spinning: false })
+        if (!res.code) {
+          const obj = res.result
+          if (obj.displayMode === 'drawer') {
+            this.helpVisible = false
+            this.$showDocument({ visible: true, content: obj.content })
+          } else {
+            this.helpVisible = true
+            this.helpNotes = obj.content
+          }
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    openTab (record) {
+      this.$emit('getField', record)
+    },
+    openTable (record) {
+      this.$emit('showTable', record)
+    }
+  }
+}
+</script>

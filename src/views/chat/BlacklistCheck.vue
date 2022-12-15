@@ -1,0 +1,107 @@
+<template>
+  <a-modal :title="$t('审核')" :width="900" :visible="visible" :destroyOnClose="true" @cancel="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('快捷选择')" :labelCol="labelCol" :wrapperCol="wrapperCol" style="width: 100%">
+          <a-radio-group
+            :value="size"
+            style="display: flex; text-align: center; position: relative; top: 3px"
+            @change="handleSizeChange"
+          >
+            <a-radio-button value="forever" style="flex: 1">{{ $t('永久生效') }}</a-radio-button>
+            <a-radio-button value="threeDays" style="flex: 1">{{ $t('3天后失效') }}</a-radio-button>
+            <a-radio-button value="sevenDays" style="flex: 1">{{ $t('7天后失效') }}</a-radio-button>
+            <a-radio-button value="thirtyDays" style="flex: 1">{{ $t('30天后失效') }}</a-radio-button>
+            <a-radio-button value="now" style="flex: 1">{{ $t('立即失效') }}</a-radio-button>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('失效时间')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-date-picker v-model="data.endTime" allowClear style="width: 100%" />
+        </a-form-item>
+      </a-form>
+    </a-spin>
+    <div slot="footer" :loading="loading">
+      <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-modal>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('chat'),
+  data () {
+    return {
+      loading: false,
+      data: {},
+      config: {},
+      form: this.$form.createForm(this),
+      visible: false,
+      labelCol: { span: 3 },
+      wrapperCol: { span: 21 },
+      size: ''
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.size = ''
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', id: config.record ? config.record.id : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.data = res.result.data
+        this.data.endTime = this.moment(this.data.endTime || undefined)
+      })
+    },
+    handleSizeChange (e) {
+      this.size = e.target.value
+      switch (e.target.value) {
+        case 'forever':
+          this.data.endTime = this.moment().add(100, 'years')
+          break
+        case 'threeDays':
+          this.data.endTime = this.moment().add(3, 'days')
+          break
+        case 'sevenDays':
+          this.data.endTime = this.moment().add(1, 'week')
+          break
+        case 'thirtyDays':
+          this.data.endTime = this.moment().add(1, 'month')
+          break
+        case 'now':
+          this.data.endTime = this.moment()
+          break
+      }
+    },
+    handleSubmit () {
+      const info = {
+        endTime: this.moment(this.data.endTime).format('YYYY-MM-DD HH:MM:SS'),
+        checkUser: this.userInfo.username,
+        visitorId: this.config.record ? this.config.record.visitorId : undefined
+      }
+      this.loading = true
+      this.axios({
+        url: this.config.url,
+        data: Object.assign(info, { id: this.data.id, action: 'submit' })
+      }).then((res) => {
+        this.visible = false
+        this.loading = false
+        this.$emit('ok')
+        if (res.code === 0) {
+          this.$message.success(res.message)
+        } else {
+          this.$message.error(res.message)
+        }
+        this.form.resetFields()
+      })
+    }
+  }
+}
+</script>

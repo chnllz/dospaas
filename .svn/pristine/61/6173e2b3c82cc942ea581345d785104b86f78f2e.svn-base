@@ -1,0 +1,84 @@
+<template>
+  <a-drawer :title="config.title" width="90%" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin
+      :spinning="$store.state.app.globalSpin.spinning || loading"
+      :tip="$store.state.app.globalSpin.tip || tip"
+      :size="$store.state.app.globalSpin.size"
+      style="overflow-x: hidden"
+    >
+      <ExpressWorkbenchCardDeatils ref="ExpressWorkbenchCardDeatils" @ok="submitReturn" />
+      <div
+        v-if="
+          !bbar.every((item) => {
+            return item.visible ? item.visible === '0' : item.display === '0'
+          })
+        "
+        class="bbar"
+      >
+        <component
+          :is="item.component"
+          v-for="(item, index) in bbar.filter((bbarItem) => bbarItem.visible === '1' || bbarItem.display === '1')"
+          :key="index"
+        />
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import ExpressWorkbenchCardDeatils from '@/views/express/ExpressWorkbenchCardDeatils'
+export default {
+  i18n: window.lang('crm'),
+  name: 'ExpressWorkbenchCard',
+  components: {
+    ExpressWorkbenchCardDeatils
+  },
+  data () {
+    return {
+      bbar: [],
+      loading: false,
+      visible: false,
+      config: {}
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.$nextTick(() => {
+        this.$refs.ExpressWorkbenchCardDeatils.show(config, this)
+      })
+    },
+    // 取消
+    handleCancel () {
+      this.visible = !this.visible
+    },
+    handleSubmit (data) {
+      this.loading = true
+      const verifJs = this.verifJs
+      if (verifJs) {
+        const parent = this
+        const str = 'return ' + verifJs
+        // eslint-disable-next-line no-new-func
+        const func = new Function(str)
+        const flag = func()(parent)
+        if (flag) {
+          this.$refs.ExpressWorkbenchCardDeatils.$refs.userTableFormView.handleSubmit(data).finally(() => {
+            this.loading = false
+          })
+        }
+      } else {
+        this.$refs.ExpressWorkbenchCardDeatils.$refs.userTableFormView.handleSubmit(data).finally(() => {
+          this.loading = false
+        })
+      }
+    },
+    submitReturn (data, tableName, status) {
+      this.loading = false
+      if (status && status.code === 0) {
+        this.config.parent.refresh('noRefresh')
+        this.visible = false
+      }
+    }
+  }
+}
+</script>

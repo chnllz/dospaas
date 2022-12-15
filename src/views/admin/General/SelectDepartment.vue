@@ -1,0 +1,393 @@
+<template>
+  <a-drawer
+    :destroyOnClose="true"
+    :title="
+      (config.optionType === 'department' ? $t('部门') : $t('角色')) +
+      (optionMode === 'default' ? $t('-单选') : $t('-多选'))
+    "
+    :width="500"
+    :visible="visible"
+    @close="visible = !visible"
+  >
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-card
+          v-if="selectList.length > 0"
+          size="small"
+          style="border: 1px dashed #e8e8e8"
+          @mouseenter="delShow = true"
+          @mouseleave="delShow = false"
+        >
+          <a-tooltip :title="$t('清空')">
+            <a-icon
+              v-if="delShow"
+              type="delete"
+              style="position: absolute; top: 3px; right: 3px; color: #f5222d"
+              @click="selectList = []"
+            />
+          </a-tooltip>
+          <a-row :gutter="[0, 5]" type="flex">
+            <a-col v-for="tag in selectList" :key="tag.name">
+              <a-tag closable @close="deleteTag(tag)">{{ tag.name }}</a-tag>
+            </a-col>
+          </a-row>
+        </a-card>
+        <a-card v-else size="small" style="text-align: center; border: 1px dashed #e8e8e8; color: #7f7f7f">
+          {{ $t('暂无数据') }}
+        </a-card>
+        <div v-if="config.optionType === 'department'">
+          <a-form-item style="margin: 10px 0 0 0">
+            <a-select
+              showSearch
+              :value="undefined"
+              :placeholder="$t('请输入部门关键字进行搜索')"
+              allowClear
+              :mode="optionMode"
+              :filter-option="false"
+              :not-found-content="fetching ? undefined : null"
+              @search="getDepartment"
+              @popupScroll="popupScroll"
+              @change="
+                (e) => {
+                  if (!e) {
+                    department = []
+                  }
+                }
+              "
+            >
+              <a-spin v-if="fetching" slot="notFoundContent" size="small" />
+              <a-select-option
+                v-for="dep in departmentData"
+                :key="dep.departmentId"
+                :value="dep.departmentId"
+                @click="dataSelect('', '', dep)"
+              >
+                {{ dep.fullDepartmentName }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <div>
+            <a-tree
+              :tree-data="dataList"
+              :load-data="onLoadData"
+              :replace-fields="{
+                key: 'value',
+                title: 'label'
+              }"
+              @select="dataSelect"
+            />
+          </div>
+        </div>
+        <a-card v-else size="small" style="margin: 10px 0 0 0">
+          <a-input-search style="margin-bottom: 8px" :placeholder="$t('请输入角色名称搜索')" @search="onChange" />
+          <s-table
+            ref="table"
+            size="small"
+            rowKey="id"
+            :columns="columnsRole"
+            :data="loadDataTable"
+            :sorter="{ field: 'listOrder', order: 'ascend' }"
+          >
+            <span slot="action" slot-scope="index, record">
+              <a
+                href="javascript:;"
+                :disabled="
+                  config.dataType === 'optionCustom'
+                    ? false
+                    : config.optionCustom &&
+                      config.optionCustom.length &&
+                      config.optionCustom.every((opItem) => opItem.roleId !== record.roleId)
+                    ? true
+                    : false
+                "
+                @click="dataSelect('', '', record, 'role')"
+              >
+                {{ $t('选择') }}
+              </a>
+            </span>
+          </s-table>
+        </a-card>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('确定') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    this.getDepartment = debounce(this.getDepartment, 800)
+    return {
+      optionMode: '',
+      config: {},
+      checkedNodes: [],
+      replaceFields: {
+        children: 'children',
+        title: 'name'
+      },
+      page: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      dataList: [],
+      rowKeyList: [],
+      selectValue: [], // 初始值和右边显示值
+      selectList: [], // 选中值
+      searchData: '',
+      visible: false,
+      loading: false,
+      delShow: false,
+      fetching: false,
+      lastFetchId: 0,
+      scrollStats: true,
+      autoExpandParent: false,
+      form: this.$form.createForm(this),
+      data: {},
+      departmentData: [],
+      queryParam: {},
+      columnsDepartment: [{
+        title: this.$t('部门'),
+        dataIndex: 'name',
+        width: 450,
+        scopedSlots: { customRender: 'name' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsRole: [{
+        title: this.$t('角色'),
+        dataIndex: 'roleName',
+        scopedSlots: { customRender: 'roleName' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      }],
+      searchValue: ''
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.optionMode = this.config.mode
+      let selectValue = []
+      if (this.optionMode === 'default') {
+        const id = config.optionType === 'department' ? 'departmentId' : 'roleId'
+        if (Array.isArray(config.selectValue) && config.selectValue.length !== 0) {
+          selectValue.push(config.selectValue)
+          if (config.optionCustom.length) {
+            this.selectList = config.optionCustom.filter(item => item[id] === config.selectValue[0])
+          } else {
+            this.selectList = config.option.filter(item => item[id] === config.selectValue)
+          }
+        } else if (typeof (config.selectValue) === 'string') {
+          if (config.optionCustom.length) {
+            this.selectList = config.optionCustom.filter(item => item[id] === config.selectValue)
+          } else {
+            this.selectList = config.option.filter(item => item[id] === config.selectValue)
+          }
+          selectValue.push(config.selectValue)
+        }
+      } else {
+        selectValue = config.selectValue
+        const id = config.optionType === 'department' ? 'departmentId' : 'roleId'
+        if (config.optionCustom.length !== 0) {
+          this.selectList = config.optionCustom.filter(item => {
+            return config.selectValue.indexOf(item[id]) !== -1
+          })
+        } else {
+          this.selectList = config.option.filter(opItem => opItem[id] === config.selectValue.find(item => item === opItem[id]))
+        }
+      }
+      if (config.optionType === 'department') {
+        this.axios({
+          url: '/admin/department/getChildren',
+          data: {}
+        }).then((res) => {
+          this.loading = false
+          res.result.data.forEach(item => {
+            if (item.childCount && item.childCount !== 0) {
+              item.children = []
+            } else {
+              item.isLeaf = true
+            }
+            if (config.optionCustom.length !== 0) {
+              item.disabled = config.optionCustom.every(opItem => opItem.departmentId !== item.value)
+            }
+          })
+          this.dataList = res.result
+        })
+      }
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/role/list',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    getDepartment (e) {
+      this.searchData = e
+      this.page.pageNo = 1
+      this.scrollStats = true
+      if (e) {
+        this.lastFetchId += 1
+        const fetchId = this.lastFetchId
+        this.fetching = true
+        this.axios({
+          url: '/admin/search/departmentSearch',
+          data: Object.assign(this.page, { searchName: e })
+        }).then(res => {
+          if (fetchId !== this.lastFetchId) {
+            return
+          }
+          this.departmentData = res.result.data
+          this.fetching = false
+        })
+      } else {
+        this.departmentData = []
+      }
+    },
+    popupScroll (e) {
+      const scrollTop = e.target.scrollTop
+      const scrollHeight = e.target.scrollHeight
+      const clientHeight = e.target.clientHeight
+      const scrollBottom = scrollHeight - clientHeight - scrollTop
+      if (scrollBottom < 1 && this.scrollStats && this.searchData) {
+        this.page.pageNo++
+        this.getDepartmentScroll()
+      }
+    },
+    getDepartmentScroll () {
+      this.axios({
+        url: '/admin/search/departmentSearch',
+        data: Object.assign(this.page, { searchName: this.searchData })
+      }).then(res => {
+        if (!res.result.data.length) {
+          this.scrollStats = false
+        }
+        this.departmentData = [...this.departmentData, ...res.result.data]
+      })
+    },
+    onLoadData (treeNode) {
+      const { value } = treeNode.dataRef
+      return new Promise((resolve) => {
+        this.axios({
+          url: '/admin/department/getChildren',
+          data: { parentDepartmentId: value }
+        }).then(res => {
+          res.result.forEach(item => {
+            if (item.childCount && item.childCount !== 0) {
+              item.children = []
+            } else {
+              item.isLeaf = true
+            }
+            if (this.config.optionCustom.length !== 0) {
+              item.disabled = this.config.optionCustom.every(opItem => opItem.departmentId !== item.value)
+            }
+          })
+          treeNode.dataRef.children = res.result
+        })
+        resolve()
+      })
+    },
+    dataSelect (selectedKeys, e, dep) {
+      let obj = {}
+      if (dep) {
+        if (dep.departmentId) {
+          obj = {
+            name: dep.name,
+            departmentId: dep.departmentId
+          }
+        } else {
+          obj = {
+            name: dep.roleName,
+            roleId: dep.roleId
+          }
+        }
+      } else {
+        obj = {
+          name: e.node.dataRef.label,
+          departmentId: e.node.dataRef.value
+        }
+      }
+      const id = obj.departmentId ? 'departmentId' : 'roleId'
+      if (this.optionMode === 'default' && this.selectList.length === 0) {
+        if (this.config.optionCustom && this.config.optionCustom.length > 0 && this.config.optionCustom.some(item => item[id] === obj[id])) {
+          this.selectList.splice(0, 0, obj)
+        } else if (this.config.optionCustom && this.config.optionCustom.length > 0 && !this.config.optionCustom.some(item => item[id] === obj[id])) {
+          this.$message.warning(this.$t('不在可选范围内'))
+        } else {
+          this.selectList.splice(0, 0, obj)
+        }
+      } else if (this.optionMode === 'default') {
+        if (this.config.optionCustom && this.config.optionCustom.length > 0 && this.config.optionCustom.some(item => item[id] === obj[id])) {
+          this.selectList.splice(0, 1, obj)
+        } else if (this.config.optionCustom && this.config.optionCustom.length > 0 && !this.config.optionCustom.some(item => item[id] === obj[id])) {
+          this.$message.warning(this.$t('不在可选范围内'))
+        } else {
+          this.selectList.splice(0, 1, obj)
+        }
+      } else {
+        if (obj.departmentId && this.selectList.every(item => item.departmentId !== obj.departmentId)) {
+          if (this.config.optionCustom && this.config.optionCustom.length > 0 && this.config.optionCustom.some(item => item[id] === obj[id])) {
+            this.selectList.splice(this.selectList.length, 0, obj)
+          } else if (this.config.optionCustom && this.config.optionCustom.length > 0 && !this.config.optionCustom.some(item => item[id] === obj[id])) {
+            this.$message.warning(this.$t('不在可选范围内'))
+          } else {
+            this.selectList.splice(this.selectList.length, 0, obj)
+          }
+        } else if (obj.roleId && this.selectList.every(item => item.roleId !== obj.roleId)) {
+          this.selectList.splice(this.selectList.length, 0, obj)
+        }
+      }
+    },
+    deleteTag (record) {
+      if (this.config.mode === 'default') {
+        this.selectList = []
+      } else if (this.config.mode === 'multiple') {
+        if (this.config.optionType !== 'department') {
+          this.selectList = this.selectList.filter(item => item.roleId !== record.roleId)
+        } else {
+          this.selectList = this.selectList.filter(item => item.departmentId !== record.departmentId)
+        }
+      }
+    },
+    onChange (e) {
+      this.queryParam.roleName = e
+      this.$refs.table.refresh(true)
+    },
+    handleSubmit () {
+      // 只保存id
+      let selectValue
+      let id = ''
+      if (this.config.optionType === 'department') {
+        selectValue = this.optionMode === 'default' ? (this.selectList[0] ? this.selectList[0].departmentId : '') : this.selectList.map(item => item.departmentId)
+        id = 'departmentId'
+      } else {
+        selectValue = this.optionMode === 'default' ? (this.selectList[0] ? this.selectList[0].roleId : '') : this.selectList.map(item => item.roleId)
+        id = 'roleId'
+      }
+      const option = this.config.option
+      this.selectList.forEach(item => {
+        if (this.config.option.every(opItem => opItem[id] !== item[id])) {
+          option.push(item)
+        }
+      })
+      this.$emit('ok', selectValue, this.config.index, this.config.conIndex, option)
+      this.visible = false
+    }
+  }
+}
+</script>

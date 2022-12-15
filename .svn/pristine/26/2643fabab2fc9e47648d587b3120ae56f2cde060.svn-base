@@ -1,0 +1,243 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" :colon="false" class="search">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <HelpPanel :number="'22041616491715'" />
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row :class="advanced ? 'advanced' : 'normal'" class="form">
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('字典名称')">
+              <a-input v-model="queryParam.dictCategoryName" :placeholder="$t('请输入字典名称')" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('字典编号')">
+              <a-input v-model="queryParam.dictCategoryNumber" :placeholder="$t('请输入字典编号')" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('字典分类')">
+              <a-input v-model="queryParam.category" :placeholder="$t('请输入字典分类')" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('备注')">
+              <a-input v-model="queryParam.remarks" :placeholder="$t('请输入备注')" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-row style="margin-bottom: 6px">
+      <a-col>
+        <a-button v-action:add type="primary" icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+      </a-col>
+    </a-row>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="sorter"
+    >
+      <span slot="name" slot-scope="text, record">
+        {{ text + (record.subCount > 0 ? '(' + record.subCount + ')' : '') }}
+      </span>
+      <span slot="dictType" slot-scope="text">
+        {{ dictType[text] }}
+      </span>
+      <span slot="status" slot-scope="text">
+        <a-badge v-if="text == 1" status="success" :text="$t('启用')" />
+        <a-badge v-else status="error" :text="$t('禁用')" />
+      </span>
+      <div slot="action" slot-scope="text, record">
+        <a :disabled="record.dictType !== 'basic' || record.accessLevel === 2" @click="handleList(record)">
+          {{ $t('设计') }}
+        </a>
+        <a-divider type="vertical" />
+        <a :disabled="record.accessLevel === 2" @click="handleEdit(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="!$auth('delete') || !!record.accessLevel" @click="handleDelete(record)">{{ $t('删除') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="record.dictType !== 'basic'" @click="handleExport(record)">{{ $t('导出') }}</a>
+      </div>
+    </s-table>
+    <dict-category-form ref="dictCategoryForm" @ok="handleOk" />
+    <dict-list ref="dictList" @ok="handleOk" />
+    <dict-import ref="dictImport" @ok="handleOk" />
+    <drag-sort ref="dragSort" @ok="handleOk" />
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    dictCategoryForm: () => import('./DictCategoryForm'),
+    DictList: () => import('./DictList'),
+    DictImport: () => import('./DictImport'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport'),
+    HelpPanel: () => import('@/views/admin/HelpPanel')
+  },
+  data () {
+    return {
+      advanced: false,
+      // 当前字典路径
+      breadcrumb: [],
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 200,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        sorter: true,
+        width: 80
+      }, {
+        title: this.$t('字典编号'),
+        dataIndex: 'dictCategoryNumber',
+        sorter: true,
+        width: 300
+      }, {
+        title: this.$t('字典名称'),
+        dataIndex: 'dictCategoryName',
+        sorter: true,
+        scopedSlots: { customRender: 'name' }
+      }, {
+        title: this.$t('字典类型'),
+        dataIndex: 'dictType',
+        sorter: true,
+        scopedSlots: { customRender: 'dictType' }
+      }, {
+        title: this.$t('字典分类'),
+        dataIndex: 'category',
+        sorter: true
+      }, {
+        title: this.$t('备注'),
+        sorter: true,
+        dataIndex: 'remarks'
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        sorter: true,
+        width: 150
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        sorter: true,
+        width: 150
+      }],
+      sorter: { field: 'id', order: 'descend' },
+      dictType: {
+        basic: this.$t('基础'),
+        table: this.$t('数据表'),
+        sql: 'SQL',
+        callback: this.$t('自定义')
+      }
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/dict/listCategory',
+        data: Object.assign(parameter, this.queryParam, { dictMode: 1 })
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleExport (record) {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict',
+        message: `${this.$t('导出字典')}: ${record.dictCategoryName}`
+      })
+    },
+    handleAdd () {
+      this.$refs.dictCategoryForm.showAdd({
+        dictMode: 1
+      })
+    },
+    handleEdit (record) {
+      this.$refs.dictCategoryForm.showEdit({
+        record: record
+      })
+    },
+    handleDelete (record) {
+      const table = this.$refs.table
+      const self = this
+      this.$confirm({
+        title: this.$t('您确认要删除该字典及其子字典吗？'),
+        onOk () {
+          self.axios({
+            url: '/admin/dict/deleteCategory',
+            params: { id: record.id }
+          }).then(res => {
+            table.refresh()
+          })
+        }
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    // 排序
+    handleSort () {
+      this.$refs.dragSort.show({
+        tableName: 'admin_dict_category',
+        sortName: 'dict_category_name',
+        where: `dict_mode = 1`
+      })
+    },
+    // 设计
+    handleList (record) {
+      this.$refs.dictList.show({
+        action: 'list',
+        title: `${this.$t('设计')}：${record.dictCategoryName}`,
+        record: record,
+        type: 'son'
+      })
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/.ant-spin-container {
+  display: flex;
+  flex-direction: column;
+}
+</style>

@@ -1,0 +1,102 @@
+<template>
+  <div class="page">{{ $t('页面加载中，请勿重复刷新！') }}</div>
+</template>
+<script>
+import AdaPay from './common/adaPay.min'
+export default {
+  i18n: window.lang('crm'),
+  mounted () {
+    let scanType = ''
+    if (/MicroMessenger/.test(window.navigator.userAgent)) {
+      const orderNumber = this.$route.query.orderNumber
+      const money = this.$route.query.money || 0
+      const uniqid = this.$route.query.uniqid || ''
+      // 扫码在微信内打开
+      scanType = 'wx_pub'
+      const openid = this.$route.query.openid
+      if (!openid) {
+        window.location.href = `${this.$store.state.env.VUE_APP_API_BASE_URL}crm/PartsPay/getOpenid?orderNumber=${orderNumber}&pageType=qrcode&money=${money}&uniqid=${uniqid}`
+      }
+    } else {
+      // 扫码支付宝打开
+      scanType = 'alipay_qr'
+    }
+    console.log('route', this.route)
+    this.confirm_pay(scanType)
+  },
+  methods: {
+    // 支付
+    confirm_pay (type) {
+      if (type === 'alipay_qr') {
+        // 支付宝支付
+        this.payment('alipay_qr')
+      } else {
+        // 微信支付
+        const openid = this.$route.query.openid
+        if (openid) {
+          this.payment('wx_pub', openid)
+        } else {
+          // this.$message.error('获取openid失败')
+        }
+      }
+    },
+    // 支付
+    payment (payType, openId) {
+      const orderNumber = this.$route.query.orderNumber
+      const payAmt = this.$route.query.money
+      const uniqid = this.$route.query.uniqid
+      var dataParam = {
+        orderNumber,
+        uniqid,
+        payAmt,
+        payChannel: payType,
+        orderType: 'qrcode',
+        expend: {}
+      }
+      if (payType === 'wx_pub') {
+        dataParam.expend = {
+          is_raw: '1',
+          open_id: openId
+        }
+      }
+      this.axios({
+        url: '/crm/partsPay/create',
+        data: JSON.stringify(dataParam)
+      }).then(res => {
+        const paymentRes = res
+        if (paymentRes.status === 'succeeded') {
+          if (payType === 'alipay_qr') {
+            // 支付宝
+            // window.location.href = 'alipays://platformapi/startapp?appId=10000007&qrcode=https://qr.alipay.com/bax01145yfufhqcskrhe208e'
+            window.location.href = 'alipays://platformapi/startapp?appId=10000007&qrcode=' + paymentRes.expend.qrcode_url
+          } else if (payType === 'wx_pub') {
+            // 微信
+            AdaPay.doPay(paymentRes, function (res) {
+              window.WeixinJSBridge.call('closeWindow')
+            })
+          }
+        } else if (paymentRes.status === 'payrepeat') {
+          this.$message.error(this.$t('当前页面已失效，请扫码重试。'))
+        } else if (paymentRes.status === 'paysuccess') {
+          this.$message.error(this.$t('支付已经完成，请勿重复支付！'))
+        } else {
+          this.$message.error(this.$t('支付订单提交失败，请扫码重试'))
+        }
+      })
+    }
+
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/.ant-statistic-content {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.page {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+</style>

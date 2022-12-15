@@ -1,0 +1,183 @@
+<!--
+ * @Description: 折叠组件
+ * @Author: kcz
+ * @Date: 2020-01-13 00:37:54
+ * @LastEditors: kcz
+ * @LastEditTime: 2020-03-28 11:32:39
+ -->
+<template>
+  <div style="display: flex; flex-direction: column; height: 100%" class="fieldTable">
+    <a-input
+      v-model="queryParam.name"
+      style="margin: 5px 0"
+      allowClear
+      :placeholder="$t('请输入字段名称搜索')"
+      @change="nameSearch"
+    />
+    <table style="width: 100%; height: 32px; background: #fafafa; border: 1px solid #d9d9d9">
+      <tr>
+        <th style="text-align: center; width: 30px">#</th>
+        <th style="width: 100px; padding-left: 15px">{{ $t('字段名称') }}</th>
+        <th style="padding-left: 5px">{{ $t('UI组件') }}</th>
+        <th>{{ $t('分组') }}</th>
+      </tr>
+    </table>
+    <div style="flex-grow: 1; overflow-y: auto; padding-bottom: 48px">
+      <draggable
+        tag="ul"
+        :value="data"
+        style="padding: 0"
+        v-bind="{
+          group: { name: 'form-draggable', pull: 'clone', put: false },
+          sort: false,
+          animation: 180,
+          ghostClass: 'moving'
+        }"
+        @start="handleStart($event, data)"
+      >
+        <li
+          v-for="(val, index) in data"
+          :key="index"
+          style="width: 100%; margin: 0; padding: 8px 2px"
+          @dragstart="$emit('generateKey', data, index)"
+        >
+          <span
+            style="
+              padding-left: 5px;
+              width: 30px;
+              display: inline-block;
+              text-overflow: ellipsis;
+              overflow: hidden;
+              white-space: nowrap;
+            "
+          >
+            {{ index + 1 }}
+          </span>
+          <span
+            style="
+              width: 100px;
+              padding-left: 10px;
+              display: inline-block;
+              text-overflow: ellipsis;
+              overflow: hidden;
+              white-space: nowrap;
+            "
+          >
+            {{ val.name }}
+          </span>
+          <span
+            style="width: 60px; display: inline-block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap"
+          >
+            <span v-if="val.formType === 'text'">{{ $t('单行文本') }}</span>
+            <span v-else-if="val.formType === 'combobox'">{{ $t('下拉框') }}</span>
+            <span v-else-if="val.formType === 'associated'">{{ $t('关联数据') }}</span>
+            <span v-else-if="val.formType === 'datetime'">{{ $t('日期时间') }}</span>
+            <span v-else-if="val.formType === 'textarea'">{{ $t('多行文本') }}</span>
+            <span v-else-if="val.formType === 'radio'">{{ $t('单选框') }}</span>
+            <span v-else-if="val.formType === 'checkbox'">{{ $t('复选框') }}</span>
+            <span v-else-if="val.formType === 'editor'">{{ $t('编辑器') }}</span>
+            <span v-else-if="val.formType === 'image'">{{ $t('图片') }}</span>
+            <span v-else-if="val.formType === 'file'">{{ $t('附件') }}</span>
+            <span v-else-if="val.formType === 'cascader'">{{ $t('级联选择') }}</span>
+            <span v-else-if="val.formType === 'switch'">{{ $t('开关') }}</span>
+            <span v-else-if="val.formType === 'score'">{{ $t('评分') }}</span>
+            <span v-else-if="val.formType === 'serialnumber'">{{ $t('流水号') }}</span>
+            <span v-else-if="val.formType === 'organization'">{{ $t('组织结构') }}</span>
+            <span v-else-if="val.formType === 'web_sub_data_window'">{{ $t('子表') }}</span>
+            <span v-else-if="val.formType === 'autocomplete'">{{ $t('自动完成') }}</span>
+            <span v-else-if="val.formType === 'number'">{{ $t('数字') }}</span>
+            <span v-else-if="val.formType === 'address'">{{ $t('地址') }}</span>
+            <span v-else-if="val.formType === 'treeselect'">{{ $t('树选择') }}</span>
+            <span v-else-if="val.formType === 'tag'">{{ $t('标签') }}</span>
+            <span v-else-if="val.formType === 'location'">{{ $t('地图选点') }}</span>
+            <span v-else-if="val.formType === 'json'">{{ $t('JSON') }}</span>
+            <span v-else>--</span>
+          </span>
+          <span
+            style="
+              padding-left: 10px;
+              width: 60px;
+              display: inline-block;
+              text-overflow: ellipsis;
+              overflow: hidden;
+              white-space: nowrap;
+            "
+          >
+            {{ val.category || '--' }}
+          </span>
+        </li>
+      </draggable>
+    </div>
+  </div>
+</template>
+<script>
+export default {
+  name: 'CollapseItem',
+  i18n: window.lang('admin'),
+  components: {
+    draggable: () => import('vuedraggable')
+  },
+  // eslint-disable-next-line vue/require-prop-types
+  props: {
+    list: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      queryParam: {},
+      fieldCategory: [],
+      data: [],
+      columns: [{
+        title: '#',
+        width: 40,
+        align: 'center',
+        dataIndex: 'idSort',
+        scopedSlots: { customRender: 'idSort' }
+      }, {
+        title: this.$t('字段名称'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'name' }
+
+      }, {
+        title: this.$t('UI组件'),
+        dataIndex: 'formType',
+        scopedSlots: { customRender: 'formType' },
+        width: 80
+      }, {
+        title: this.$t('分组'),
+        dataIndex: 'category',
+        scopedSlots: { customRender: 'category' },
+        width: 120
+      }]
+    }
+  },
+  watch: {
+    list (newValue) {
+      this.data = newValue
+      if (this.queryParam.name) {
+        this.nameSearch()
+      }
+    }
+  },
+  created () {
+    this.data = this.list
+  },
+  methods: {
+    handleStart (e, data, index) {
+      this.$emit('start', data[e.oldIndex].formType, index)
+    },
+    nameSearch () {
+      if (!this.queryParam.name) {
+        this.data = this.list
+      } else {
+        this.data = this.list.filter(item => item.name.includes(this.queryParam.name))
+      }
+    },
+    groupChange () {
+
+    }
+  }
+}
+</script>

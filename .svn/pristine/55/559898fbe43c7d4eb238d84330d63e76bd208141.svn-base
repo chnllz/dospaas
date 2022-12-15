@@ -1,0 +1,633 @@
+<template>
+  <div class="bar" style="width: 100%">
+    <a-row>
+      <a-col :span="20">
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('保存') }}</span>
+          </template>
+          <a-button type="primary" class="item-space" size="small" @click="handleOk">{{ $t('保存') }}</a-button>
+        </a-tooltip>
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('检测') }}</span>
+          </template>
+          <a-button class="item-space" size="small" @click="flowCheck">{{ $t('检测') }}</a-button>
+        </a-tooltip>
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('清除 (Cmd + D)') }}</span>
+          </template>
+          <a-button name="delete" class="item-space" size="small" icon="delete" @click="handleClick"></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('撤销 (Cmd + Z)') }}</span>
+          </template>
+          <a-button
+            :disabled="!canUndo"
+            name="undo"
+            class="item-space"
+            size="small"
+            icon="undo"
+            @click="handleClick"
+          ></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>Redo (Cmd + Shift + Z)</span>
+          </template>
+          <a-button
+            :disabled="!canRedo"
+            name="redo"
+            class="item-space"
+            size="small"
+            icon="redo"
+            @click="handleClick"
+          ></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('复制 (Cmd + Shift + Z)') }}</span>
+          </template>
+          <a-button name="copy" class="item-space" size="small" icon="copy" @click="handleClick"></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('剪切 (Cmd + X)') }}</span>
+          </template>
+          <a-button name="cut" class="item-space" size="small" icon="scissor" @click="handleClick"></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('粘贴 (Cmd + V)') }}</span>
+          </template>
+          <a-button name="paste" class="item-space" size="small" icon="snippets" @click="handleClick"></a-button>
+        </a-tooltip>
+
+        <!-- <a-tooltip placement="bottom">
+      <template #title>
+        <span>{{ $t('保存PNG (Cmd + S)') }}</span>
+      </template>
+      <a-button name="savePNG" @click="handleClick" class="item-space" size="small" icon="download">
+        png
+      </a-button>
+    </a-tooltip> -->
+
+        <!-- <a-tooltip placement="bottom">
+      <template #title>
+        <span>{{ $t('保存SVG (Cmd + S)') }}</span>
+      </template>
+      <a-button name="saveSVG" @click="handleClick" class="item-space" size="small" icon="download">
+        svg
+      </a-button>
+    </a-tooltip> -->
+
+        <!-- <a-tooltip placement="bottom">
+      <template #title>
+        <span>{{ $t('打印 (Cmd + P)') }}</span>
+      </template>
+      <a-button name="print" @click="handleClick" class="item-space" size="small" icon="printer">
+      </a-button>
+    </a-tooltip> -->
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('显示网格') }}</span>
+          </template>
+          <a-button name="showGrid" class="item-space" size="small" icon="table" @click="handleClick"></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('垂直居中') }}</span>
+          </template>
+          <a-button
+            name="alignCenter"
+            class="item-space"
+            size="small"
+            icon="border-horizontal"
+            @click="handleClick"
+          ></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('水平居中') }}</span>
+          </template>
+          <a-button
+            name="horizontally"
+            class="item-space"
+            size="small"
+            icon="border-verticle"
+            @click="handleClick"
+          ></a-button>
+        </a-tooltip>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('导出JSON') }}</span>
+          </template>
+          <a-button name="toJSON" class="item-space" size="small" @click="handleClick">{{ $t('导出JSON') }}</a-button>
+        </a-tooltip>
+        <a-modal
+          :title="$t('导出JSON')"
+          :visible="toVisible"
+          :footer="null"
+          :confirm-loading="confirmToLoading"
+          @cancel="handletoCancel"
+        >
+          <json-view
+            style="height: calc(100vh - 350px); overflow: auto"
+            :value="cell"
+            :expand-depth="3"
+            boxed
+            copyable
+          />
+        </a-modal>
+
+        <a-tooltip placement="bottom">
+          <template #title>
+            <span>{{ $t('导入JSON') }}</span>
+          </template>
+          <a-button name="inputJSON" class="item-space" size="small" @click="handleClick">
+            {{ $t('导入JSON') }}
+          </a-button>
+        </a-tooltip>
+        <a-modal
+          :title="$t('导入JSON')"
+          :visible="inputVisible"
+          :confirm-loading="confirmInputLoading"
+          @ok="handleInputOk"
+          @cancel="handleinputCancel"
+        >
+          <a-textarea
+            v-model="inputData"
+            style="height: calc(100vh - 350px); padding: 10px 10px 10px 30px"
+            :placeholder="$t('在此输入json数据')"
+          ></a-textarea>
+        </a-modal>
+      </a-col>
+      <a-col :span="4" style="text-align: right">
+        <a-popover v-model="helpVisible" trigger="click" :arrowPointAtCenter="true" placement="bottomRight">
+          <template slot="content">
+            <div style="width: 350px" class="helpText">
+              <div v-dompurify-html="helpNotes" v-viewer></div>
+            </div>
+          </template>
+          <a-icon
+            type="question-circle"
+            style="font-size: 18px; margin-right: 8px; color: rgba(0, 0, 0, 0.65)"
+            @click="getHelp"
+          ></a-icon>
+        </a-popover>
+      </a-col>
+    </a-row>
+  </div>
+</template>
+
+<script>
+import FlowGraph from '../../graph'
+import { DataUri } from '@antv/x6'
+
+export default {
+  name: 'Index',
+  i18n: window.lang('admin'),
+  components: {
+    JsonView: () => import('vue-json-viewer')
+  },
+  props: {
+    cell: {
+      type: Object,
+      default: () => { }
+    },
+    workflow: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      canUndo: '',
+      canRedo: '',
+      show: false,
+      toVisible: false,
+      confirmToLoading: false,
+      confirmInputLoading: false,
+      JSONContent: {},
+      visible1: false,
+      inputVisible: false,
+      test: {
+        cells: []
+      },
+      form: this.$form.createForm(this),
+      inputData: '',
+      info: {
+        cells: []
+      },
+      // 校验判断
+      saveCheck: true,
+      // 错误信息
+      errTextList: [],
+      helpVisible: false,
+      helpNotes: ''
+    }
+  },
+  mounted () {
+    setTimeout(() => {
+      this.initEvent()
+    }, 200)
+  },
+  methods: {
+    onClose () {
+      this.visible1 = false
+    },
+    getHelp () {
+      this.$setLoading({ spinning: true })
+      this.helpVisible = false
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: '22041616481909'
+        }
+      }).then(res => {
+        this.$setLoading({ spinning: false })
+        if (!res.code) {
+          const obj = res.result
+          if (obj.displayMode === 'drawer') {
+            this.helpVisible = false
+            this.$showDocument({ visible: true, content: obj.content })
+          } else {
+            this.helpVisible = true
+            this.helpNotes = obj.content
+          }
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    showDrawer () {
+      this.visible1 = true
+    },
+    showTool (record) {
+      this.show = record.config.showGrid
+    },
+    // 取消导出JSON的弹出框
+    handletoCancel (e) {
+      this.toVisible = false
+    },
+    // 取消导入JSON的弹出框
+    handleinputCancel () {
+      this.inputVisible = false
+      this.inputData = ''
+    },
+    initEvent () {
+      const { graph } = FlowGraph
+      const { history } = graph
+      history.on('change', () => {
+        this.canUndo = history.canUndo()
+        this.canRedo = history.canRedo()
+      })
+      graph.bindKey('ctrl+z', () => {
+        if (history.canUndo()) {
+          history.undo()
+        }
+        return false
+      })
+      graph.bindKey('ctrl+shift+z', () => {
+        if (history.canRedo()) {
+          history.redo()
+        }
+        return false
+      })
+      graph.bindKey('ctrl+d', () => {
+        graph.clearCells()
+        return false
+      })
+      graph.bindKey('ctrl+s', () => {
+        graph.toPNG((datauri) => {
+          DataUri.downloadDataUri(datauri, 'chart.png')
+        })
+        return false
+      })
+      graph.bindKey('ctrl+p', () => {
+        graph.printPreview()
+        return false
+      })
+      graph.bindKey('ctrl+c', this.copy)
+      graph.bindKey('ctrl+v', this.paste)
+      graph.bindKey('ctrl+x', this.cut)
+    },
+    copy () {
+      const { graph } = FlowGraph
+      const cells = graph.getSelectedCells()
+      if (cells.length) {
+        graph.copy(cells)
+      }
+      return false
+    },
+    cut () {
+      const { graph } = FlowGraph
+      const cells = graph.getSelectedCells()
+      if (cells.length) {
+        graph.cut(cells)
+      }
+      return false
+    },
+    // 粘贴
+    paste () {
+      const { graph } = FlowGraph
+      if (!graph.isClipboardEmpty()) {
+        const cells = graph.paste({ offset: 32 })
+        graph.cleanSelection()
+        graph.select(cells)
+      }
+      return false
+    },
+    // 转化为Json格式
+    exportJson () {
+      this.toVisible = true
+    },
+    // 保存数据
+    handleOk (e) {
+      this.confirmToLoading = true
+      const data = JSON.parse(JSON.stringify(this.cell))
+      data.cells.forEach(item => {
+        if (item.shape === 'edge') {
+          item.source.cell = data.cells.find(cellItem => cellItem.id.search(item.source.cell) !== -1).id
+          item.target.cell = data.cells.find(cellItem => cellItem.id.search(item.target.cell) !== -1).id
+        }
+      })
+      this.$setLoading({ spinning: true, tip: this.$t('流程图保存中，请稍候……'), size: 'large' })
+      this.axios({
+        url: '/admin/workflow/generate',
+        data: { id: this.workflow.id, workflowId: this.workflow.workflowId, flow: JSON.stringify(data), action: 'submit' }
+      }).then(res => {
+        if (res.code === 0) {
+          this.$message.success(res.message)
+        } else {
+          this.$confirm({
+            title: this.$t('保存失败'),
+            content: h => <div style="color: #faad14;">{this.$t('保存失败，此时关闭浏览器窗口会导致配置信息丢失。可点击【JSON】保存JSON信息到记事本后，联系技术人员调试')}</div>,
+            onOk () { }
+          })
+        }
+        this.toVisible = false
+        this.$setLoading(false)
+        this.confirmToLoading = false
+        this.visible = false
+        this.$setLoading(false)
+        this.confirmLoading = false
+      })
+    },
+    flowCheck () {
+      const data = JSON.parse(JSON.stringify(this.cell))
+      data.cells.forEach(item => {
+        if (item.shape === 'edge') {
+          item.source.cell = data.cells.find(cellItem => cellItem.id.search(item.source.cell) !== -1).id
+          item.target.cell = data.cells.find(cellItem => cellItem.id.search(item.target.cell) !== -1).id
+        }
+      })
+      let freeNode = []
+      const onNode = []
+      this.errTextList = []
+      if (data.cells.some(item => item.type.search('link'))) {
+        this.saveCheck = true
+        data.cells.forEach(item => {
+          if (item.type.search('link') !== -1) {
+            if (item.source.cell.search('start') !== -1) {
+              if (item.target.cell.search('start') !== -1 || item.target.cell.search('end') !== -1 || item.target.cell.search('gateway') !== -1) {
+                this.saveCheck = false
+                const objTarget = data.cells.find(itemCellItem => itemCellItem.id.search(item.target.cell) !== -1)
+                let GatewayText = ''
+                let place = ''
+                if (item.target.cell.search('start') !== -1 || item.target.cell.search('end') !== -1) {
+                  GatewayText = objTarget.attrs.text.textWrap.text
+                  place = '库所'
+                } else {
+                  GatewayText = this.$t('任意网关')
+                }
+                const text = this.$t(`${GatewayText}${place}`)
+                const messageTip1 = this.$t('开始库所不能直接连接{0}', { 0: text })
+                this.errTextList.push(messageTip1)
+              }
+            } else if (item.source.cell.search('gateway') !== -1 && item.target.cell.search('gateway') !== -1) {
+              this.saveCheck = false
+              this.errTextList.push(this.$t('网关不能直接连接网关'))
+            } else if (item.source.cell.search('gateway_andsplit') !== -1 || item.source.cell.search('gateway_andjoin') !== -1 || item.source.cell.search('gateway_implicit') !== -1 || item.source.cell.search('gateway_orjoin') !== -1) {
+              if (item.target.cell.search('start') !== -1 || item.target.cell.search('end') !== -1) {
+                let typeName = ''
+                if (item.source.cell.search('gateway_implicit') !== -1) {
+                  typeName = this.$t('后置排他拆分网关')
+                } else if (item.source.cell.search('gateway_andsplit') !== -1) {
+                  typeName = this.$t('并行拆分网关')
+                } else if (item.source.cell.search('gateway_andjoin') !== -1) {
+                  typeName = this.$t('并行合并网关')
+                } else if (item.source.cell.search('gateway_orjoin') !== -1) {
+                  typeName = this.$t('排他合并网关')
+                }
+                this.saveCheck = false
+                this.$nextTick(() => {
+                  const messageTip2 = this.$t('{0}的输出不能是库所', { 0: typeName })
+                  this.errTextList.push(messageTip2)
+                })
+              }
+            }
+            onNode.push(data.cells.find(findItem => item.source.cell.includes(findItem.id)))
+            onNode.push(data.cells.find(findItem => item.target.cell.includes(findItem.id)))
+          }
+        })
+        freeNode = data.cells.filter(itemCell => itemCell.type.search('link') === -1 && onNode.every(itemOn => itemOn.id.search(itemCell.id) === -1))
+        freeNode.forEach(item => {
+          this.saveCheck = false
+          let freeName = ''
+          if (item.type.search('start') !== -1) {
+            freeName = this.$t('开始库所')
+          } else if (item.type.search('end') !== -1) {
+            freeName = this.$t('结束库所')
+          } else if (item.type.search('gateway') !== -1) {
+            freeName = this.$t('网关')
+          } else {
+            freeName = this.$t('变迁')
+          }
+          const messageTip3 = this.$t('存在游离的{0}', { 0: freeName })
+          this.errTextList.push(messageTip3)
+        })
+        if (!this.saveCheck) {
+          this.$error({
+            title: this.$t('流程图存在错误'),
+            content: () => {
+              const list = []
+              for (let i = 0; i < this.errTextList.length; i++) {
+                list.push(<div>{this.errTextList[i]}</div>)
+              }
+              return list
+            }
+          })
+        } else {
+          this.$message.success('检测完成')
+        }
+      }
+    },
+    // 输入JSON
+    inputJson () {
+      this.inputData = ''
+      this.inputVisible = true
+    },
+    // 导入JSON转化为图形
+    handleInputOk () {
+      if (this.inputData) {
+        const inputJsonData = JSON.parse(this.inputData)
+        const that = this
+        that.$confirm({
+          title: this.$t('导入JSON数据'),
+          content: h => <div style="color:red;">{this.$t('此时导入操作导致现有配置信息丢失。是否确认替换原来的数据')}</div>,
+          okText: this.$t('确认'),
+          onOk () {
+            that.$emit('inputJson', true, inputJsonData)
+            that.inputVisible = false
+          },
+          onCancel () {
+            that.inputVisible = false
+          }
+        })
+      } else {
+        this.$message.error(this.$t('JSON数据不可为空'))
+      }
+    },
+    // 显示网格
+    showGrid () {
+      const { graph } = FlowGraph
+      if (!this.show) {
+        graph.showGrid()
+      } else {
+        graph.hideGrid()
+      }
+      this.show = !this.show
+    },
+    // 垂直居中
+    alignCenter () {
+      const { graph } = FlowGraph
+      const newArr = []
+      graph.getSelectedCells().map(item => {
+        newArr.push(item.store.data.position.x)
+      })
+      const max = Math.max(...newArr)
+      const min = Math.min(...newArr)
+      const center = max - (max - min) / 2
+      for (let i = 0; i < graph.getSelectedCells().length; i++) {
+        const x1 = graph.getSelectedCells()[i].store.data.position.x
+        graph.getSelectedCells()[i].translate(center - x1)
+      }
+      graph.cleanSelection()
+    },
+    // 水平居中
+    horizontally () {
+      const { graph } = FlowGraph
+      const newArr = []
+      graph.getSelectedCells().map(item => {
+        newArr.push(item.store.data.position.y)
+      })
+      const max = Math.max(...newArr)
+      const min = Math.min(...newArr)
+      const center = max - (max - min) / 2
+      for (let i = 0; i < graph.getSelectedCells().length; i++) {
+        const y1 = graph.getSelectedCells()[i].store.data.position.y
+        graph.getSelectedCells()[i].translate(undefined, center - y1)
+      }
+      graph.cleanSelection()
+    },
+    handleClick (event) {
+      const { graph } = FlowGraph
+      const name = event.currentTarget.name
+      switch (name) {
+        // 水平居中
+        case 'horizontally':
+          this.horizontally()
+          break
+        // 垂直居中
+        case 'alignCenter':
+          this.alignCenter()
+          break
+        case 'showGrid':
+          this.showGrid()
+          break
+        case 'undo':
+          graph.history.undo()
+          break
+        case 'redo':
+          graph.history.redo()
+          break
+        // 清空
+        case 'delete':
+          graph.clearCells()
+          this.$emit('clean', true)
+          break
+        case 'savePNG':
+          graph.toPNG((dataUri) => {
+            // 下载
+            DataUri.downloadDataUri(dataUri, 'chartx.png')
+          }, {
+            backgroundColor: 'white',
+            padding: {
+              top: 20,
+              right: 30,
+              bottom: 40,
+              left: 50
+            },
+            quality: 1
+          })
+          break
+        case 'saveSVG':
+          graph.toSVG((dataUri) => {
+            // 下载
+            DataUri.downloadDataUri(DataUri.svgToDataUrl(dataUri), 'chart.svg')
+          })
+          break
+        case 'print':
+          graph.printPreview()
+          break
+        case 'copy':
+          this.copy()
+          break
+        case 'cut':
+          this.cut()
+          break
+        case 'paste':
+          this.paste()
+          break
+        case 'toJSON':
+          this.exportJson()
+          break
+        case 'inputJSON':
+          this.inputJson()
+          break
+        default:
+          break
+      }
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+button {
+  margin-right: 8px;
+}
+.bar {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+/deep/.jv-container .jv-code.boxed {
+  max-height: 550px;
+}
+/deep/.jv-container .jv-more {
+  position: relative;
+}
+</style>

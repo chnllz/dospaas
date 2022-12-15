@@ -1,0 +1,33 @@
+// with polyfills
+import 'core-js/stable'
+import 'regenerator-runtime/runtime'
+
+import Vue from 'vue'
+import VueI18n from 'vue-i18n'
+import App from './App'
+import router from './router'
+import store from './store/'
+import bootstrap from './core/bootstrap'
+import storage from '@/utils/storage'
+import VueDOMPurifyHTML from 'vue-dompurify-html'
+Vue.use(VueDOMPurifyHTML)
+
+Vue.config.productionTip = false
+if (!storage.get('lang')) {
+  storage.set('lang', 'zh_CN')
+}
+const lang = storage.get('lang')
+
+export default new Vue({
+  router,
+  store,
+  i18n: new VueI18n({
+    locale: lang,
+    messages: {
+      [lang]: require(`@/i18n/${lang}`).default
+    },
+    silentTranslationWarn: true
+  }),
+  created: bootstrap,
+  render: h => h(App)
+}).$mount('#app')

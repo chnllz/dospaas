@@ -1,0 +1,155 @@
+<template>
+  <div class="page" style="height: calc(100vh - 208px); border-top: #f0f2f5 8px solid; overflow: hidden">
+    <a-row>
+      <a-col :span="18">
+        <a-form layout="inline" style="display: flex; margin-bottom: 8px; padding-left: 8px">
+          <a-form-item :label="$t('系统名称')">
+            <a-input v-model="queryParam.name" allowClear style="width: 200px" />
+          </a-form-item>
+          <a-form-item :label="$t('仪表盘名称')">
+            <a-input v-model="queryParam.dashboardName" allowClear style="width: 200px" />
+          </a-form-item>
+          <a-space>
+            <a-button
+              @click="
+                () => {
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              {{ $t('搜索') }}
+            </a-button>
+            <a-button
+              @click="
+                () => {
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a-button type="primary" @click="handleAdd">
+              {{ $t('添加') }}
+            </a-button>
+          </a-space>
+        </a-form>
+      </a-col>
+      <a-col :span="4" style="text-align: right"></a-col>
+    </a-row>
+    <s-table
+      ref="table"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      class="table-fill"
+      :scroll="{ y: true }"
+      :data="loadDataTable"
+      :sorter="sorter"
+      style="padding: 0 8px"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a-space>
+          <a @click="openTab(record)">
+            {{ $t('设计') }}
+          </a>
+          <a @click="handleEdit(record)">{{ $t('编辑') }}</a>
+          <a>{{ $t('复制') }}</a>
+          <a>{{ $t('删除') }}</a>
+        </a-space>
+      </div>
+    </s-table>
+    <table-dashboard-data-form ref="tableDashboardDataForm" @ok="handleOk" />
+  </div>
+</template>
+<script>
+import storage from '@/utils/storage'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    TableDashboardDataForm: () => import('./TableDashboardDataForm')
+  },
+  data () {
+    return {
+      // 搜索参数
+      queryParam: { module: '' },
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 220,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        sorter: true,
+        width: 60
+      }, {
+        title: this.$t('系统名称'),
+        dataIndex: 'alias',
+        width: 200,
+        sorter: true
+      }, {
+        title: this.$t('仪表盘名称'),
+        dataIndex: 'dashboardName',
+        width: 120
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 120
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime'
+      }],
+      sorter: { field: 'id', order: 'descend' },
+      data: []
+    }
+  },
+  created () {
+    this.queryParam.module = storage.get('moduleName')
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/table/dashboardData/mockInit',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleAdd () {
+      this.$refs.tableDashboardDataForm.show(
+        { title: '添加' }
+      )
+    },
+    handleEdit (record) {
+      this.$refs.tableDashboardDataForm.show(
+        {
+          title: '编辑',
+          record
+        }
+      )
+    },
+    handleOk (val) {
+      this.axios({
+        url: '/admin/data/add',
+        data: {
+          tableName: 'admin_setting',
+          data: {
+            module: this.queryParam.module,
+            variable: 'dashboard',
+            name: val.setting['dashboardName'],
+            access_level: val.setting['permission'],
+            setting: JSON.stringify(val.setting)
+          }
+        }
+      })
+      this.$refs.table.refresh()
+    },
+    // 点击设计弹出新的tab
+    openTab (record) {
+      this.$emit('openDashboard', record)
+    }
+  }
+}
+</script>

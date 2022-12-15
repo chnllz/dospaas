@@ -1,0 +1,219 @@
+<template>
+  <div>
+    <div class="table-operator">
+      <a-button v-action:add icon="plus" type="primary" @click="handleAdd">{{ $t('添加授权') }}</a-button>
+      <a-button
+        icon="sync"
+        style="margin-right: 16px"
+        @click="
+          () => {
+            queryParam = {}
+            $refs.table.refresh(true)
+          }
+        "
+      >
+        {{ $t('刷新列表') }}
+      </a-button>
+    </div>
+    <s-table
+      ref="table"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <template slot="headImageUrl" slot-scope="text">
+        <div style="border: 1px dashed #d9d9d9; border-radius: 5px; padding: 5px" @click="handleImagePreview(text)">
+          <img :src="text" style="width: 64px; height: 64px" :alt="$t('授权方头像')" />
+        </div>
+      </template>
+      <template slot="principalType" slot-scope="text">
+        {{ principalType[text] }}
+      </template>
+      <template slot="accountType" slot-scope="text">
+        {{ accountType[text] }}
+      </template>
+      <template slot="customerType" slot-scope="text">
+        {{ customerType[text] }}
+      </template>
+      <template slot="verifyType" slot-scope="text">
+        {{ verifyType[text] }}
+      </template>
+      <template slot="action" slot-scope="text, record">
+        <a @click="handleLook(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a @click="handleDelete(record)">{{ $t('解绑') }}</a>
+      </template>
+    </s-table>
+    <detail ref="detail" />
+
+    <a-modal :visible="imagePreviewVisible" :footer="null" @cancel="imagePreviewVisible = !imagePreviewVisible">
+      <img alt="example" style="width: 100%" :src="imagePreviewUrl" />
+    </a-modal>
+    <a-modal
+      :visible="authorizationVisible"
+      :title="$t('使用帮助')"
+      @ok="authorizationVisible = !authorizationVisible"
+      @cancel="authorizationVisible = !authorizationVisible"
+    >
+      <a-list size="small" bordered :data-source="helpList">
+        <a-list-item slot="renderItem" slot-scope="item">
+          {{ item }}
+        </a-list-item>
+        <div slot="header">{{ $t('如何解除微信公众号服务授权') }}</div>
+        <div slot="footer">{{ $t('小程序解除绑定步骤类似') }}</div>
+      </a-list>
+    </a-modal>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('wechat'),
+  components: { Detail: () => import('./Detail') },
+  data () {
+    return {
+      imagePreviewVisible: false,
+      imagePreviewUrl: '',
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60
+      }, {
+        title: this.$t('授权方头像'),
+        dataIndex: 'headImageUrl',
+        width: 90,
+        scopedSlots: { customRender: 'headImageUrl' }
+      }, {
+        title: this.$t('授权方昵称'),
+        // 2022年5月12日13:59:44 返回的数据没有驼峰
+        dataIndex: 'nickname'
+      }, {
+        title: this.$t('主体名称'),
+        dataIndex: 'principalName'
+      }, {
+        title: this.$t('主体类型'),
+        dataIndex: 'principalType',
+        scopedSlots: { customRender: 'principalType' }
+      }, {
+        title: this.$t('授权方类型'),
+        dataIndex: 'accountType',
+        scopedSlots: { customRender: 'accountType' }
+
+      }, {
+        title: this.$t('授权方认证类型'),
+        dataIndex: 'customerType',
+        scopedSlots: { customRender: 'customerType' }
+
+      },
+      {
+        title: this.$t('公众号认证类型'),
+        dataIndex: 'verifyType',
+        scopedSlots: { customRender: 'verifyType' }
+
+      }
+      ],
+      authorizationVisible: false,
+      helpList: [
+        this.$t('1.登录您的微信公众号后台，在左侧菜单栏处找到“设置--公众号设置”'),
+        this.$t('2.进入“公众号设置--授权管理”，点击“查看平台详情”'),
+        this.$t('3.点击“取消授权”按钮即可')
+      ],
+      principalType: {
+        0: '个人',
+        1: '企业',
+        2: '媒体',
+        3: '政府',
+        4: '其他组织'
+      },
+      accountType: {
+        1: '订阅号',
+        2: '服务号',
+        3: '小程序'
+      },
+      customerType: {
+        1: '企业',
+        2: '企业媒体',
+        3: '政府',
+        4: '非营利组织',
+        5: '民营非企业',
+        6: '盈利组织',
+        8: '社会团体',
+        9: '事业媒体',
+        11: '事业单位',
+        12: '个体工商户',
+        13: '海外企业'
+      },
+      verifyType: {
+        '-1': '未认证',
+        0: '微信认证',
+        1: '新浪微博认证',
+        2: '腾讯微博认证',
+        3: '已资质认证通过但还未通过名称认证',
+        4: '已资质认证通过，还未通过名称认证，但通过了新浪微博认证',
+        5: '已资质认证通过，还未通过名称认证，但通过了腾讯微博认证'
+      }
+    }
+  },
+  created () { },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/wechat/openPlatform/init',
+        data: Object.assign(parameter)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 添加授权
+    handleAdd () {
+      this.$refs.detail.show({
+        action: 'add',
+        title: this.$t('添加授权'),
+        url: '/wechat/openPlatform/generateAuthLink'
+      })
+    },
+    // 查看授权
+    handleLook (record) {
+      this.$refs.detail.show({
+        action: 'detail',
+        title: this.$t('查看授权'),
+        record: record,
+        url: '/wechat/open/detail'
+      })
+    },
+    // 解除授权
+    handleDelete (record) {
+      const table = this.$refs.table
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要解除{0}的授权吗？', { 0: record.nickname }),
+        onOk () {
+          that.axios({
+            url: '/wechat/appAccount/unbind',
+            data: { authorizerAppid: record.authorizer_appid }
+          }).then(res => {
+            if (res.code !== 0) {
+              that.$message.warning(res.message)
+            } else {
+              table.refresh()
+            }
+          })
+        }
+      })
+    },
+    // 图片预览
+    handleImagePreview (text) {
+      this.imagePreviewUrl = text
+      this.imagePreviewVisible = true
+    }
+  }
+}
+</script>

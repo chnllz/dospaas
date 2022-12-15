@@ -1,0 +1,17 @@
+<template>
+  <record-details ref="RecordDetails" :url="url" />
+</template>
+<script>
+export default {
+  components: {
+    RecordDetails: () => import('./RecordDetails')
+  },
+  data () {
+    return {
+      url: '/quality/inspected/mockInit'
+    }
+  },
+  methods: {
+  }
+}
+</script>

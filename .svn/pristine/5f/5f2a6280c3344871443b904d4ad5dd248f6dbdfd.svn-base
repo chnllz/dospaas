@@ -1,0 +1,453 @@
+<template>
+  <a-spin :spinning="loading">
+    <!-- 报表信息 -->
+    <a-table rowKey="id" :columns="infoColumns" :data-source="dataSource" size="small" :pagination="false">
+      <template slot="title">
+        <div style="font-weight: bold; font-size: 16px">{{ $t('报表信息') }}</div>
+      </template>
+    </a-table>
+    <a-table
+      style="margin-top: 16px"
+      rowKey="extension"
+      :columns="columns"
+      :data-source="calloutData"
+      :expandedRowKeys="expandedRowKeys"
+      size="small"
+      :pagination="false"
+      @expand="onExpand"
+    >
+      <template slot="title">
+        <div style="font-weight: bold; font-size: 16px">
+          {{ $t('呼入通话') }}
+          <a-button icon="download" size="small" style="margin-left: 20px" type="primary" @click="downloadAll">
+            {{ $t('导出数据') }}
+          </a-button>
+        </div>
+      </template>
+      <template slot="billPrintTime" slot-scope="text, record">
+        <span>{{ record.billPrintTime }}</span>
+      </template>
+      <template slot="exportDetail" slot-scope="text, record">
+        <a href="#" @click="download(record)">{{ $t('导出') }}</a>
+      </template>
+      <s-table
+        v-if="expandKey === text.extension && currentKey === 'callIn'"
+        slot="expandedRowRender"
+        slot-scope="text"
+        size="small"
+        rowKey="row"
+        :columns="childColumns"
+        :data="loadDataDetail"
+        :sorter="{ field: 'calldate', order: 'descend' }"
+      >
+        <template slot="action" slot-scope="text1, recd">
+          <a href="#" style="margin-right: 10px" @click="handlePlay(recd)">
+            <a-icon type="play-circle" />
+          </a>
+          <a href="#" style="margin-right: 10px" @click="handleDownload(recd)">
+            <a-icon type="download" />
+          </a>
+        </template>
+      </s-table>
+    </a-table>
+    <!-- 图表展示 -->
+    <div ref="top" style="height: 500px; margin-top: 20px"></div>
+    <div ref="middle" style="height: 500px; margin-top: 20px"></div>
+    <div ref="bottom" style="height: 500px; margin-top: 20px"></div>
+    <general-export ref="generalExport" />
+  </a-spin>
+</template>
+<script>
+import echarts from 'echarts'
+import { mapGetters } from 'vuex'
+import storage from '@/utils/storage'
+export default {
+  i18n: window.lang('callcenter'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    searchData: {
+      type: Object,
+      default: () => { }
+    },
+    users: {
+      type: Array,
+      default: () => {
+        return []
+      }
+    },
+    currentKey: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    return {
+      loading: false,
+      loadFlag: true,
+      seatSearch: {},
+      params: {},
+      extension: [],
+      infoColumns: [
+        { title: this.$t('开始时间'), dataIndex: 'startParts' },
+        { title: this.$t('结束时间'), dataIndex: 'endParts' },
+        { title: this.$t('搜索时间段'), dataIndex: 'period', customRender: text => text + this.$t('天') },
+        { title: this.$t('总呼叫数'), dataIndex: 'totalCalls' },
+        { title: this.$t('总接通数'), dataIndex: 'totalNomissed' },
+        { title: this.$t('总接通百分比'), dataIndex: 'percentTotalNomissed' },
+        { title: this.$t('总未接数'), dataIndex: 'totalMissed' },
+        { title: this.$t('总时长'), dataIndex: 'totalBillPrint' },
+        { title: this.$t('平均振铃时间'), dataIndex: 'avgRingFull' }
+      ],
+      columns: [
+        { title: this.$t('坐席'), dataIndex: 'agentName' },
+        { title: this.$t('总计'), dataIndex: 'calls' },
+        { title: this.$t('接通'), dataIndex: 'nomissed' },
+        { title: this.$t('接通百分比'), dataIndex: 'percentNomissed' },
+        { title: this.$t('未接'), dataIndex: 'missed' },
+        { title: this.$t('通话时长'), dataIndex: 'billPrint', scopedSlots: { customRender: 'billPrintTime' } },
+        { title: this.$t('通话时长百分比'), dataIndex: 'totalBill' },
+        { title: this.$t('平均通话时长'), dataIndex: 'avgDurationPrint' },
+        { title: this.$t('总振铃时长'), dataIndex: 'ringTime' },
+        { title: this.$t('平均振铃时长'), dataIndex: 'avgRingTime' },
+        { title: this.$t('导出详细'), dataIndex: 'exportDetail', scopedSlots: { customRender: 'exportDetail' } }
+      ],
+      childColumns: [
+        { title: this.$t('序号'), dataIndex: 'row', width: 80 },
+        { title: this.$t('呼叫时间'), dataIndex: 'callTime' },
+        { title: this.$t('主叫'), dataIndex: 'source' },
+        { title: this.$t('被叫'), dataIndex: 'destination' },
+        { title: this.$t('计费时长'), dataIndex: 'billableSeconds' },
+        { title: this.$t('振铃时长'), dataIndex: 'ringTime' },
+        { title: this.$t('呼叫结果'), dataIndex: 'disposition' },
+        { title: this.$t('操作'), dataIndex: 'action', scopedSlots: { customRender: 'action' } }
+      ],
+      dataSource: [],
+      calloutData: [],
+      // s-table搜索参数
+      queryParam: {},
+      expandKey: '',
+      expandedRowKeys: [],
+      audioUrl: ''
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  watch: {
+    searchData: {
+      handler () {
+        this.loadFlag = true
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  methods: {
+    init () {
+      if (this.loadFlag) {
+        const extension = []
+        const selectUsers = this.searchData.seat
+        const seatSearch = storage.get('seatSearch') ? JSON.parse(storage.get('seatSearch')) : {}
+        this.seatSearch = seatSearch
+        const params = {
+          startTime: seatSearch.startTime,
+          endTime: seatSearch.endTime,
+          noInternal: seatSearch.filtration ? 1 : 0,
+          typeReport: 'incoming'
+        }
+        this.params = params
+        this.users.forEach(item => {
+          if (selectUsers.indexOf(item.nodedata) !== -1) {
+            extension.push(item.node.extension)
+          }
+        })
+        this.extension = extension
+        this.loading = true
+        this.axios({
+          url: '/callcenter/callCenterCallRecord/report',
+          data: Object.assign(params, { extension: extension })
+        }).then(res => {
+          this.loading = false
+          const obj = { id: 0, avgRingFull: '', endParts: '', period: '', startParts: '', totalBillPrint: '', totalCalls: '', totalNomissed: '', percentTotalNomissed: '', totalMissed: '' }
+          for (const key in obj) {
+            if (key !== 'id') {
+              obj[key] = res.result.data[key]
+            }
+          }
+          this.dataSource = [obj]
+          this.calloutData = res.result.data.extensionData
+          this.calloutData.forEach((item) => {
+            item.billPrintTime = item.billPrint
+          })
+          let chartData = this.calloutData.map(item => {
+            const arr = []
+            arr[0] = item.agentName
+            arr[1] = item.nomissed
+            arr[2] = item.missed
+            return arr
+          })
+          chartData = [['product', '接听', '未接'], ...chartData]
+          this.initCharts(chartData)
+          // this.loadFlag = false
+        })
+      }
+    },
+    loadData (parameter) {
+      return this.axios({
+        url: '/cdrstat/index/report',
+        data: Object.assign(this.params, parameter, { extension: this.extension })
+      }).then(res => {
+        return res.result.data.extensionData
+      })
+    },
+    onExpand (expanded, record) {
+      if (expanded === true) {
+        this.queryParam = { channel: record.channel }
+        this.expandKey = record.extension
+        this.expandedRowKeys = [record.extension]
+      } else {
+        this.expandedRowKeys = []
+      }
+    },
+    // 初始化子表格数据
+    loadDataDetail (parameter) {
+      return this.axios({
+        data: Object.assign(parameter, this.params, this.queryParam),
+        url: '/callcenter/callCenterCallRecord/reportDetail'
+      }).then((res) => {
+        return res.result
+      })
+    },
+    downloadAll () {
+      const params = {
+        startTime: this.seatSearch.startTime,
+        endTime: this.seatSearch.endTime,
+        noInternal: this.seatSearch.filtration ? 1 : 0,
+        typeReport: 'incoming',
+        sortField: 'calldate',
+        sortOrder: 'ascend',
+        export: 1,
+        extension: this.extension
+      }
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportCallCenterRecordTask',
+        parameter: {
+          condition: {
+            req: params,
+            type: 'exportCallCenterRecord'
+          }
+        }
+      })
+    },
+    // 导出
+    download (record) {
+      const params = {
+        startTime: this.seatSearch.startTime,
+        endTime: this.seatSearch.endTime,
+        noInternal: this.seatSearch.filtration ? 1 : 0,
+        typeReport: 'incoming',
+        sortField: 'calldate',
+        sortOrder: 'ascend',
+        export: 1,
+        extension: this.extension,
+        channel: record.channel
+      }
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportCallCenterRecordTask',
+        parameter: {
+          condition: {
+            req: params,
+            type: 'exportCallCenterRecordItem'
+          }
+        }
+      })
+    },
+    urlEncode (param, key, encode) {
+      if (param == null) return ''
+      var paramStr = ''
+      var t = typeof (param)
+      if (t === 'string' || t === 'number' || t === 'boolean') {
+        paramStr += '&' + key + '=' + ((encode == null || encode) ? encodeURIComponent(param) : param)
+      } else {
+        for (var i in param) {
+          var k = key == null ? i : key + (param instanceof Array ? '[' + i + ']' : '.' + i)
+          paramStr += this.urlEncode(param[i], k, encode)
+        }
+      }
+      return paramStr
+    },
+    // 录音播放
+    handlePlay (record) {
+      if (record.recordFile) {
+        const url = `${process.env.VUE_APP_API_BASE_URL}callcenter/api/recordDownload?recordingFile=${record.recordFile}`
+        this.$setSetting({ audioPlayData: { visible: true, sourceUrl: url } })
+      } else {
+        this.$message.info('录音文件为空')
+      }
+    },
+    handleDownload (record) {
+      if (record.recordFile) {
+        const url = `${process.env.VUE_APP_API_BASE_URL}callcenter/api/recordDownload?recordingFile=${record.recordFile}`
+        window.open(url)
+      } else {
+        this.$message.info('录音文件为空')
+      }
+    },
+    // 初始化图表数据
+    initCharts () {
+      // 第一个图
+      let chartData = this.calloutData.map(item => {
+        const arr = []
+        arr[0] = item.agentName
+        arr[1] = item.nomissed
+        arr[2] = item.missed
+        return arr
+      })
+      chartData = [['product', '接听', '未接'], ...chartData]
+      const option = {
+        grid: { left: '10px', right: '10px', bottom: '10px', containLabel: true },
+        color: ['#67DC00', '#C52518'],
+        title: { text: this.$t('呼入接听数与未接数对比图') },
+        toolbox: { show: false },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { // 坐标轴指示器，坐标轴触发有效
+            type: 'shadow' // 默认为直线，可选为：'line' | 'shadow'
+          }
+        },
+        dataset: {
+          source: chartData
+        },
+        xAxis: { type: 'category' },
+        yAxis: {},
+        series: [
+          {
+            type: 'bar',
+            barWidth: '10%',
+            label: {
+              show: true,
+              formatter: '{@接听}',
+              fontSize: 16,
+              position: 'top',
+              rich: {
+                name: {
+                  textBorderColor: '#fff'
+                }
+              }
+            }
+          },
+          {
+            type: 'bar',
+            barWidth: '10%',
+            label: {
+              show: true,
+              formatter: '{@未接}',
+              fontSize: 16,
+              position: 'top',
+              rich: {
+                name: {
+                  textBorderColor: '#fff'
+                }
+              }
+            }
+          }
+        ]
+      }
+      const chartsTop = echarts.init(this.$refs.top)
+      chartsTop.setOption(option)
+      // 第二个图
+      const xData = []
+      const yData = []
+      const bottomY = [] // 第三个图的Y轴数据
+      this.calloutData.forEach(item => {
+        xData.push(item.agentName)
+        item.billPrint = this.getMin(item.billPrint)
+        yData.push(item.billPrint)
+        bottomY.push(item.calls)
+      })
+      const optionMiddle = {
+        color: ['#3398DB'],
+        title: { text: this.$t('坐席总呼叫时长统计图（单位：分）') },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { // 坐标轴指示器，坐标轴触发有效
+            type: 'shadow' // 默认为直线，可选为：'line' | 'shadow'
+          }
+        },
+        grid: { left: '10px', right: '10px', bottom: '10px', containLabel: true },
+        xAxis: [{
+          type: 'category',
+          data: xData,
+          axisTick: { alignWithLabel: true }
+        }],
+        yAxis: [{ type: 'value' }],
+        series: [{
+          type: 'bar',
+          barWidth: '10%',
+          data: yData,
+          label: {
+            show: true,
+            formatter: '{c}',
+            fontSize: 16,
+            position: 'top',
+            rich: {
+              name: {
+                textBorderColor: '#fff'
+              }
+            }
+          }
+        }]
+      }
+      const chartsMiddle = echarts.init(this.$refs.middle)
+      chartsMiddle.setOption(optionMiddle)
+      //  第三个图
+      const optionBottom = {
+        color: ['#3398DB'],
+        title: { text: this.$t('坐席呼入的总数统计图（单位：次）') },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { // 坐标轴指示器，坐标轴触发有效
+            type: 'shadow' // 默认为直线，可选为：'line' | 'shadow'
+          }
+        },
+        grid: { left: '10px', right: '10px', bottom: '10px', containLabel: true },
+        xAxis: [{
+          type: 'category',
+          data: xData,
+          axisTick: { alignWithLabel: true }
+        }],
+        yAxis: [{ type: 'value' }],
+        series: [{
+          type: 'bar',
+          barWidth: '10%',
+          data: bottomY,
+          label: {
+            show: true,
+            formatter: '{c}',
+            fontSize: 16,
+            position: 'top',
+            rich: {
+              name: {
+                textBorderColor: '#fff'
+              }
+            }
+          }
+        }]
+      }
+      const chartsBottom = echarts.init(this.$refs.bottom)
+      chartsBottom.setOption(optionBottom)
+    },
+    // 获取多少分
+    getMin (date) {
+      const arr = date.split(':')
+      let result = arr[0] * 60 + parseInt(arr[1]) + arr[2] / 60
+      result = result.toFixed(2)
+      return result
+    }
+  }
+}
+</script>

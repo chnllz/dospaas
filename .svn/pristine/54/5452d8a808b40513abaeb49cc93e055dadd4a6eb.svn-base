@@ -1,0 +1,74 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+        <a-form-item :label="$t('姓名')">
+          <a-input
+            v-decorator="[
+              'info[name]',
+              { initialValue: data.name, rules: [{ required: true, message: '请输入姓名' }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('电话')">
+          <a-input v-decorator="['info[number]', { initialValue: data.number }]" />
+        </a-form-item>
+        <a-form-item :label="$t('备注')">
+          <a-textarea v-decorator="['info[remarks]', { initialValue: data.remarks }]" :autoSize="{ minRows: 5 }" />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('test'),
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: {},
+      form: this.$form.createForm(this)
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', id: config.record ? config.record.id : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.data = res.result
+      })
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { action: 'submit', id: this.data.id })
+          }).then((res) => {
+            this.loading = false
+            this.$emit('ok', values)
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.visible = false
+              this.$message.success(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

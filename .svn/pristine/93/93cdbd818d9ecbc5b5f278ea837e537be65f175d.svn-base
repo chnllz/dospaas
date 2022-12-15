@@ -1,0 +1,441 @@
+<template>
+  <div class="page">
+    <a-spin :spinning="loading">
+      <a-tabs v-model="currentTab" :animated="false" @change="handleTabChange">
+        <a-tab-pane v-for="parentItem in tabList" :key="parentItem.key" :tab="parentItem.title">
+          <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search">
+            <a-card size="small" :title="$t('搜索')">
+              <a-space slot="extra">
+                <a-button htmlType="submit" @click="getDataList">{{ $t('搜索') }}</a-button>
+                <a-button @click="reset">{{ $t('重置') }}</a-button>
+              </a-space>
+              <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+                <a-col :span="6">
+                  <a-form-item :label="$t('会话开始时间')">
+                    <a-range-picker
+                      v-if="['day', 'time'].includes(parentItem.key)"
+                      v-model="showObj['sessionTime' + parentItem.key]"
+                      :allowClear="false"
+                      :disabled-date="disabledDate"
+                      :ranges="{
+                        [$t('昨天')]: [
+                          moment().startOf('day').subtract('day', 1),
+                          moment().endOf('day').subtract('day', 1)
+                        ],
+                        [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                        [$t('最近七天')]: [moment().subtract(7, 'days'), moment()],
+                        [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                        [$t('最近31天')]: [moment().subtract(31, 'days'), moment()]
+                      }"
+                      format="YYYY-MM-DD"
+                      style="width: 100%"
+                      @change="getInputTime"
+                      @openChange="onOpenChange"
+                      @calendarChange="onCalendarChange"
+                    />
+                    <a-range-picker
+                      v-else-if="parentItem.key == 'month'"
+                      v-model="showObj['sessionTime' + parentItem.key]"
+                      style="width: 100%"
+                      :allowClear="false"
+                      format="YYYY-MM"
+                      :ranges="{
+                        [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                        [$t('上个月')]: [
+                          moment().startOf('month').subtract('month', 1),
+                          moment().endOf('month').subtract('month', 1)
+                        ],
+                        [$t('最近3个月')]: [moment().subtract(2, 'month'), moment()]
+                      }"
+                      :mode="modeMonth"
+                      :open="openMonth"
+                      @change="
+                        (date, dateString) => {
+                          queryParam.startTime = dateString[0] + '-01'
+                          queryParam.endTime = dateString[1] + '-01'
+                        }
+                      "
+                      @openChange="openMonthChange"
+                      @panelChange="handlePanelChange"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('客服名称')">
+                    <a-tree-select
+                      v-model="showObj['serviceId' + parentItem.key]"
+                      :filterTreeNode="filterTreeOption"
+                      :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                      allowClear
+                      treeCheckable
+                      multiple
+                      :replaceFields="{
+                        value: 'serviceId',
+                        title: 'nickName'
+                      }"
+                      style="width: 100%"
+                      :tree-data="treeData"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('首响合格时长')">
+                    <div style="display: flex; margin-top: 4px">
+                      <a-input-number
+                        v-model="showObj['responseTime' + parentItem.key]"
+                        style="width: 100%; margin-right: -1px"
+                        :min="1"
+                        :max="60"
+                      ></a-input-number>
+                      <a-button style="display: inline-block">{{ $t('秒') }}</a-button>
+                    </div>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('平均响应合格时长')">
+                    <div style="display: flex; margin-top: 4px">
+                      <a-input-number
+                        v-model="showObj['replyTime' + parentItem.key]"
+                        style="width: 100%; margin-right: -1px"
+                        :min="1"
+                        :max="60"
+                      ></a-input-number>
+                      <a-button style="display: inline-block">{{ $t('秒') }}</a-button>
+                    </div>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </a-card>
+          </a-form>
+          <a-row type="flex" justify="space-between" align="middle" style="margin-bottom: 8px">
+            <a-col>
+              <a-space>
+                <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+              </a-space>
+            </a-col>
+            <a-col>
+              <a-popover placement="left">
+                <template slot="content">
+                  <div v-dompurify-html="content" style="width: 400px"></div>
+                </template>
+                <a-icon type="question-circle" style="font-size: 16px" />
+              </a-popover>
+            </a-col>
+          </a-row>
+          <a-table
+            ref="table"
+            :scroll="{ x: true, y: windowHeight - 370 }"
+            class="table-fill"
+            size="small"
+            rowKey="serviceId"
+            :columns="columns"
+            :dataSource="showTable['dataList' + parentItem.key]"
+            :pagination="false"
+          ></a-table>
+        </a-tab-pane>
+      </a-tabs>
+      <general-export ref="generalExport" />
+    </a-spin>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      filterTreeOption (input, treeNode) {
+        return treeNode.data.props.title.includes(input)
+      },
+      loading: false,
+      // 搜索栏显示参数
+      showObj: {
+        sessionTimeday: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+        sessionTimetime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+        sessionTimemonth: [this.moment().startOf('month'), this.moment().startOf('month')]
+      },
+      // 表格数据对象
+      showTable: {},
+      showApi: {
+        dayIs: false,
+        monthIs: false,
+        timeIs: false
+      },
+      windowHeight: document.documentElement.clientHeight,
+      treeData: [],
+      sessionTime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+      openMonth: false,
+      modeMonth: ['month', 'month'],
+      currentTab: 'day',
+      tabList: [{
+        title: this.$t('客服响应-按天'),
+        key: 'day'
+      }, {
+        title: this.$t('客服响应-按月'),
+        key: 'month'
+      }],
+      content: `${this.$t('会话量：访客被客服接起的数量。')}<br />
+                ${this.$t('日均会话量：会话量/查询天数。')}<br />
+                ${this.$t('平均会话时长：总会话时长/总会话量。')}<br />
+                ${this.$t('访客平均排队时长：总排队时长/总会话量（排队时长为访客开始排队到访客被客服接起的时间间隔）。')}<br />
+                ${this.$t('平均首次响应时长：首次响应总时长/总会话量（排除没有产生首次响应的会话）。首次响应时长：访客被客服接起，访客发送首条消息后，客服第一次回复的时间间隔。')}<br />
+                ${this.$t('首次响应合格率：首次响应时长≤统计设置下{首次响应合格时长}的会话量/总会话量（排除没有产生首次响应的会话）。')}<br />
+                ${this.$t('平均响应时长：所有会话轮次下（排除没有产生首次响应的会话），访客发言到客服回复的时间间隔的平均值。 平均响应合格率：平均响应时长≤统计设置下{平均响应合格时长}的会话量/总会话量（排除没有产生首次响应的会话）。')}<br />
+                ${this.$t('超时响应轮次：客服响应时长＞统计设置下{超时响应时长}的轮次总和。')}<br />
+                ${this.$t('超长会话量：会话时长＞统计设置下{超长会话时长}的会话量。')}`,
+      advanced: false,
+      queryParam: {
+        sortField: 'serviceId',
+        sortOrder: 'ascend',
+        startTime: this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        endTime: this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      },
+      columns: [{
+        title: '#',
+        width: 40,
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('客服名称'),
+        dataIndex: 'serviceName',
+        width: 200,
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.serviceName.length - b.serviceName.length,
+        customRender: (text, record) => {
+          if (text !== this.$t('合计')) {
+            return `${record.serviceId}(${text})`
+          } else {
+            return text
+          }
+        }
+      }, {
+        title: this.$t('会话量'),
+        width: 80,
+        dataIndex: 'conversationNumber',
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.conversationNumber - b.conversationNumber
+      }, {
+        title: this.$t('日均会话量'),
+        width: 120,
+        dataIndex: 'dayConversationNumber',
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.dayConversationNumber - b.dayConversationNumber
+      }, {
+        title: this.$t('平均会话时长'),
+        dataIndex: 'avgConversationTime',
+        width: 120,
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.avgConversationTime - b.avgConversationTime,
+        customRender: (text) => {
+          let sec = parseInt(text)
+          let min = 0
+          let hour = 0
+          if (sec > 59) {
+            min = parseInt(sec / 60)
+            sec = parseInt(sec % 60)
+            if (min > 59) {
+              hour = parseInt(min / 60)
+              min = parseInt(min % 60)
+            }
+          }
+          const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+          return result
+        }
+      }, {
+        title: this.$t('访客平均排队时长(秒)'),
+        dataIndex: 'queueTime',
+        width: 150,
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.queueTime - b.queueTime
+      }, {
+        title: this.$t('平均首次响应时长(秒)'),
+        dataIndex: 'firstReplyTime',
+        width: 150,
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.firstReplyTime - b.firstReplyTime
+      }, {
+        title: this.$t('首次响应合格率'),
+        dataIndex: 'firstReplyTimeQualifiedRate',
+        width: 120,
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : Number(a.firstReplyTimeQualifiedRate.substring(0, a.firstReplyTimeQualifiedRate.indexOf('.') + 3)) - Number(b.firstReplyTimeQualifiedRate.substring(0, b.firstReplyTimeQualifiedRate.indexOf('.') + 3))
+      }, {
+        title: this.$t('平均响应时长(秒)'),
+        dataIndex: 'avgReplyTime',
+        width: 120,
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.avgReplyTime - b.avgReplyTime
+      }, {
+        title: this.$t('平均响应合格率'),
+        width: 120,
+        dataIndex: 'avgReplyTimeQualifiedRate',
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : Number(a.avgReplyTimeQualifiedRate.substring(0, a.avgReplyTimeQualifiedRate.indexOf('.') + 3)) - Number(b.avgReplyTimeQualifiedRate.substring(0, b.avgReplyTimeQualifiedRate.indexOf('.') + 3))
+      }, {
+        title: this.$t('超时响应轮次'),
+        width: 120,
+        dataIndex: 'timeOutReply',
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.timeOutReply - b.timeOutReply
+      }, {
+        title: this.$t('超长会话量'),
+        width: 120,
+        dataIndex: 'longConversation',
+        sorter: (a, b) => a.serviceName === this.$t('合计') ? 0 : a.longConversation - b.longConversation
+      }],
+      sorter: { field: 'serviceId', order: 'ascend' },
+      params: {},
+      disabledCurrent: null
+    }
+  },
+  mounted () {
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+    const strArr = ['day', 'month']
+    strArr.forEach(element => {
+      this.$set(this.showObj, ['responseTime' + element], 30)
+      this.$set(this.showObj, ['replyTime' + element], 30)
+      this.$set(this.showObj, ['serviceId' + element], undefined)
+    })
+    this.axios({
+      url: '/chat/group/getAllGroup'
+    }).then(res => {
+      const getTreeData = (array, parent) => {
+        array.forEach(item => {
+          if (item.children && item.children.length) {
+            getTreeData(item.children, item)
+          } else if (!item.distributionMode) {
+            item.nickName = `${item.serviceId}(${item.nickName})`
+            item.serviceId = `${item.serviceId}-${parent?.['serviceId'] || ''}`
+          } else {
+            item.disabled = true
+          }
+        })
+      }
+      getTreeData(res.result.data)
+      this.treeData = res.result.data
+    })
+    this.getDataList()
+  },
+  methods: {
+    getDataList () {
+      this.queryParam.tab = this.currentTab === 'day' ? 'day' : this.currentTab === 'month' ? 'month' : ''
+      this.queryParam.responseTime = this.showObj['responseTime' + this.currentTab]
+      this.queryParam.replyTime = this.showObj['replyTime' + this.currentTab]
+      this.queryParam.serviceId = this.showObj['serviceId' + this.currentTab]
+      this.loading = true
+      const params = this.queryParam
+      if (params.serviceId) {
+        params.serviceId = this.queryParam.serviceId.map(item => {
+          return item.split('-')[0]
+        })
+      }
+      this.axios({
+        url: '/chat/customerReport/serviceResponseInit',
+        data: this.queryParam
+      }).then(res => {
+        this.loading = false
+        if (res.code !== 0) {
+          this.$message.error(res.message)
+          return
+        }
+        this.showTable['dataList' + this.currentTab] = res.result.data
+        if (res.result?.total) {
+          const obj = { ...res.result.total, ...{ serviceId: parseInt(Math.random() * (10000000 - 100000 + 1) + 100000, 10), serviceName: this.$t('合计') } }
+          this.showTable['dataList' + this.currentTab].push(obj)
+        }
+        this.$forceUpdate()
+      })
+    },
+    handleTabChange (activeKey) {
+      this.currentTab = activeKey
+      this.queryParam.tab = activeKey
+      this.columns[3].title = activeKey === 'day' ? this.$t('日均会话量') : this.$t('月均会话量')
+      this.queryParam.startTime = this.showObj['sessionTime' + this.currentTab][0].format('YYYY-MM-DD')
+      this.queryParam.endTime = this.showObj['sessionTime' + this.currentTab][1].format('YYYY-MM-DD')
+      if (activeKey === 'month' && !this.showApi.monthIs) {
+        this.getDataList()
+        this.showApi.monthIs = true
+      }
+    },
+    // 重置
+    reset () {
+      this.showObj['responseTime' + this.currentTab] = 30
+      this.showObj['replyTime' + this.currentTab] = 30
+      this.showObj['serviceId' + this.currentTab] = undefined
+      const startDayTime = this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      const startMonth = this.moment().startOf('month').format('YYYY-MM-DD')
+      const endDayTime = this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      this.queryParam = {
+        startTime: ['day'].includes(this.currentTab) ? startDayTime : startMonth,
+        endTime: ['day'].includes(this.currentTab) ? endDayTime : startMonth,
+        tab: this.currentTab
+      }
+      const day = [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)]
+      const month = [this.moment().startOf('month'), this.moment().startOf('month')]
+      this.showObj['sessionTime' + this.currentTab] = ['day'].includes(this.currentTab) ? day : this.currentTab === 'month' ? month : ''
+      this.getDataList()
+    },
+    onOpenChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+    },
+    onCalendarChange (dates) {
+      // 获取手动选择的时间段起始值
+      this.disabledCurrent = dates[0]
+    },
+    disabledDate (current, date) {
+      if (!this.disabledCurrent) return false
+      return (current && current < this.moment(this.disabledCurrent).subtract(31, 'days').endOf('day')) || current > this.moment(this.disabledCurrent).add(30, 'days').endOf('day')
+    },
+    getInputTime (date, dateString) {
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    // 控制月份中改变的设置
+    openMonthChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+      this.openMonth = status
+    },
+    handlePanelChange (value, mode) {
+      const chooseTime = value
+      this.modeMonth = [
+        mode[0] === 'date' ? 'month' : mode[0],
+        mode[1] === 'date' ? 'month' : mode[1]
+      ]
+      if (mode[0] === 'date') {
+        this.disabledCurrent = value[0]
+      } else {
+        this.disabledCurrent = null
+      }
+      if (mode[1] === 'date') {
+        this.openMonth = false
+        const time = value[1].diff(value[0], 'month')
+        if (time > 11) {
+          chooseTime[0] = this.moment(value[1]).subtract(11, 'M').startOf('day')
+        }
+      }
+      this.queryParam.startTime = chooseTime[0].format('YYYY-MM-DD')
+      this.queryParam.endTime = chooseTime[1].format('YYYY-MM-DD')
+      this.showObj['sessionTime' + this.currentTab] = chooseTime
+    },
+    handleExport () {
+      const params = this.queryParam
+      if (params.serviceId) {
+        params.serviceId = this.queryParam.serviceId.map(item => {
+          return item.split('-')[0]
+        })
+      }
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        number: 'SysServiceResponse',
+        className: 'ExportChatStatsTask',
+        parameter: {
+          condition: {
+            req: params,
+            type: 'serviceResponse'
+          }
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,158 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('按钮名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'name',
+              { rules: [{ required: true, message: $t('请输入按钮名称') }], initialValue: data.name }
+            ]"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :label="$t('按钮类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="['buttonType', { rules: [{ required: true }], initialValue: data.buttonType + '' }]"
+            disabled
+          >
+            <a-select-option value="1">{{ $t('系统默认') }}</a-select-option>
+            <a-select-option value="0">{{ $t('自定义') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('按钮位置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'position',
+              { rules: [{ required: true, message: $t('请选择显示方案') }], initialValue: data.position || 'bar' }
+            ]"
+            :disabled="data.buttonType === '1'"
+          >
+            <a-select-option value="bar">{{ $t('工具栏') }}</a-select-option>
+            <a-select-option value="line">{{ $t('行操作') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('是否显示')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'visible',
+              { rules: [{ required: true, message: $t('请选择显示方案') }], initialValue: data.visible ? '1' : '0' }
+            ]"
+          >
+            <a-select-option value="1">{{ $t('是') }}</a-select-option>
+            <a-select-option value="0">{{ $t('否') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('附加设置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'settingType',
+              { rules: [{ required: true, message: $t('请选择附加设置') }], initialValue: data.settingType || 'no' }
+            ]"
+          >
+            <a-select-option value="no">{{ $t('无') }}</a-select-option>
+            <a-select-option value="import">{{ $t('导入模板') }}</a-select-option>
+            <a-select-option value="export">{{ $t('导出模板') }}</a-select-option>
+            <a-select-option value="web_sub_data_window">{{ $t('开窗选择') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('按钮样式')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'style',
+              { rules: [{ required: true, message: $t('请选择按钮样式') }], initialValue: data.style }
+            ]"
+            :placeholder="$t('请选择按钮样式')"
+          >
+            <a-select-option value="primary">Primary</a-select-option>
+            <a-select-option value="default">Default</a-select-option>
+            <a-select-option value="dashed">Dashed</a-select-option>
+            <a-select-option value="danger">Danger</a-select-option>
+            <a-select-option value="link">Link</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('附加属性')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-button size="small" @click="codeEditor">
+            <a-badge v-if="data.attribute" status="success" :text="$t('设置')" />
+            <a-badge v-else status="default" :text="$t('设置')" />
+          </a-button>
+        </a-form-item>
+      </a-form>
+      <code-editor ref="codeEditor" :key="codeKey" @func="getCode" />
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    CodeEditor: () => import('@/views/admin/CodeEditor'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  props: {
+    myBarMenus: {
+      type: Array,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      data: {},
+      codeKey: 'codeKey'
+    }
+  },
+  methods: {
+    show (config, data) {
+      this.visible = true
+      this.config = config
+      this.data = config.record
+      this.recordIndex = config.index
+      this.form.resetFields()
+    },
+    codeEditor () {
+      this.codeKey = this.codeKey === 'codeKey' ? 'codeKey_1' : 'codeKey'
+      this.$nextTick(() => {
+        this.$refs.codeEditor.show({
+          value: this.data.attribute || ''
+        }, 'toolForm')
+      })
+    },
+    getCode (value) {
+      this.data.attribute = value
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          values = Object.assign(this.data, values)
+          values.visible = values.visible === '1'
+          if (this.config.action === 'add') {
+            values.usePermissions = null
+            values.usage = values.usage ? values.usage : 'customer_' + new Date().valueOf()
+            this.myBarMenus.push(values)
+          } else {
+            this.$set(this.myBarMenus, this.recordIndex, values)
+          }
+          this.visible = false
+          this.$message.success(this.$t('操作成功'))
+          this.$emit('ok')
+        }
+      })
+    }
+  }
+}
+</script>

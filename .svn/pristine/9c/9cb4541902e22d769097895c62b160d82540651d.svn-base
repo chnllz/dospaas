@@ -1,0 +1,277 @@
+<template>
+  <a-spin :spinning="loading">
+    <div>
+      <a-form layout="inline" style="display: flex; align-item: center">
+        <a-form-item :label="$t('关键字')">
+          <a-input v-model="queryParam.key" :placeholder="$t('请输入系统名称或显示名称')" />
+        </a-form-item>
+        <a-space>
+          <a-button htmlType="submit" type="primary" @click="loadDataTable()">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = { dictCategoryNumber: config.record.dictCategoryNumber }
+                loadDataTable()
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button v-action:add type="primary" icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+          <a-button v-action:sort icon="sort-ascending" @click="handleSort()">{{ $t('排序') }}</a-button>
+        </a-space>
+      </a-form>
+      <a-table
+        ref="table"
+        size="small"
+        rowKey="id"
+        :columns="config.record && config.record.dictMode == 0 ? columns : columnsTree"
+        :dataSource="tableData"
+        :pagination="false"
+        :expandIconColumnIndex="3"
+        :sorter="sorter"
+      >
+        <span slot="name" slot-scope="text, record">
+          {{ text + (record.subCount > 0 ? '(' + record.subCount + ')' : '') }}
+        </span>
+        <span slot="status" slot-scope="text">
+          <a-badge v-if="text == '1'" status="success" :text="$t('启用')" />
+          <a-badge v-else status="error" :text="$t('禁用')" />
+        </span>
+        <div v-if="config.record.dictMode == 1" slot="action" slot-scope="text, record">
+          <a @click="handleSonAdd(record)">{{ $t('添加') }}</a>
+          <a-divider type="vertical" />
+          <a :disabled="!record.children" @click="handleSort(record)">{{ $t('排序') }}</a>
+          <a-divider type="vertical" />
+          <a
+            :disabled="disabledList.includes(record.dictDataNumber) || record.accessLevel === 2"
+            @click="handleEdit(record)"
+          >
+            {{ $t('编辑') }}
+          </a>
+          <a-divider type="vertical" />
+          <a
+            :disabled="disabledList.includes(record.dictDataNumber) || !$auth('delete') || !!record.accessLevel"
+            @click="handleDelete(record)"
+          >
+            {{ $t('删除') }}
+          </a>
+        </div>
+        <div v-else slot="action" slot-scope="text, record">
+          <a
+            :disabled="disabledList.includes(record.dictDataNumber) || record.accessLevel === 2"
+            @click="handleEdit(record)"
+          >
+            {{ $t('编辑') }}
+          </a>
+          <a-divider type="vertical" />
+          <a
+            :disabled="disabledList.includes(record.dictDataNumber) || !$auth('delete') || !!record.accessLevel"
+            @click="handleDelete(record)"
+          >
+            {{ $t('删除') }}
+          </a>
+        </div>
+      </a-table>
+      <dict-form ref="dictForm" @ok="loadDataTable" />
+      <dict-import ref="dictImport" @ok="loadDataTable" />
+      <drag-sort ref="dragSort" @ok="loadDataTable" />
+    </div>
+  </a-spin>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    DictForm: () => import('./DictForm'),
+    DictImport: () => import('./DictImport'),
+    DragSort: () => import('@/views/admin/Common/DragSort')
+  },
+  props: {
+    config: {
+      type: Object,
+      default: () => { }
+    },
+    // 禁止编辑数据字典系统名称集合
+    disabledList: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      loading: false,
+      // 搜索参数
+      queryParam: {},
+      tableData: [],
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 80
+      }, {
+        title: this.$t('排序'),
+        dataIndex: 'listOrder',
+        sorter: true,
+        width: 80
+      }, {
+        title: this.$t('系统名称'),
+        dataIndex: 'dictDataNumber'
+      }, {
+        title: this.$t('显示名称'),
+        dataIndex: 'dictDataName',
+        scopedSlots: { customRender: 'name' }
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'status',
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks',
+        customRender: (text) => {
+          return text || '--'
+        }
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 150
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 150
+      }],
+      columnsTree: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 200,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60
+      }, {
+        title: this.$t('排序'),
+        dataIndex: 'listOrder',
+        sorter: true,
+        width: 80
+      }, {
+        title: this.$t('显示名称'),
+        dataIndex: 'dictDataName',
+        scopedSlots: { customRender: 'name' }
+      }, {
+        title: this.$t('系统名称'),
+        dataIndex: 'dictDataNumber',
+        width: 120
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'status',
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks',
+        customRender: (text) => {
+          return text || '--'
+        }
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 100
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 150
+      }],
+      sorter: { sortField: 'listOrder', sortOrder: 'ascend' }
+    }
+  },
+  mounted () {
+    this.show()
+  },
+  methods: {
+    // 打开抽屉组件
+    show () {
+      this.tableData = []
+      this.queryParam.dictCategoryNumber = this.config.record.dictCategoryNumber
+      this.loadDataTable()
+    },
+    loadDataTable () {
+      this.loading = true
+      this.axios({
+        url: '/admin/dict/initData',
+        data: Object.assign(this.queryParam)
+      }).then(res => {
+        this.tableData = res.result
+        this.loading = false
+      })
+    },
+    handleAdd () {
+      // runmber 为字典编号
+      this.$refs.dictForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        url: '/admin/dict/addData',
+        dictCategoryNumber: this.config.record.dictCategoryNumber,
+        parentDictDataNumber: this.config.record.dictDataNumber,
+        record: { dictMode: this.config.record.dictMode, dictCategoryNumber: this.config.record.dictCategoryNumber || this.config.number }
+      })
+    },
+    handleSonAdd (record) {
+      this.$refs.dictForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        url: '/admin/dict/addData',
+        type: 'son',
+        dictCategoryNumber: this.config.record.dictCategoryNumber,
+        parentDictDataNumber: record.dictDataNumber,
+        record: Object.assign(record, { dictCategoryNumber: this.config.record.dictCategoryNumber })
+      })
+    },
+    handleEdit (record) {
+      this.$refs.dictForm.show({
+        action: 'edit',
+        title: record.dictDataName,
+        url: '/admin/dict/editData',
+        type: 'son',
+        dictCategoryNumber: this.config.record.dictCategoryNumber,
+        record: Object.assign(record, { dictCategoryNumber: this.config.record.dictCategoryNumber })
+      })
+    },
+    handleDelete (record) {
+      const self = this
+      this.$confirm({
+        title: this.$t('您确认要删除该字典及其子字典吗？'),
+        onOk () {
+          self.axios({
+            url: '/admin/dict/deleteData',
+            data: { id: record.id }
+          }).then(res => {
+            self.loadDataTable()
+          })
+        }
+      })
+    },
+    // 排序
+    handleSort (record) {
+      const where = `dictCategoryNumber = '${this.config.record.dictCategoryNumber}' and `
+      let where2 = ''
+      if (record) {
+        where2 = `parentDictDataNumber = '${record.dictDataNumber}'`
+      } else {
+        where2 = 'parentDictDataNumber is null'
+      }
+      this.$refs.dragSort.show({
+        tableName: 'admin_dict_data',
+        sortName: 'dictDataName',
+        where: where + where2
+      })
+    }
+  }
+}
+</script>

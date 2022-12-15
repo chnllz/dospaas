@@ -1,0 +1,1309 @@
+<template>
+  <div class="wrap" @keydown.32="spaceStop">
+    <div class="content">
+      <!--左侧工具栏-->
+      <div>
+        <div class="workFlowName" style="-webkit-box-shadow: 2px 0 2px rgba(0, 21, 41, 35%)">
+          {{ $t('流程') }}：{{ workflowName }}
+        </div>
+        <div id="flowStencil" class="sider" style="-webkit-box-shadow: 2px 0 2px rgba(0, 21, 41, 35%); box-shadow: 0" />
+      </div>
+      <div class="panel">
+        <!--流程图工具栏-->
+        <div class="toolbar">
+          <tool-bar
+            ref="toolBar"
+            :cell="allCell"
+            :workflow="workflowData"
+            @btnAlignCenter="handle"
+            @clean="handleClean"
+            @inputJson="showInputJson"
+          />
+        </div>
+        <!--流程图画板-->
+        <div id="flowContainer" class="x6-graph" />
+      </div>
+      <div
+        id="minimapContainer"
+        class="x6-graph"
+        style="
+          position: fixed;
+          width: 200px;
+          height: 100px;
+          bottom: 44px;
+          right: 50px;
+          box-shadow: rgba(51, 51, 51, 20%) 0px 0px 6px 4px;
+        "
+      ></div>
+      <div>
+        <ul v-show="rightShow" id="right" class="menu-pane" style="box-shadow: 0 0 6px rgba(51, 51, 51, 20%)">
+          <li v-show="rightCopy" class="menu-item" @click="copy">{{ $t('复制') }}</li>
+          <li v-show="rightMultiplex" class="menu-item" @click="multiplex">{{ $t('复用') }}</li>
+          <li v-show="rightPaste" class="menu-item" @click="paste">{{ $t('粘贴') }}</li>
+          <li v-show="rightRemove" class="menu-item" @click="del">{{ $t('删除') }}</li>
+        </ul>
+      </div>
+    </div>
+
+    <flow-attr
+      ref="flowAttr"
+      :workflowId="workflowId"
+      :flowData="flowData"
+      :select="currentSelect"
+      @ok="editCurrentSelect"
+      @close="onCloseFlow"
+    ></flow-attr>
+  </div>
+</template>
+
+<script>
+import './index.less'
+import FlowGraph from './graph'
+import ToolBar from './components/ToolBar/index.vue'
+import { FunctionExt, Graph } from '@antv/x6'
+import insertCss from 'insert-css'
+insertCss(`
+  @keyframes ant-line {
+    to {
+        stroke-dashoffset: -1000
+    }
+  }
+`)
+
+export default {
+  name: 'Index',
+  i18n: window.lang('admin'),
+  components: {
+    ToolBar,
+    FlowAttr: () => import('./modules/FlowAttr')
+  },
+  data () {
+    return {
+      editCell: false,
+      shortcutEnabled: true,
+      centerFor: undefined,
+      close: false,
+      // 删除
+      rightRemove: false,
+      // 右击表單
+      rightShow: false,
+      // 复制
+      rightCopy: false,
+      // 粘贴
+      rightPaste: false,
+      pasterX: '',
+      pasterY: '',
+      cells: {},
+      node: {},
+      nodeId: '',
+      existEdge: [],
+      checkNode: false,
+      // 选中的节点id
+      selectNodeId: '',
+      mouseenterCell: [],
+      mouseenterList: [],
+      portsShow: {},
+      workflowName: '',
+      workflowId: '',
+      currentSelect: {},
+      flowData: {
+        nodeList: [],
+        linkList: [],
+        attr: {
+          id: ''
+        },
+        config: {
+          showGrid: true,
+          showGridText: this.$t('隐藏网格'),
+          showGridIcon: 'eye'
+        },
+        remarks: '',
+        params: {}
+      },
+      loadData1: {},
+      x: '',
+      y: '',
+      allCell: {
+        cells: []
+      },
+      oldCells: [],
+      newCells: [],
+      workflowData: {},
+      delCell: {},
+      pasteNodeId: [],
+      multiplexNodeId: [],
+      multiplexNode: false,
+      rightMultiplex: false,
+      someKey: 1,
+      pasteOtherNum: 0,
+      hoverCell: {},
+      copyCell: {}
+    }
+  },
+  mounted () {
+    this.initGraph()
+    // 添加监听取消右键菜单
+    document.addEventListener('click', this.handleRemoveRightMenu, true)
+    document.addEventListener('contextmenu', this.handleRemoveRightMenu, true)
+  },
+  methods: {
+    onCloseFlow () {
+      this.shortcutEnabled = true
+    },
+    // 导入JSON数据生成
+    showInputJson (value, dataCell) {
+      if (value) {
+        this.allCell.cells = []
+        this.oldCells = []
+        this.newCells = []
+        this.mouseenterCell = []
+        // this.pasteNodeId = []
+        this.$setLoading({ spinning: true, tip: this.$t('流程图加载中，请稍候……'), size: 'large' })
+        const { graph } = FlowGraph
+        this.$nextTick(() => {
+          graph.fromJSON({ cells: dataCell.cells })
+          this.$message.success(this.$t('操作成功'))
+          this.allCell = dataCell
+          this.$setLoading(false)
+        })
+      }
+    },
+    getData () {
+      this.$setLoading({ spinning: true, tip: this.$t('流程图加载中，请稍候……'), size: 'large' })
+      this.axios({
+        url: '/admin/workflow/generate',
+        data: { workflowId: this.$route.query.workflowId, action: 'get' }
+      }).then(res => {
+        this.workflowData = res.result.data
+        this.workflowName = res.result.data.workflowName
+        this.workflowId = res.result.data.workflowId
+        this.flowData.params = res.result.data
+        const { graph } = FlowGraph
+        if (res.result.data.flow) {
+          const loadData = JSON.parse(res.result.data.flow)
+          this.loadData1 = JSON.parse(res.result.data.flow)
+          let cells = []
+          let cells1 = []
+          cells = loadData.cells
+          for (let i = 0; i < cells.length; i++) {
+            if (cells[i].shape === 'edge') {
+              this.flowData.linkList.push(cells[i])
+            } else {
+              this.flowData.nodeList.push(cells[i])
+            }
+          }
+          graph.fromJSON({ cells: cells })
+
+          cells1 = cells.map(item => {
+            if (item.shape !== 'edge') {
+              const obj = graph.history.model.collection['cells'].find(cellItem => cellItem.id === item.id)
+              const cell = item
+              cell.ports.items = [{
+                group: 'top',
+                id: obj.port.ports[0].id,
+                zIndex: 999
+              }, {
+                group: 'right',
+                id: obj.port.ports[1].id,
+                zIndex: 999
+              }, {
+                group: 'bottom',
+                id: obj.port.ports[2].id,
+                zIndex: 999
+              }, {
+                group: 'left',
+                id: obj.port.ports[3].id,
+                zIndex: 999
+              }]
+
+              if (item.shape !== 'flow-chart-gateway') {
+                item.ports.groups = {
+                  top: { position: { name: 'top', args: { dx: 0 } } },
+                  right: { position: { name: 'right', args: { dy: 0 } } },
+                  bottom: { position: { name: 'bottom', args: { dx: 0 } } },
+                  left: { position: { name: 'left', args: { dy: 0 } } }
+                }
+              } else {
+                item.angle = 45
+              }
+              return cell
+            }
+          }).filter(boolItem => boolItem)
+          graph.model.collection.cells.forEach(it => {
+            if (it.shape === 'edge') {
+              const obj = {
+                id: it.id,
+                shape: 'edge',
+                type: 'link',
+                data: JSON.stringify(it),
+                attrs: { line: { stroke: '#1890FF', strokeWidth: 2, targetMarker: { name: 'classic', size: 8 } } },
+                connector: { name: 'rounded', args: { radius: 8 } },
+                zIndex: 0,
+                source: { cell: it.source.cell, port: it.source.port },
+                target: { cell: it.target.cell, port: it.target.port },
+                markUp: [],
+                router: {
+                  name: 'er',
+                  args: {
+                    offset: 'center',
+                    min: 30
+                  }
+                }
+              }
+              cells1.push(obj)
+            }
+          })
+          this.$nextTick(() => {
+            graph.fromJSON({ cells: cells1 })
+            graph.model.collection.cells.forEach(it => {
+              const data = it.store.data.shape === 'edge' && it.store.data.data ? JSON.parse(it.store.data.data) : {}
+              // 判断是否存在向弧条件设置
+              if (it.store.data.shape === 'edge' && data.data.arcCondition && data.data.arcCondition.simpleCondition && data.data.arcCondition.simpleCondition.length) {
+                this.edgeSetTag(it, 'condition')
+              }
+              // 判断是否存在向弧触发事件
+              if (it.store.data.shape === 'edge' && data.data.arcEvent && data.data.arcEvent.length) {
+                this.edgeSetTag(it, 'event')
+              }
+            })
+          })
+        }
+        const nodeAll = []
+        for (const i in graph.toJSON().cells) {
+          if (graph.toJSON().cells[i].shape !== 'edge') {
+            nodeAll.push(graph.toJSON().cells[i])
+          }
+        }
+        this.oldCells = graph.toJSON().cells
+        this.allCell = graph.toJSON()
+        this.$setLoading(false)
+      })
+    },
+
+    handle (record) {
+      this.centerFor = record
+    },
+    // 修改选中节点/线
+    editCurrentSelect (currentSelect) {
+      const { graph } = FlowGraph
+      // 修改保存的节点/线数据
+      let objCell = {}
+      let objCellSource = []
+      let objCellTarget = []
+      // 修改画布上节点/线的数据
+      let objGraph = {}
+      // 修改复用变迁数据
+      let objMultCell = []
+      let objMultGraph = []
+      // 修改画布上节点/线的数据
+      const len = currentSelect.id.length
+      objGraph = graph.model.collection.cells.find(cellItem => cellItem.id.includes(currentSelect.id.substring(len - 36, len)))
+      objGraph.data = currentSelect
+      if (objGraph.shape !== 'edge') {
+        objGraph.data.id = currentSelect.gid
+        objGraph.attr('text/textWrap/text', currentSelect.nodeName)
+      }
+      // 修改复用变迁的原变迁id
+      objMultGraph = graph.model.collection.cells.filter(cellItem => cellItem.data.quoteId && cellItem.data.quoteId.includes(currentSelect.id.substring(len - 36, len)))
+      if (objMultGraph.length > 0) {
+        objMultGraph.forEach(item => {
+          item.data.quoteId = currentSelect.gid
+          item.data.nodeName = currentSelect.nodeName
+          item.attr('text/textWrap/text', currentSelect.nodeName)
+        })
+      }
+      // 修改保存节点/线的数据
+      objCell = this.allCell.cells.find(cellItem => currentSelect.id.includes(cellItem.id.substring(len - 36, len)))
+      objCell.data = currentSelect
+      if (objCell.type !== 'link') {
+        objCell.data.id = currentSelect.gid
+        objCell.id = currentSelect.gid
+        objCell.type = currentSelect.type
+        objCell.attrs.text.textWrap.text = currentSelect.nodeName
+      }
+      // 修改线连接上的id（网关、变迁）
+      // 源
+      objCellSource = this.allCell.cells.filter(cellItem => currentSelect.type !== 'link' && cellItem.type === 'link' && currentSelect.id.includes(cellItem.source.cell.substring(len - 36, len)))
+      if (objCellSource.length > 0) {
+        objCellSource.forEach(item => { item.source.cell = currentSelect.gid })
+      }
+      // 目标
+      objCellTarget = this.allCell.cells.filter(cellItem => currentSelect.type !== 'link' && cellItem.type === 'link' && currentSelect.id.includes(cellItem.target.cell.substring(len - 36, len)))
+      if (objCellTarget.length > 0) {
+        objCellTarget.forEach(item => {
+          item.target.cell = currentSelect.gid
+        })
+      }
+      // 修改复用变迁的原变迁id
+      objMultCell = this.allCell.cells.filter(cellItem => cellItem.data.type === 'quote_transition' && cellItem.data.quoteId && cellItem.data.quoteId.includes(currentSelect.id.substring(len - 36, len)))
+      if (objMultCell.length > 0) {
+        objMultCell.forEach(item => {
+          item.data.quoteId = currentSelect.gid
+          item.data.nodeName = currentSelect.nodeName
+          item.attrs.text.textWrap.text = currentSelect.nodeName
+        })
+      }
+      graph.model.collection.cells.forEach(it => {
+        if (it.shape === 'edge' && it.id.includes(currentSelect.gid)) {
+          it.data = JSON.stringify(currentSelect)
+          it.removeTools()
+          it.attr('line', { stroke: '#13c2c2', strokeWidth: 4 })
+          it.addTools([{ name: 'circleSource' }, { name: 'circleTarget' }])
+          if (currentSelect.arcCondition && currentSelect.arcCondition.simpleCondition && currentSelect.arcCondition.simpleCondition.length) {
+            this.edgeSetTag(it, 'condition')
+          }
+          if (currentSelect.arcEvent && currentSelect.arcEvent.length) {
+            this.edgeSetTag(it, 'event')
+          }
+        }
+      })
+    },
+    // 设置事件以及条件标签
+    edgeSetTag (edge, type) {
+      if (type === 'event') {
+        edge.addTools({
+          name: 'button',
+          args: {
+            x: '100%',
+            y: '100%',
+            markup: [
+              {
+                tagName: 'rect',
+                selector: 'button',
+                attrs: {
+                  width: 40,
+                  height: 20,
+                  x: -20,
+                  y: -10,
+                  stroke: '#9254de',
+                  'stroke-width': 1,
+                  fill: 'white',
+                  cursor: 'pointer'
+                }
+              },
+              {
+                tagName: 'text',
+                textContent: '事件',
+                selector: 'icon',
+                attrs: {
+                  fill: '#9254de',
+                  'font-size': 12,
+                  'text-anchor': 'middle',
+                  'pointer-events': 'none',
+                  y: '0.3em'
+                }
+              }
+            ],
+            distance: '40%'
+          }
+        })
+      } else {
+        edge.addTools({
+          name: 'button',
+          args: {
+            x: '100%',
+            y: '100%',
+            markup: [
+              {
+                tagName: 'rect',
+                selector: 'button',
+                attrs: {
+                  width: 40,
+                  height: 20,
+                  x: -20,
+                  y: -10,
+                  stroke: '#fe854f',
+                  'stroke-width': 1,
+                  fill: 'white',
+                  cursor: 'pointer'
+                }
+              },
+              {
+                tagName: 'text',
+                textContent: '条件',
+                selector: 'icon',
+                attrs: {
+                  fill: '#fe854f',
+                  'font-size': 12,
+                  'text-anchor': 'middle',
+                  'pointer-events': 'none',
+                  y: '0.3em'
+                }
+              }
+            ],
+            distance: '60%'
+          }
+        })
+      }
+    },
+    // 重命名事件
+    rename () {
+      const cell = this.cells.cell
+      const view = this.cells.view
+      const oldText = cell.attr('text/textWrap/text')
+      const elem = view.container.querySelector('.x6-edit-text')
+      if (elem == null) { return }
+      cell.attr('text/style/display', 'none')
+      if (elem) {
+        elem.style.display = ''
+        elem.style.marginLeft = 25
+        elem.contentEditable = 'true'
+        elem.innerText = oldText
+        elem.focus()
+      }
+      const onBlur = () => {
+        cell.attr('text/textWrap/text', elem.innerText)
+        cell.attr('text/style/display', '')
+        elem.style.display = 'none'
+        elem.contentEditable = 'false'
+      }
+      elem.addEventListener('blur', () => {
+        onBlur()
+        elem.removeEventListener('blur', onBlur)
+      })
+    },
+    // 复制事件
+    copy () {
+      this.copyNode = true
+      this.multiplexNode = false
+      const { graph } = FlowGraph
+      this.rightPaste = true
+      this.copyCell = this.hoverCell
+      graph.copy([this.copyCell])
+      this.$message.success(this.$t('复制成功'))
+    },
+    // 粘贴事件
+    paste () {
+      const { graph } = FlowGraph
+      if (!graph.isClipboardEmpty()) {
+        if (this.copyNode) {
+          this.pasteNodeId = graph.paste({ nodeProps: { x: this.pasterX, y: this.pasterY } })
+          graph.resetSelection(this.pasteNodeId)
+          this.$message.success(this.$t('粘贴成功'))
+          graph.copy([this.copyCell])
+        } else if (this.multiplexNode) {
+          const { graph } = FlowGraph
+          if (!graph.isClipboardEmpty()) {
+            this.multiplexNodeId = graph.paste({ nodeProps: { x: this.pasterX, y: this.pasterY } })
+            const obj = this.allCell.cells.find(item => item.id.search(this.copyCell.id) !== -1)
+            const objNew = graph.model.collection.cells.find(item => this.copyCell.id.search(item.id) !== -1)
+            const data = {
+              type: 'quote_transition',
+              nodeName: this.copyCell.attrs.text.textWrap.text,
+              quoteId: obj.id,
+              id: 'quote_transition' + '-' + this.multiplexNodeId[0].id
+            }
+            const attrs = this.multiplexNodeId[0].attrs
+            attrs.text.textWrap.text = objNew.attrs.text.textWrap.text
+            attrs.body.fill = '#D9D9D9'
+            attrs.body.stroke = '#8C8C8C'
+            const nodeMul = {
+              attrs: attrs,
+              data: data,
+              id: 'quote_transition' + '-' + this.multiplexNodeId[0].id,
+              ports: this.multiplexNodeId[0].ports,
+              position: this.multiplexNodeId[0].store.data.position,
+              shape: this.multiplexNodeId[0].shape,
+              type: 'quote_transition',
+              size: this.multiplexNodeId[0].store.data.size,
+              zIndex: this.multiplexNodeId[0].zIndex
+            }
+            this.newCells.push(nodeMul)
+            this.allCell.cells.push(nodeMul)
+            const multiplexNode = graph.model.collection.cells.find(cellItem => this.multiplexNodeId[0].id.search(cellItem.id) !== -1)
+            multiplexNode.attr('text/textWrap/text', objNew.attrs.text.textWrap.text)
+            multiplexNode.attr('body/fill', '#D9D9D9')
+            multiplexNode.attr('body/stroke', '#8C8C8C')
+            multiplexNode.data = data
+            graph.resetSelection(this.multiplexNodeId)
+            graph.copy([this.copyCell])
+            this.$message.success(this.$t('粘贴成功'))
+          }
+        }
+      }
+    },
+    // 复用
+    multiplex () {
+      const { graph } = FlowGraph
+      this.multiplexNode = true
+      this.copyNode = false
+      this.copyCell = this.hoverCell
+      graph.copy([this.copyCell])
+      this.$message.success(this.$t('复用成功'))
+    },
+    // 删除
+    del () {
+      const { graph } = FlowGraph
+      const cells = graph.getSelectedCells()
+      if (cells.length > 1) {
+        // 框选删除
+        for (let i = 0; i < cells.length; i++) {
+          const edges = graph.getConnectedEdges(cells[i].id, { incoming: true, outgoing: true })
+          this.oldCells = this.oldCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+          this.newCells = this.newCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+          this.allCell.cells = this.allCell.cells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+        }
+        this.oldCells = this.oldCells.filter(item => !cells.find(oldItem => item.id.includes(oldItem.id)))
+        this.newCells = this.newCells.filter(item => !cells.find(newItem => item.id.includes(newItem.id)))
+        this.allCell.cells = this.allCell.cells.filter(item => !cells.find(newItem => item.id.includes(newItem.id)))
+        graph.cut(cells)
+      } else {
+        const { graph } = FlowGraph
+        if (this.hoverCell.shape === 'edge') {
+          // 删除线
+          this.newCells = this.newCells.filter(item => item.id !== this.hoverCell.id)
+          this.oldCells = this.oldCells.filter(item => item.id !== this.hoverCell.id)
+          this.allCell.cells = this.allCell.cells.filter(item => item.id !== this.hoverCell.id)
+          graph.cut([this.hoverCell])
+          this.$message.success(this.$t('删除成功'))
+        } else {
+          // 删除节点
+          if (this.hoverCell.shape.search('user') !== -1 && !this.hoverCell.data.quoteId) {
+            if (this.allCell.cells.some(item => item.data.quoteId && item.data.quoteId.search(this.hoverCell.id) !== -1)) {
+              const that = this
+              that.$confirm({
+                title: this.$t('删除变迁'),
+                content: h => <div style="color:red;">{this.$t('该变迁下包含复用变迁，此操作会导致复用变迁同时删除，是否继续')}</div>,
+                okText: this.$t('确认'),
+                onOk () {
+                  const p = new Promise((resolve, reject) => {
+                    that.allCell.cells.forEach(item => {
+                      if (item.data.quoteId && item.data.quoteId.search(that.hoverCell.id) !== -1) {
+                        const edges = graph.getConnectedEdges(item.id, { incoming: true, outgoing: true })
+                        that.newCells = that.newCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+                        that.allCell.cells = that.allCell.cells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+                        that.newCells = that.newCells.filter(itemCell => !itemCell.id.includes(item.id))
+                        that.allCell.cells = that.allCell.cells.filter(itemCell => !itemCell.id.includes(item.id))
+                        const obj = graph.model.collection.cells.find(itemCell => item.id.search(itemCell.id) !== -1)
+                        graph.cut([obj])
+                        that.$message.success(this.$t('删除成功'))
+                      }
+                    })
+                    resolve()
+                  })
+                  p.then(() => {
+                    if (that.copyCell.id.search(that.hoverCell.id) !== -1) {
+                      that.rightPaste = false
+                      that.rightCopy = false
+                      that.rightMultiplex = false
+                      that.copyCell = {}
+                    }
+                    const edges = graph.getConnectedEdges(that.hoverCell.id, { incoming: true, outgoing: true })
+                    that.newCells = that.newCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+                    that.newCells = that.newCells.filter(itemCell => !itemCell.id.includes(that.hoverCell.id))
+                    that.allCell.cells = that.allCell.cells.filter(item => !item.id.includes(that.hoverCell.id))
+                    graph.cut([that.hoverCell])
+                    that.$message.success(this.$t('删除成功'))
+                  })
+                },
+                onCancel () { }
+              })
+            } else if (this.allCell.cells.every(item => !item.data.quoteId || (item.data.quoteId && item.data.quoteId.search(this.hoverCell.id) === -1))) {
+              const edges = graph.getConnectedEdges(this.hoverCell.id, { incoming: true, outgoing: true })
+              this.newCells = this.newCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+              this.oldCells = this.oldCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+              this.allCell.cells = this.allCell.cells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+              this.newCells = this.newCells.filter(itemCell => !itemCell.id.includes(this.hoverCell.id))
+              this.oldCells = this.oldCells.filter(itemCell => !itemCell.id.includes(this.hoverCell.id))
+              this.allCell.cells = this.allCell.cells.filter(item => !item.id.includes(this.hoverCell.id))
+              graph.cut([this.hoverCell])
+              this.$message.success(this.$t('删除成功'))
+            }
+          } else {
+            const edges = graph.getConnectedEdges(this.hoverCell.id, { incoming: true, outgoing: true })
+            this.newCells = this.newCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+            this.oldCells = this.oldCells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+            this.allCell.cells = this.allCell.cells.filter(item => !edges.find(edgesItem => item.id.search(edgesItem.id) !== -1))
+            this.newCells = this.newCells.filter(itemCell => !itemCell.id.includes(this.hoverCell.id))
+            this.oldCells = this.oldCells.filter(itemCell => !itemCell.id.includes(this.hoverCell.id))
+            this.allCell.cells = this.allCell.cells.filter(item => !item.id.includes(this.hoverCell.id))
+            graph.cut([this.hoverCell])
+            this.$message.success(this.$t('删除成功'))
+          }
+        }
+      }
+    },
+    // 清空
+    handleClean (value) {
+      if (value) {
+        this.allCell.cells = []
+        this.oldCells = []
+        this.newCells = []
+        this.pasteNodeId = []
+      }
+    },
+    handleRemoveRightMenu () {
+      // 取消右键菜单
+      this.rightShow = false
+    },
+    onClose () {
+      FlowGraph.destroy()
+      // 移除监听
+      document.removeEventListener('click', this.handleRemoveRightMenu, true)
+      document.removeEventListener(
+        'contextmenu',
+        this.handleRemoveRightMenu,
+        true
+      )
+    },
+    getContainerSize () {
+      return {
+        width: document.body.offsetWidth - 290,
+        height: document.body.offsetHeight - 38
+      }
+    },
+    // 移入节点的颜色
+    nodeChangeColor (node) {
+      if (node.shape === 'flow-chart-start') {
+        node.attr('body', { fill: '#f6ffed', stroke: '#b7eb8f', strokeWidth: 1 })
+        node.attr('text', { fill: '#389e0d' })
+      } else if (node.shape === 'flow-chart-end') {
+        node.attr('body', { fill: '#fff1f0', stroke: '#ffa39e', strokeWidth: 1 })
+        node.attr('text', { fill: '#cf1322' })
+      } else {
+        node.attr('body', { fill: '#e6f7ff', stroke: '#91d5ff', strokeWidth: 1 })
+        node.attr('text', { fill: '#096dd9' })
+      }
+    },
+    // 移出节点的颜色
+    nodeBackColor (node) {
+      if (node.shape === 'flow-chart-start') {
+        node.attr('body', { fill: '#52c41a', strokeWidth: 0 })
+        node.attr('text', { fill: '#ffffff' })
+      } else if (node.shape === 'flow-chart-end') {
+        node.attr('body', { fill: '#FF5500', strokeWidth: 0 })
+        node.attr('text', { fill: '#ffffff' })
+      } else {
+        if (node.data.type && node.data.type.search('quote') !== -1) {
+          node.attr('body', { fill: '#D9D9D9', stroke: '#8C8C8C', strokeWidth: 1 })
+          node.attr('text', { fill: '#434343' })
+        } else {
+          node.attr('body', { fill: '#FAFAFA', stroke: '#D9D9D9', strokeWidth: 1 })
+          node.attr('text', { fill: '#434343' })
+        }
+      }
+    },
+    // 显示节点上的连接桩
+    showPorts (ports, show, shape) {
+      ports.forEach(item => {
+        item.style.visibility = show ? 'visible' : 'hidden'
+        item.addEventListener('click', function (e) {
+        })
+        item.addEventListener('mousemove', function (e) {
+          if (shape === 'flow-chart-start') {
+            item.setAttribute('stroke', '#389e0d')
+          } else if (shape === 'flow-chart-end') {
+            item.setAttribute('stroke', '#cf1322')
+          } else {
+            item.setAttribute('stroke', '#096dd9')
+          }
+          item.setAttribute('r', 6)
+        })
+        item.addEventListener('mouseout', function (e) {
+          if (shape === 'flow-chart-start') {
+            item.setAttribute('stroke', '#b7eb8f')
+          } else if (shape === 'flow-chart-end') {
+            item.setAttribute('stroke', '#ffa39e')
+          } else {
+            item.setAttribute('stroke', '#91d5ff')
+          }
+          item.setAttribute('r', 4)
+        })
+      })
+    },
+    // 显示节点上的连接桩
+    showNodePorts (node, judge, shape) {
+      const ports = []
+      if (node && node.view && node.view.portsCache) {
+        for (const i in node.view.portsCache) {
+          const port = node.view.portsCache[i].portContentElement
+          ports.push(port)
+        }
+        this.showPorts(ports, judge, shape)
+      }
+    },
+    // 阻止原始空格事件
+    spaceStop (e) {
+      e.preventDefault()
+      return false
+    },
+    initGraph () {
+      const graph = FlowGraph.init()
+      this.getData()
+      // 按下空格事件的监听
+      graph.bindKey('space', (e) => {
+        // e.stopPropagation()
+        // 禁止画布拖拽
+        graph.disablePanning()
+        // 启用移动节点
+        graph.options.interacting.nodeMovable = true
+        // 启用移动线
+        graph.options.interacting.edgeMovable = true
+        // 启用连接线
+        graph.options.interacting.magnetConnectable = true
+        // 启用选择
+        graph.enableSelection()
+      }, 'keyup')
+      // 放开空格事件的监听
+      graph.bindKey('space', (e) => {
+        // e.stopPropagation()
+        // 启用画布拖拽
+        graph.enablePanning()
+        // 禁止移动节点
+        graph.options.interacting.nodeMovable = false
+        // 禁止移动线
+        graph.options.interacting.edgeMovable = false
+        // 禁止连接线
+        graph.options.interacting.magnetConnectable = false
+        // 禁止选择
+        graph.disableSelection()
+      }, 'keydown')
+      Graph.registerEdgeTool('circleTarget', {
+        inherit: 'target-arrowhead',
+        tagName: 'circle',
+        attrs: { r: 3, fill: '#fff', stroke: '#13c2c2', cursor: 'pointer', rx: 10 }
+      })
+      graph.on('cell:selected', (cell) => {
+        this.hoverCell = cell.cell
+        graph.bindKey('del', (e) => {
+          if (!e.altKey) {
+            this.delCell = cell.cell
+            this.del()
+          }
+        }, 'keydown')
+      })
+      Graph.registerEdgeTool('circleSource', {
+        inherit: 'source-arrowhead',
+        tagName: 'circle',
+        attrs: { r: 3, fill: '#fff', stroke: '#13c2c2', cursor: 'pointer', rx: 10 }
+      })
+      graph.on('cell:mouseenter', (cell) => {
+        this.hoverCell = cell.cell
+        let len = ''
+        if (cell.cell.id.length > 36) {
+          len = cell.cell.id.length
+        }
+        if ((cell.cell.id.length <= 36 && this.allCell.cells.every(item => item.id.search(cell.cell.id) === -1) || (cell.cell.id.length > 36 && this.allCell.cells.every(item => item.id.search(cell.cell.id.substring(len - 36, len)) === -1)))) {
+          let obj2 = {}
+          if (cell.cell.shape !== 'edge') {
+            let attrs = {}
+            if (cell.cell.shape === 'flow-chart-gateway') {
+              attrs = {
+                text: { textWrap: { text: cell.cell.attrs.text.textWrap.text }, transform: cell.cell.attrs.text.transform }
+              }
+            } else if (cell.cell.shape === 'flow-chart-user') {
+              attrs = {
+                text: { textWrap: { text: cell.cell.attrs.text.textWrap.text } }
+              }
+            } else {
+              attrs = {
+                text: { textWrap: { text: cell.cell.attrs.text.textWrap.text } },
+                body: { rx: cell.cell.attrs.body.rx, ry: cell.cell.attrs.body.ry }
+              }
+            }
+
+            let type = ''
+            let data = {}
+            if (cell.cell.shape === 'flow-chart-start') {
+              type = 'start'
+            } else if (cell.cell.shape === 'flow-chart-end') {
+              type = 'end'
+            } else if (cell.cell.shape === 'flow-chart-gateway') {
+              type = 'gateway_explicit'
+            } else {
+              type = 'user_transition'
+            }
+            let id = cell.cell.id
+            if (!id.includes('start') && !id.includes('end') && !id.includes('gateway') && !id.includes('transition')) {
+              id = type + '-' + cell.cell.id
+            }
+            data = {
+              nodeName: cell.cell.attrs.text.textWrap.text,
+              id: id,
+              type: type
+            }
+            obj2 = {
+              attrs: attrs,
+              data: data,
+              id: id,
+              ports: cell.cell.port,
+              position: cell.cell.store.data.position,
+              shape: cell.cell.shape,
+              type: type,
+              size: cell.cell.store.data.size,
+              zIndex: cell.cell.zIndex
+            }
+          } else {
+            obj2 = {
+              shape: cell.cell.shape,
+              attrs: {
+                line: { stroke: '#1890FF', targetMarker: { name: 'classic', size: 8 } }
+              },
+              id: 'link-' + cell.cell.id,
+              type: 'link',
+              data: {},
+              source: cell.cell.source,
+              target: cell.cell.target,
+              zIndex: cell.cell.zIndex
+            }
+          }
+          if (this.oldCells.every(old => old.id !== obj2.id) && this.newCells.every(update => update.id.search(obj2.id) === -1)) {
+            this.newCells.splice(this.newCells.length, 0, obj2)
+          }
+
+          this.allCell.cells = [...this.oldCells, ...this.newCells]
+        }
+        this.allCell.cells.forEach(item => {
+          if (item.shape === 'edge') {
+            if (item.id.search('link') === -1) {
+              item.router = {
+                name: 'er',
+                args: {
+                  offset: 'center',
+                  min: 30
+                }
+              }
+            }
+            this.allCell.cells.forEach(item1 => {
+              if (item1.id.search(item.source.cell) !== -1) {
+                item.source.cell = item1.id
+              } else if (item1.id.search(item.target.cell) !== -1) {
+                item.target.cell = item1.id
+              }
+            })
+          }
+        })
+      })
+      graph.on('node:moved', ({ node }) => {
+        var { x, y } = node.position()
+        for (let i = 0; i < this.allCell.cells.length; i++) {
+          if (node.id === this.allCell.cells[i].id) {
+            this.allCell.cells[i].position.x = x
+            this.allCell.cells[i].position.y = y
+          }
+        }
+      })
+      // 选中节点
+      graph.on('node:selected', ({ node, e, options }) => {
+        if (graph.getSelectedCells().length > 1) {
+          for (let i = 0; i < document.getElementsByClassName('x6-widget-selection-box').length; i++) {
+            document.getElementsByClassName('x6-widget-selection-box')[i].style.border = 0
+            document.getElementsByClassName('x6-widget-selection-box')[i].style.boxShadow = 'none'
+          }
+        }
+        this.checkNode = true
+        this.selectNodeId = node.id
+        const edges = graph.getConnectedEdges(node, { incoming: false, outgoing: true })
+        edges.forEach(item => {
+          item.attr('line', {
+            stroke: '#13c2c2',
+            strokeDasharray: 5,
+            targetMarker: 'classic',
+            style: { animation: 'ant-line 30s infinite linear' }
+          })
+        })
+        this.nodeChangeColor(node)
+      })
+      // 取消选中节点
+      graph.on('node:unselected', ({ node }) => {
+        this.checkNode = false
+        this.selectNodeId = ''
+        this.delCellId = ''
+        const edges = graph.getConnectedEdges(node, { incoming: false, outgoing: true })
+        edges.forEach(item => {
+          item.attr('line', { stroke: '#1890ff', strokeDasharray: '' })
+        })
+        this.nodeBackColor(node)
+        if (node.id !== this.currentSelect.id) {
+          this.currentSelect = {}
+        }
+      })
+      // 连接线
+      graph.on('edge:connected', ({ isNew, edge, e, view, currentCell }) => {
+        const jsondata = graph.toJSON().cells
+        if (isNew) {
+          // 对新创建的边进行插入数据库等持久化操作
+          const sourceNode = edge.store.data.source.cell
+          const targetNode = edge.store.data.target.cell
+          const edgeList = []
+          for (let i = 0; i < jsondata.length; i++) {
+            if (jsondata[i].shape === 'edge') {
+              edgeList.push(jsondata[i])
+            }
+          }
+          this.existEdge = []
+          for (let i = 0; i < edgeList.length; i++) {
+            if (sourceNode === edgeList[i].source.cell && targetNode === edgeList[i].target.cell && this.existEdge.every(exItem => exItem !== edgeList[i].id) || targetNode === edgeList[i].source.cell && sourceNode === edgeList[i].target.cell && this.existEdge.every(exItem => exItem !== edgeList[i].id)) {
+              this.existEdge.push(edgeList[i].id)
+            }
+          }
+          if (this.existEdge.length > 1) {
+            this.existEdge.forEach(item => {
+              if (edge.id !== item) {
+                graph.removeEdge(item)
+                this.allCell.cells = this.allCell.cells.filter(cellItem => cellItem.id !== item)
+                this.oldCells = this.oldCells.filter(cellItem => cellItem.id !== item)
+                this.newCells = this.newCells.filter(cellItem => cellItem.id !== item)
+              }
+            })
+          }
+        }
+        const objSourceQuote = this.allCell.cells.find(item => item.id.search(edge.source.cell) !== -1)
+        if (objSourceQuote.type === 'quote_transition') {
+          graph.removeEdge(edge)
+          this.$message.error(this.$t('复用变迁不允许作为线的源'))
+        } else if (objSourceQuote.type === 'end') {
+          graph.removeEdge(edge)
+          this.$message.error(this.$t('结束库所不允许作为线的源'))
+        } else {
+          const obj2 = {
+            shape: edge.shape,
+            attrs: { line: { stroke: '#1890FF', targetMarker: { name: 'classic', size: 8 } } },
+            connector: { name: 'rounded', args: { radius: 8 } },
+            id: edge.id,
+            type: 'link',
+            data: {},
+            source: edge.source,
+            target: edge.target,
+            zIndex: edge.zIndex
+          }
+          if (this.oldCells.every(old => old.id !== edge.id)) {
+            if (this.newCells.length === 0 || this.newCells.every(update => update.id !== edge.id)) {
+              this.newCells.push(obj2)
+            }
+          }
+          this.allCell.cells = [...this.oldCells, ...this.newCells]
+          for (let i = 0; i < this.allCell.cells.length; i++) {
+            if (edge.id === this.allCell.cells[i].id) {
+              this.allCell.cells[i].source.cell = edge.source.cell
+              this.allCell.cells[i].target.cell = edge.target.cell
+            }
+          }
+        }
+        this.allCell.cells.forEach(cellItem => {
+          if (cellItem.id === edge.id) {
+            cellItem.source = edge.store.data.source
+            cellItem.target = edge.store.data.target
+          }
+        })
+      })
+      graph.on('node:mousedown', (node) => {
+        const ports = []
+        if (node.view && node.view.portsCache) {
+          for (const i in node.view.portsCache) {
+            const port = node.view.portsCache[i].portContentElement
+            ports.push(port)
+          }
+        }
+        for (let i = 0; i < 4; i = i + 1) {
+          ports[i].style.visibility = 'visible'
+          ports[i].addEventListener('mousedown', function (e) {
+          })
+          ports[i].addEventListener('mousemove', function (e) {
+            if (node.node.shape === 'flow-chart-start') {
+              ports[i].setAttribute('curor', 'crosshair')
+              ports[i].setAttribute('stroke', '#389e0d')
+            } else if (node.node.shape === 'flow-chart-end') {
+              ports[i].setAttribute('stroke', '#cf1322')
+            } else {
+              ports[i].setAttribute('stroke', '#096dd9')
+            }
+            ports[i].setAttribute('r', 6)
+          })
+          ports[i].addEventListener('mouseout', function (e) {
+            if (node.node.shape === 'flow-chart-start') {
+              ports[i].setAttribute('stroke', '#b7eb8f')
+            } else if (node.node.shape === 'flow-chart-end') {
+              ports[i].setAttribute('stroke', '#ffa39e')
+            } else {
+              ports[i].setAttribute('stroke', '#91d5ff')
+            }
+            ports[i].setAttribute('r', 4)
+          })
+        }
+      })
+      graph.on('node:mouseup', (e, node) => {
+        graph.off('node:select')
+      })
+      // 鼠标移入显示每个节点节点上的点
+      graph.on('node:mouseenter', FunctionExt.debounce((node) => {
+        if (graph.getSelectedCells().length === 0) {
+          this.nodeChangeColor(node.node)
+          this.showNodePorts(node, true, node.node.shape)
+          this.portsShow = node
+        }
+      }), 10)
+      // 鼠标移出消失每个节点节点上的点
+      graph.on('node:mouseleave', (node) => {
+        if (node.node.id !== this.selectNodeId || !this.checkNode) {
+          this.nodeBackColor(node.node)
+          this.showNodePorts(node, false, node.node.shape)
+        }
+      })
+      // 节点双击
+      graph.on(
+        'node:dblclick', (node) => {
+          this.node = node.cell
+          this.nodeId = this.node.id
+          const newNode = this.allCell.cells.find(item => item.id.includes(this.nodeId))
+          this.currentSelect = newNode ? newNode.data : node.node.data
+          this.currentSelect.nodeName = node.node.attrs.text.textWrap.text
+          if (this.allCell.cells.some(update => update.id.search(this.nodeId) !== -1)) {
+            if (this.node.shape === 'flow-chart-user' && !this.node.data.quoteId) {
+              if (this.node.data.gid) {
+                const len = this.node.data.gid.length
+                const type = this.node.data.gid.substring(0, len - 37)
+                this.node.data.gid = type + '-' + newNode.id.substring(len - 36, len)
+                this.node.data.id = this.node.data.gid
+                this.node.data.type = type
+                newNode.data = this.node.data
+                newNode.id = newNode.data.id
+                newNode.type = type
+              }
+              this.currentSelect = Object.assign(newNode.data, this.currentSelect)
+              this.currentSelect['type'] = newNode.type
+              this.currentSelect['id'] = newNode.id
+            } else if (this.node.shape === 'flow-chart-gateway') {
+              this.currentSelect = Object.assign(newNode.data, this.currentSelect)
+              if (this.node.data.gid) {
+                const len = this.node.data.gid.length
+                const type = this.node.data.gid.substring(0, len - 37)
+                this.currentSelect['id'] = type + '-' + newNode.id.substring(len - 36, len)
+                this.currentSelect['type'] = type
+              } else {
+                this.currentSelect['id'] = newNode.id
+                this.currentSelect['type'] = newNode.type
+              }
+            } else {
+              this.currentSelect['id'] = newNode.id
+              this.currentSelect['type'] = newNode.type
+              this.currentSelect['arcCondition'] = undefined
+              this.currentSelect['arcEvent'] = undefined
+            }
+          }
+          this.$refs.flowAttr.show({
+            val: this.currentSelect
+          })
+        })
+      // 线双击
+      graph.on(
+        'edge:dblclick', (edge) => {
+          const node = this.allCell.cells.find(item => item.id.includes(edge.edge.source.cell))
+          const sourceId = node.id
+          this.currentSelect = {
+            id: edge.edge.id,
+            type: 'link',
+            sourceId: sourceId.includes(node.type) ? sourceId : node.type + '-' + sourceId
+          }
+          this.flowData.nodeList = this.allCell.cells.map(item => item.data)
+          if (this.allCell.cells.some(update => update.id.search(edge.edge.id) !== -1)) {
+            const newEdge = this.allCell.cells.find(update => update.id.search(edge.edge.id) !== -1)
+            if (newEdge.data.length > 0) {
+              this.currentSelect = Object.assign(this.currentSelect)
+            } else {
+              this.currentSelect = Object.assign(this.currentSelect, newEdge.data)
+            }
+          }
+          this.currentSelect.sourceId = sourceId.includes(node.type) ? sourceId : node.type + '-' + sourceId
+          this.$refs.flowAttr.show({
+            val: this.currentSelect
+          })
+          this.rightCopy = false
+        })
+      // 节点、线右击
+      graph.on('cell:contextmenu', (cell) => {
+        if (this.mouseenterCell.length === 0) {
+          this.mouseenterCell.push(cell.cell)
+        } else {
+          this.mouseenterCell = []
+          this.mouseenterCell.push(cell.cell)
+        }
+
+        this.delCell = cell.cell
+        if (this.mouseenterCell.length === 1) {
+          if (cell.cell.shape === 'edge') {
+            this.mouseenterCell[0].attr('line', { stroke: '#13c2c2' })
+          } else {
+            this.nodeChangeColor(this.mouseenterCell[0])
+          }
+        } else {
+          if (this.mouseenterCell[0].id !== cell.cell.id) {
+            if (this.mouseenterCell[0].shape === 'edge') {
+              this.mouseenterCell[0].attr('line', { stroke: '#1890ff' })
+            } else {
+              this.nodeBackColor(this.mouseenterCell[0])
+            }
+            this.mouseenterCell.splice(this.mouseenterCell[0], 1)
+            if (cell.cell.shape === 'edge') {
+              cell.cell.attr('line', { stroke: '#13c2c2' })
+            } else {
+              this.nodeChangeColor(cell.cell)
+            }
+          }
+        }
+
+        const text = document.getElementById('right')
+        this.rightShow = true
+        this.rightRemove = true
+        this.rightPaste = false
+        // this.pasterX = ''
+        // this.pasterY = ''
+        if (graph.getSelectedCells().length > 1) {
+          this.rightMultiplex = false
+          this.rightCopy = false
+        } else {
+          if (cell.cell.shape.search('start') !== -1 || cell.cell.shape.search('end') !== -1 || cell.cell.shape.search('gateway') !== -1) {
+            this.rightCopy = true
+            this.rightMultiplex = false
+          } else if (cell.cell.shape.search('user') !== -1) {
+            if (cell.cell.data.type && cell.cell.data.type.search('quote') !== -1) {
+              this.rightCopy = false
+              this.rightMultiplex = false
+            } else {
+              this.rightCopy = true
+              this.rightMultiplex = true
+            }
+          }
+        }
+
+        text.style.left = cell.e.clientX + 'px'
+        text.style.top = cell.e.clientY + 'px'
+      })
+      // 节点右击
+      graph.on('node:contextmenu', (node) => {
+        const text = document.getElementById('right')
+        text.style.left = node.e.clientX + 'px'
+        text.style.top = node.e.clientY + 'px'
+      })
+      // 选中线
+      graph.on('edge:selected', ({ edge }) => {
+        this.selectEdge = edge
+        edge.type = 'link'
+        edge.attr('line', { stroke: '#13c2c2', strokeWidth: 4 })
+        edge.addTools([{ name: 'circleSource' }, { name: 'circleTarget' }])
+      })
+      // 取消选中线
+      graph.on('edge:unselected', ({ edge }) => {
+        this.delCellId = ''
+        this.selectEdge = {}
+        edge.attr('line', { stroke: '#1890ff', strokeWidth: 2, sourceMarker: '' })
+        edge.removeTools()
+        const data = this.allCell.cells.find(item => item.id.includes(edge.id))
+        if (data.data && data.data.arcCondition && data.data.arcCondition.simpleCondition && data.data.arcCondition.simpleCondition.length) {
+          this.edgeSetTag(edge, 'condition')
+        }
+        if (data.data && data.data.arcEvent && data.data.arcEvent.length) {
+          this.edgeSetTag(edge, 'event')
+        }
+        this.currentSelect = {}
+      })
+      // 线右击
+      graph.on(
+        'edge:contextmenu', (edge) => {
+          const text = document.getElementById('right')
+          text.style.left = edge.e.clientX + 'px'
+          text.style.top = edge.e.clientY + 'px'
+          this.rightShow = true
+          this.rightPaste = false
+          this.rightRemove = true
+          this.rightCopy = false
+        })
+      // 点击画布
+      graph.on('blank:mousedown', (e) => {
+        this.delCellId = ''
+        if (this.mouseenterCell.length > 0) {
+          if (this.mouseenterCell[0].shape === 'edge') {
+            this.mouseenterCell[0].attr('line', { stroke: '#1890ff', sourceMarker: '' })
+          } else {
+            this.nodeBackColor(this.mouseenterCell[0])
+          }
+        }
+      })
+      // 画布右击
+      graph.on(
+        'blank:contextmenu', (e) => {
+          const text = document.getElementById('right')
+          this.pasterX = e.x
+          this.pasterY = e.y
+          text.style.left = e.e.clientX + 'px'
+          text.style.top = e.e.clientY + 'px'
+          this.rightShow = true
+
+          if (this.rightCopy || this.rightMultiplex) {
+            this.rightPaste = true
+          }
+          this.rightCopy = false
+          this.rightMultiplex = false
+          this.rightRemove = false
+        })
+      graph.centerContent()
+      const resizeFn = () => {
+        const { width, height } = this.getContainerSize()
+        graph.resize(width, height)
+      }
+      resizeFn()
+      window.addEventListener('resize', resizeFn)
+      return () => {
+        window.removeEventListener('resize', resizeFn)
+      }
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.ant-line {
+  stroke-dashoffset: -1000;
+}
+
+.close {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 15px;
+  height: 15px;
+}
+.close:before,
+.close:after {
+  position: absolute;
+  left: 15px;
+  content: ' ';
+  height: 20px;
+  width: 2px;
+  background-color: #333;
+}
+.close:before {
+  transform: rotate(45deg);
+}
+.close:after {
+  transform: rotate(-45deg);
+}
+.menu-pane {
+  text-align: center;
+  position: fixed;
+  min-width: 100px;
+  z-index: 8006;
+  zoom: 1;
+  background: #fff;
+}
+.menu-pane {
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  font-family: 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  li {
+    list-style-type: none;
+  }
+  .menu-item {
+    text-align: center;
+    cursor: pointer;
+    line-height: 30px;
+  }
+  .menu-item:hover {
+    background-color: rgba(13, 179, 166, 0.1);
+  }
+  .x6-node *:hover {
+    fill: #000;
+  }
+}
+</style>

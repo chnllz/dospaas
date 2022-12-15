@@ -1,0 +1,690 @@
+<template>
+  <div>
+    <a-form :form="cardForm">
+      <a-space direction="vertical" style="width: 100%">
+        <a-card size="small" :title="$t('会话结束提示语')" :bodyStyle="bodyStyle">
+          <a-divider orientation="left" style="margin-bottom: 16px">
+            {{ $t('访客离开提示语') }}
+            <a-tooltip :title="$t('由于“访客手动结束”原因导致的会话结束，系统向访客发出以下提示')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </a-divider>
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('visitorsLeave')">{{ $t('添加') }}</a-button>
+            <a-button icon="sort-ascending" @click="handleSort('visitorsLeave')">{{ $t('排序') }}</a-button>
+          </div>
+          <a-table
+            ref="visitorsLeaveLists"
+            rowKey="id"
+            :columns="visitorsLeaveColumns"
+            :dataSource="visitorsLeaveLists"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'visitorsLeave')">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'visitorsLeave')">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+            <div slot="group" slot-scope="text">
+              {{
+                groupList.find((item) => item.id === text) ? groupList.find((item) => item.id === text)['name'] : '--'
+              }}
+            </div>
+          </a-table>
+          <a-divider orientation="left" style="margin: 16px 0px">
+            {{ $t('客服结束提示语') }}
+            <a-tooltip
+              :title="
+                $t('由于“客服手动结束”、“客服离线结束”、“管理员强制结束”原因导致的会话结束，系统向访客发出以下提示')
+              "
+            >
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </a-divider>
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('servicerEnd')">{{ $t('添加') }}</a-button>
+            <a-button icon="sort-ascending" @click="handleSort('servicerEnd')">{{ $t('排序') }}</a-button>
+          </div>
+          <a-table
+            ref="servicerEndLists"
+            rowKey="id"
+            :columns="servicerEndColumns"
+            :dataSource="servicerEndLists"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'servicerEnd')">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'servicerEnd')">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+          </a-table>
+        </a-card>
+        <a-card size="small" :title="$t('会话超时规则与提示')" :bodyStyle="bodyStyle">
+          <a-form-item
+            :labelCol="{ style: 'width: 130px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 130px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('会话超时设置') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '开启后，若当前会话的最后发言方是客服，在设置的{会话超时规则}时间内，访客没有新消息产生，系统将会在2分钟后自动结束会话'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'conversationTimeoutClose',
+                { initialValue: data.conversationTimeoutClose, valuePropName: 'checked' }
+              ]"
+              :checked-children="$t('开')"
+              :un-checked-children="$t('关')"
+              @change="(e) => (data.conversationTimeoutClose = e)"
+            />
+          </a-form-item>
+          <template v-if="data.conversationTimeoutClose">
+            <a-form-item
+              :labelCol="{ style: 'width: 130px; display: inline-block' }"
+              :wrapperCol="{ style: 'width: calc(100% - 130px); display: inline-block' }"
+            >
+              <span slot="label">
+                {{ $t('会话超时规则') }}
+                <a-tooltip :title="$t('默认值5，设置范围1~480')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              {{ $t('超过') }}
+              <a-input-number
+                v-decorator="[
+                  'conversationTimeoutTime',
+                  {
+                    initialValue: data.conversationTimeoutTime || 5,
+                    rules: [{ required: true, message: $t('请输入会话超时规则') }]
+                  }
+                ]"
+                style="margin: 0px 8px"
+                :min="1"
+                :max="480"
+              />
+              {{ $t('分钟访客未回复消息') }}
+            </a-form-item>
+            <a-form-item
+              :labelCol="{ style: 'width: 130px; display: inline-block' }"
+              :wrapperCol="{ style: 'width: calc(100% - 130px); display: inline-block' }"
+            >
+              <span slot="label">
+                {{ $t('是否提示客服') }}
+                <a-tooltip :title="$t('提示语内容：因访客长时间未回复，2分钟后系统将关闭会话。提示语不可修改')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-switch
+                v-decorator="['promptServicer', { initialValue: data.promptServicer, valuePropName: 'checked' }]"
+                :checked-children="$t('开')"
+                :un-checked-children="$t('关')"
+              />
+            </a-form-item>
+            <a-form-item
+              style="margin-bottom: 8px"
+              :label="$t('是否提示访客')"
+              :labelCol="{ style: 'width: 130px; display: inline-block' }"
+              :wrapperCol="{ style: 'width: calc(100% - 130px); display: inline-block' }"
+            >
+              <a-switch
+                v-decorator="['promptVisitor', { initialValue: data.promptVisitor, valuePropName: 'checked' }]"
+                :checked-children="$t('开')"
+                :un-checked-children="$t('关')"
+                @change="(e) => (data.promptVisitor = e)"
+              />
+            </a-form-item>
+            <template v-if="data.promptVisitor">
+              <div class="table-operator">
+                <a-button icon="plus" @click="handleAdd('sessionTimeout')">{{ $t('添加') }}</a-button>
+                <a-button icon="sort-ascending" @click="handleSort('sessionTimeout')">{{ $t('排序') }}</a-button>
+              </div>
+              <a-table
+                ref="sessionTimeoutLists"
+                rowKey="id"
+                :columns="sessionTimeoutColumns"
+                :dataSource="sessionTimeoutLists"
+                size="small"
+                :pagination="false"
+              >
+                <div slot="action" slot-scope="text, record, index">
+                  <a @click="handleEdit(record, 'sessionTimeout')">{{ $t('编辑') }}</a>
+                  <a-divider type="vertical" />
+                  <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'sessionTimeout')">
+                    <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+                  </a-popconfirm>
+                </div>
+              </a-table>
+            </template>
+          </template>
+        </a-card>
+        <a-card size="small" :title="$t('沉默访客设置')" :bodyStyle="bodyStyle">
+          <a-form-item
+            style="margin: 8px 0px"
+            :labelCol="{ style: 'width: 100px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 100px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('是否启用') }}
+              <a-tooltip :title="$t('开启后，在设置的时间内没有新消息产生，系统将自动关闭会话')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="['silenceEnable', { initialValue: data.silenceEnable, valuePropName: 'checked' }]"
+              @change="(e) => (data.silenceEnable = e)"
+            />
+          </a-form-item>
+          <template v-if="data.silenceEnable">
+            <a-form-item
+              style="margin-bottom: 8px"
+              :labelCol="{ style: 'width: 100px; display: inline-block' }"
+              :wrapperCol="{ style: 'width: calc(100% - 100px); display: inline-block' }"
+            >
+              <span slot="label">
+                {{ $t('判断规则') }}
+                <a-tooltip :title="$t('默认值180，设置范围30~600')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              {{ $t('访客进入人工后超过') }}
+              <a-input-number
+                v-decorator="[
+                  'silenceRuleTime',
+                  {
+                    initialValue: data.silenceRuleTime || 180,
+                    rules: [{ required: true, message: $t('请输入判断规则时间') }]
+                  }
+                ]"
+                style="margin: 0px 8px"
+                :min="30"
+                :max="600"
+              />
+              {{ $t('秒无新消息产生') }}
+            </a-form-item>
+            <a-divider orientation="left" style="margin: 16px 0px">{{ $t('沉默访客提示语') }}</a-divider>
+            <div class="table-operator">
+              <a-button icon="plus" @click="handleAdd('silence')">{{ $t('添加') }}</a-button>
+              <a-button icon="sort-ascending" @click="handleSort('silence')">{{ $t('排序') }}</a-button>
+            </div>
+            <a-table
+              ref="silenceLists"
+              rowKey="id"
+              :columns="silenceColumns"
+              :dataSource="silenceLists"
+              size="small"
+              :pagination="false"
+            >
+              <div slot="action" slot-scope="text, record, index">
+                <a @click="handleEdit(record, 'silence')">{{ $t('编辑') }}</a>
+                <a-divider type="vertical" />
+                <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'silence')">
+                  <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+                </a-popconfirm>
+              </div>
+              <div slot="group" slot-scope="text">
+                {{
+                  groupList.find((item) => item.id === text) ? groupList.find((item) => item.id === text)['name'] : '--'
+                }}
+              </div>
+            </a-table>
+          </template>
+        </a-card>
+        <!-- <a-card size="small" :title="$t('其他设置')" :bodyStyle="bodyStyle">
+          <a-form-item :labelCol="{style: 'width: 200px; display: inline-block'}" :wrapperCol="{style: 'width: calc(100% - 200px); display: inline-block'}">
+            <span slot="label">
+              {{ $t('访客离开网页超时关闭') }}
+              <a-tooltip :title="$t('网页、小程序sdk的访客进入会话后，在设置的时间内轮循发现访客已离开，系统将立即关闭会话，会话结束原因为“访客离开网页失效关闭”，不允许超时关闭的置顶会话除外')">
+                <a-icon type="question-circle"/>
+              </a-tooltip>
+            </span>
+            <a-form-item>
+              {{ $t('访客离开网页超过') }}
+              <a-input-number
+                style="margin: 0px 8px;"
+                :min="10"
+                :max="600"
+                v-decorator="['leaveTime', { initialValue: data.leaveTime || 30 }]"/>秒
+            </a-form-item>
+            <a-form-item>
+              {{ $t('允许人工置顶会话超时关闭') }} <a-tooltip :title="$t('开启后，置顶会话将受会话超时关闭，满足要求会自动关闭，不影响新会话进线')">
+                <a-icon type="question-circle"/>
+              </a-tooltip><a-switch style="margin: 0px 8px;" :checked-children="$t('开')" :un-checked-children="$t('关')" v-decorator="['worktimeMode', { initialValue: data.worktimeMode, valuePropName: 'checked' }]"/>
+            </a-form-item>
+          </a-form-item>
+        </a-card> -->
+      </a-space>
+    </a-form>
+    <a-button style="margin-top: 16px" type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+    <a-modal
+      :title="config.title"
+      :width="600"
+      :visible="visible"
+      :destroyOnClose="true"
+      :confirmLoading="loading"
+      @ok="modalSubmit"
+      @cancel="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <a-form :form="form">
+          <a-form-item :label="$t('模板名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              v-decorator="[
+                'name',
+                {
+                  initialValue: config.data && config.data.name ? config.data.name : '',
+                  rules: [{ transform: (value) => value.trim() }, { required: true, message: $t('请输入模板名称') }]
+                }
+              ]"
+              :disabled="config.data && config.data.id === 1"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('适用技能组')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-decorator="[
+                'group',
+                {
+                  initialValue: config.data && config.data.group ? config.data.group : undefined,
+                  rules: [{ required: config.data && config.data.id !== 1, message: $t('请选择适用技能组') }]
+                }
+              ]"
+              :disabled="config.data && config.data.id === 1"
+              allowClear
+              mode="multiple"
+              show-search
+              :filter-option="filterOption"
+            >
+              <a-select-option v-for="group in groupList" :key="group.id" :value="group.id">
+                {{ group.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t(config.contentTitle)">
+            <a-textarea
+              v-decorator="[
+                'content',
+                {
+                  initialValue: config.data && config.data.content ? config.data.content : '',
+                  rules: [
+                    { transform: (value) => value.trim() },
+                    { required: true, message: $t(`请输入${config.contentTitle}`) }
+                  ]
+                }
+              ]"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+          <a-form-item
+            v-if="config.type === 'sessionTimeout'"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+            :label="$t('会话超时结束访客提示语')"
+          >
+            <a-textarea
+              v-decorator="[
+                'contentEnd',
+                {
+                  initialValue: config.data && config.data.contentEnd ? config.data.contentEnd : '',
+                  rules: [
+                    { transform: (value) => value.trim() },
+                    { required: true, message: $t(`请输入会话超时结束访客提示语`) }
+                  ]
+                }
+              ]"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-decorator="['remarks', { initialValue: config.data && config.data.remarks ? config.data.remarks : '' }]"
+              :disabled="config.data && config.data.id === 1"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </a-modal>
+    <drag-sort ref="dragSort" @ok="getList" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    DragSort: () => import('@/views/admin/Common/DragSort')
+  },
+  props: {
+    baseAll: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    groupList: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      labelCol: { span: 8 },
+      wrapperCol: { span: 16 },
+      data: {},
+      visitorsLeaveColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('访客离开提示语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      servicerEndColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        width: 300,
+        dataIndex: 'group',
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('客服结束提示语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      sessionTimeoutColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('会话超时访客提示语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('会话超时结束访客提示语'),
+        dataIndex: 'contentEnd'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      silenceColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        width: 300,
+        dataIndex: 'group',
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('沉默访客关闭提示'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      visitorsLeaveLists: [{
+        id: 1,
+        name: '默认',
+        group: [],
+        content: this.$t('访客离开，会话结束'),
+        remarks: this.$t('系统默认文案，不可删除')
+      }],
+      servicerEndLists: [{
+        id: 1,
+        name: '默认',
+        group: [],
+        content: this.$t('客服已结束当前会话'),
+        remarks: this.$t('系统默认文案，不可删除')
+      }],
+      sessionTimeoutLists: [{
+        id: 1,
+        name: '默认',
+        group: [],
+        content: this.$t('您好，我们长时间没有收到您的回复，稍后将自动结束本次会话'),
+        contentEnd: this.$t('因长时间未收到您的回复，系统已结束本次会话'),
+        remarks: this.$t('系统默认文案，不可删除')
+      }],
+      silenceLists: [{
+        id: 1,
+        name: '默认',
+        group: [],
+        content: this.$t('您好，未能收到您的回复，本次对话将自动结束'),
+        remarks: this.$t('系统默认文案，不可删除')
+      }],
+      form: this.$form.createForm(this),
+      cardForm: this.$form.createForm(this),
+      visible: false,
+      loading: false,
+      config: {},
+      cardType: '',
+      sortListType: '',
+      bodyStyle: { padding: '10px' }
+    }
+  },
+  created () {
+    this.data = this.baseAll
+    if (this.baseAll.visitorsLeaveLists) {
+      this.visitorsLeaveLists = JSON.parse(this.baseAll.visitorsLeaveLists)
+    }
+    if (this.baseAll.servicerEndLists) {
+      this.servicerEndLists = JSON.parse(this.baseAll.servicerEndLists)
+    }
+    if (this.baseAll.sessionTimeoutLists) {
+      this.sessionTimeoutLists = JSON.parse(this.baseAll.sessionTimeoutLists)
+    }
+    if (this.baseAll.silenceLists) {
+      this.silenceLists = JSON.parse(this.baseAll.silenceLists)
+    }
+  },
+  methods: {
+    handleAdd (type) {
+      this.cardType = type
+      let contentTitle = ''
+      if (type === 'visitorsLeave') {
+        contentTitle = '访客离开提示语'
+      } else if (type === 'servicerEnd') {
+        contentTitle = '客服结束提示语'
+      } else if (type === 'sessionTimeout') {
+        contentTitle = '会话超时访客提示语'
+      } else if (type === 'silence') {
+        contentTitle = '沉默访客关闭提示'
+      }
+      this.config = {
+        title: this.$t('添加'),
+        type: type,
+        contentTitle: contentTitle,
+        data: {}
+      }
+      this.visible = true
+    },
+    handleEdit (record, type) {
+      this.cardType = type
+      let contentTitle = ''
+      if (type === 'visitorsLeave') {
+        contentTitle = '访客离开提示语'
+      } else if (type === 'servicerEnd') {
+        contentTitle = '客服结束提示语'
+      } else if (type === 'sessionTimeout') {
+        contentTitle = '会话超时访客提示语'
+      } else if (type === 'silence') {
+        contentTitle = '沉默访客关闭提示'
+      }
+      this.config = {
+        title: this.$t('编辑'),
+        type: type,
+        contentTitle: contentTitle,
+        data: record
+      }
+      this.visible = true
+    },
+    handleDelete (index, type) {
+      this[type + 'Lists'].splice(index, 1)
+    },
+    handleSort (type) {
+      this.cardType = type
+      this.$refs.dragSort.show({
+        sortData: this[type + 'Lists'],
+        width: 600,
+        placement: 'right'
+      })
+    },
+    getList (data) {
+      this[this.cardType + 'Lists'] = data
+    },
+    filterOption (input, option) {
+      return (
+        option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      )
+    },
+    modalSubmit () {
+      this.form.validateFields((error, values) => {
+        if (!error) {
+          if (this.config.data && this.config.data.id) {
+            values.id = this.config.data.id
+            this[this.cardType + 'Lists'].splice(this[this.cardType + 'Lists'].findIndex(item => item.id === this.config.data.id), 1, values)
+          } else {
+            values.id = new Date().valueOf()
+            this[this.cardType + 'Lists'].push(values)
+          }
+          this.$message.success(this.$t('操作成功'))
+          this.visible = false
+        }
+      })
+    },
+    handleSubmit () {
+      this.cardForm.validateFields((error, values) => {
+        if (!error) {
+          this.$emit('ok', true)
+          values.visitorsLeaveLists = JSON.stringify(this.visitorsLeaveLists)
+          values.servicerEndLists = JSON.stringify(this.servicerEndLists)
+          values.sessionTimeoutLists = JSON.stringify(this.sessionTimeoutLists)
+          values.silenceLists = JSON.stringify(this.silenceLists)
+          this.axios({
+            url: '/chat/setting/save',
+            data: { action: 'submit', info: values }
+          }).then(res => {
+            this.$emit('ok', false)
+            if (res.code === 0) {
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,502 @@
+<template>
+  <div class="useMonitor">
+    <div class="box">
+      <div class="content">
+        <div class="color-fff gloTime font-12">
+          <div>{{ nowTime }}</div>
+          <div>{{ $t('信息化系统解决方案提供商') }}</div>
+        </div>
+        <!-- 头部 -->
+        <div class="globalClass">
+          <div class="topLogo topLogoImg">
+            <img :src="heardImg" alt="" />
+          </div>
+          <div class="centerTitleHeight centerTitleImg">
+            <div class="centerTitle">{{ $t('话务宏观监控') }}</div>
+          </div>
+        </div>
+        <!-- 说明 -->
+        <div
+          class="gloExplainClass"
+          @click="
+            () => {
+              openExplain = true
+            }
+          "
+        >
+          <img src="./assets/image/explain.png" class="explainImage" alt="" />
+          <div class="color-ffc font-12">{{ $t('帮助说明') }}</div>
+        </div>
+        <!-- 中间 -->
+        <div class="tableBox">
+          <!-- 上半部分表格 -->
+          <div class="topClass">
+            <!-- 第一个 -->
+            <subTable class="flex-2">
+              <div slot="body" class="tFirBoxBody">
+                <div class="color-fff font-21">{{ $t('当前等待') }}</div>
+                <div class="firBox viewBoxClass">
+                  <div v-for="(item, index) in currentWait" :key="index" class="firBoxItem">{{ item }}</div>
+                  <div class="firBoxText">人</div>
+                </div>
+                <div class="firTime global-flex-jus">
+                  <div>
+                    <div class="color-fff firTimeTitle">{{ $t('最长等待时长') }}</div>
+                    <div class="firTimeText color-ff6">{{ max_wait }}</div>
+                  </div>
+                  <div>
+                    <div class="color-fff firTimeTitle">{{ $t('平均等待时长') }}</div>
+                    <div class="firTimeText color-4cb">{{ avg_wait }}</div>
+                  </div>
+                </div>
+              </div>
+            </subTable>
+            <!-- 第二个 -->
+            <subTable class="topSecClass">
+              <div slot="body" class="secClass">
+                <div class="global-flex-jus">
+                  <div
+                    v-for="(item, index) in secTopList"
+                    :key="index"
+                    class="secBox flex-1"
+                    :style="{ marginRight: index !== secTopList.length - 1 ? '0.17rem' : '' }"
+                  >
+                    <div class="font-14 color-fff">{{ item.name }}</div>
+                    <div class="font-32 secText color-2e6">{{ item.num }}</div>
+                  </div>
+                </div>
+                <div class="secCenterBox">
+                  <div class="secLineLeft flex-1"></div>
+                  <div class="flex-2 phoneBox">
+                    <img src="./assets/image/phone.png" class="phoneClass" />
+                    <div>
+                      <span class="font-18 color-fff">{{ $t('平均通话时长') }}：</span>
+                      <span class="font-18 color-2e6">{{ call_data.avg_duration }}</span>
+                    </div>
+                  </div>
+                  <div class="secLineRight flex-1"></div>
+                </div>
+                <div class="global-flex-jus text-center">
+                  <div v-for="(item, index) in secBottomList" :key="index">
+                    <div class="font-18 color-fff">{{ item.name }}</div>
+                    <div class="font-32 font-600" :style="{ color: item.color }">{{ item.num }}</div>
+                  </div>
+                </div>
+              </div>
+            </subTable>
+            <!-- 第三个 -->
+            <subTable style="flex: 300px">
+              <div slot="body" class="fullClass">
+                <div ref="pie" class="fullClass"></div>
+              </div>
+            </subTable>
+          </div>
+          <!-- 下半部分表格 -->
+          <div class="global-flex-jus bottomClass">
+            <!-- 第一个 -->
+            <subTable class="bottomFirBox">
+              <div slot="body" class="fullClass bFirBoxBody">
+                <div class="color-fff font-21 bFirText">{{ $t('近12小时通话') }}</div>
+                <div ref="charts" class="bChart bChartFirst"></div>
+              </div>
+            </subTable>
+            <!-- 第二个 -->
+            <subTable style="flex: 295px">
+              <div slot="body" class="fullClass bSecBoxBody">
+                <div class="color-fff font-21">{{ $t('坐标状态') }}</div>
+                <div ref="charts_pieHollow" class="bChart bChartTop"></div>
+              </div>
+            </subTable>
+          </div>
+        </div>
+      </div>
+      <a-modal
+        title="说明"
+        :visible="openExplain"
+        :bodyStyle="{ maxHeight: '500px', overflowY: 'height' > 500 ? 'scroll' : 'auto' }"
+        @ok="() => (openExplain = false)"
+        @cancel="() => (openExplain = false)"
+      >
+        <div>{{ $t('话务宏观监控') }}</div>
+      </a-modal>
+    </div>
+  </div>
+</template>
+<script>
+import './assets/css/chartframe.less'
+import echarts from 'echarts'
+export default {
+  components: {
+    subTable: () => import('./components/subTable')
+  },
+  data () {
+    return {
+      heardImg: '',
+      nowTime: null,
+      // 时间定时器
+      timeid: null,
+      secTopList: [{
+        name: this.$t('来电数'),
+        alias: 'call_num',
+        num: 0
+      }, {
+        name: this.$t('应答数'),
+        alias: 'answer_num',
+        num: 0
+      }, {
+        name: this.$t('放弃数'),
+        alias: 'giveup_num',
+        num: 0
+      }, {
+        name: this.$t('未接数'),
+        alias: 'agentmiss_num',
+        num: 0
+      }],
+      secBottomList: [{
+        name: this.$t('呼出数'),
+        alias: 'callout_num',
+        color: '#25D9FD',
+        num: 0
+      }, {
+        name: this.$t('呼出接通数'),
+        alias: 'answer_num',
+        color: '#824EE2',
+        num: 0
+      }, {
+        name: this.$t('呼出未接数'),
+        alias: 'noanswer_num',
+        color: '#EB3374',
+        num: 0
+      }, {
+        name: this.$t('呼出接听率'),
+        alias: 'callout_answer',
+        color: '#34FF9A',
+        num: '0%'
+      }],
+      chartsOptions: {
+        // 柱状图
+        charts: {
+          grid: {
+            left: '10px',
+            right: '10px',
+            bottom: '10px',
+            containLabel: true
+          },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' }
+          },
+          color: ['#2E64FF', '#00D9FF', '#824EE2', '#314A78', '#0d5da2', '#147AFC', '#ffffff'],
+          toolbox: { show: false },
+          // 柱子数量
+          legend: {
+            data: [{
+              icon: 'circle',
+              name: this.$t('呼入量')
+            }, {
+              icon: 'circle',
+              name: this.$t('转坐席量')
+            }, {
+              icon: 'circle',
+              name: this.$t('接听量')
+            }, {
+              icon: 'circle',
+              name: this.$t('放弃量')
+            }, {
+              icon: 'circle',
+              name: this.$t('未接量')
+            }, {
+              name: this.$t('接通率')
+            }],
+            right: '0',
+            textStyle: {
+              color: '#ffffff'
+            }
+          },
+          // X轴名称
+          xAxis: {
+            type: 'category',
+            data: [],
+            splitLine: {
+              show: true,
+              lineStyle: {
+                color: '#ffffff',
+                type: 'dashed',
+                width: 0.5
+              }
+            },
+            axisLine: {
+              show: false
+            },
+            axisLabel: {
+              color: '#ffffff'
+            }
+          },
+          yAxis: [{
+            type: 'value',
+            splitLine: {
+              show: true,
+              lineStyle: {
+                color: '#ffffff',
+                type: 'dashed',
+                width: 0.5
+              }
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              color: '#ffffff'
+            },
+            axisLine: {
+              show: false
+            }
+          }],
+          // 对应柱子高度
+          series: [{
+            name: this.$t('呼入量'),
+            type: 'bar',
+            itemStyle: {
+              normal: { barBorderRadius: [30, 30, 0, 0] }
+            },
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }, {
+            name: this.$t('转坐席量'),
+            type: 'bar',
+            itemStyle: {
+              normal: { barBorderRadius: [30, 30, 0, 0] }
+            },
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }, {
+            name: this.$t('接听量'),
+            type: 'bar',
+            itemStyle: {
+              normal: { barBorderRadius: [30, 30, 0, 0] }
+            },
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }, {
+            name: this.$t('放弃量'),
+            type: 'bar',
+            itemStyle: {
+              normal: { barBorderRadius: [30, 30, 0, 0] }
+            },
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }, {
+            name: this.$t('未接量'),
+            type: 'bar',
+            itemStyle: {
+              normal: { barBorderRadius: [30, 30, 0, 0] }
+            },
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }, {
+            name: this.$t('接通率'),
+            type: 'line',
+            smooth: true,
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }]
+        },
+        // 饼状图
+        pie: {
+          tooltip: {
+            trigger: 'item',
+            formatter: (params) => {
+              return `${this.$t(params.name)}\n\n${params.value}%`
+            }
+          },
+          color: ['#2E64FF', '#7D24FB'],
+          legend: {
+            orient: 'vertical',
+            bottom: '50%',
+            right: '10%',
+            data: ['接通率', '放弃率'],
+            textStyle: {
+              color: '#ffffff'
+            }
+          },
+          series: {
+            type: 'pie',
+            label: {
+              position: 'inner',
+              formatter: (params) => {
+                return `${this.$t(params.name)}\n\n${params.value}%`
+              }
+            },
+            right: '30%',
+            labelLine: {
+              show: false
+            },
+            data: [
+              { value: 0, name: '放弃率' },
+              { value: 0, name: '接通率' }
+            ]
+          }
+        },
+        // 空心饼状图
+        charts_pieHollow: {
+          color: ['#7D24FB', '#2E64FB', '#b6a2de', '#00D9FF', '#EB3374', '#0B1095'],
+          tooltip: {
+            trigger: 'item',
+            formatter: (params) => {
+              return `${this.$t(params.name)}\n\n${params.value}%`
+            }
+          },
+          legend: {
+            icon: 'circle',
+            bottom: 0,
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 12
+            }
+          },
+          series: [
+            {
+              type: 'pie',
+              radius: ['24%', '43%'],
+              labelLine: {
+                length: 33,
+                lineStyle: {
+                  color: '#2D99FF'
+                }
+              },
+              label: {
+                formatter: (params) => {
+                  return `{b|${this.$t(params.name)}}\n{d|${params.value}}`
+                },
+                rich: {
+                  b: {
+                    color: '#ffffff',
+                    fontSize: 14
+                  },
+                  d: {
+                    color: '#00DDFF',
+                    fontSize: 20
+                  }
+                }
+              },
+              data: [
+                { value: 300, name: '离线' },
+                { value: 1048, name: '在线' },
+                { value: 735, name: '空闲' },
+                { value: 580, name: '示忙' },
+                { value: 484, name: '通话' },
+                { value: 300, name: '振铃' }
+              ]
+            }
+          ]
+        }
+      },
+      fn: null,
+      chartview: null,
+      chartpie: null,
+      pieline: null,
+      pieHollow: null,
+      avg_wait: '00:00:00', // 平均等待时长
+      max_wait: '00:00:00', // 最长等待时长
+      currentWait: [], // 当前等待
+      call_data: {},
+      openExplain: false
+    }
+  },
+  activated () {
+    this.loaddata()
+    this.fn = this.resizeHandler()
+    this.$nextTick(() => {
+      this.fn()
+      window.addEventListener('resize', this.fn)
+    })
+    this.changeTime()
+  },
+  // 销毁循环
+  deactivated () {
+    clearInterval(this.timeid)
+    window.removeEventListener('resize', this.fn)
+  },
+  mounted () {
+    this.loaddata()
+    this.changeTime()
+  },
+  methods: {
+    changeTime () {
+      this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      this.timeid = setInterval(() => {
+        this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      }, 1000)
+    },
+    // 转化数值
+    changeData (res) {
+      this.avg_wait = res.avg_wait
+      const currentWait = res.current_wait.toString()
+      const arr = []
+      this.call_data = res.call_data
+      this.secBottomList.forEach(item => {
+        item.num = item.alias === 'callout_answer' ? `${res.callout_data[item.alias]}%` : res.callout_data[item.alias]
+      })
+      for (let i = 0; i < currentWait.length; i++) {
+        arr.push(currentWait[i])
+      }
+      this.currentWait = arr
+      this.max_wait = res.max_wait
+      this.secTopList.forEach(item => {
+        item.num = res.call_data[item.alias]
+      })
+      const chart2 = res.chart2_data
+      this.chartsOptions.charts.xAxis.data = chart2.name_data
+      this.chartsOptions.charts.series[0].data = chart2.value_incall
+      this.chartsOptions.charts.series[1].data = chart2.value_agent
+      this.chartsOptions.charts.series[2].data = chart2.value_answer
+      this.chartsOptions.charts.series[3].data = chart2.value_abandon
+      this.chartsOptions.charts.series[4].data = chart2.value_agentmiss
+      this.chartsOptions.charts.series[5].data = chart2.value_connect
+      this.chartsOptions.pie.series.data = res.chart3_data
+      this.chartsOptions.pie.legend.formatter = (name) => {
+        const data = this.chartsOptions.pie.series.data
+        const obj = data.filter(item => item.name === name)
+        return `${this.$t(obj[0].name)} (${obj[0].value}%)`
+      }
+      this.chartsOptions.charts_pieHollow.series[0].data.forEach(item => {
+        const index = res.chart1_data.name_data.findIndex(itemChart => itemChart.includes(item.name))
+        item.value = res.chart1_data.value_data[index]
+      })
+      this.chartsOptions.charts_pieHollow.legend.formatter = (params) => {
+        const index = res.chart1_data.name_data.findIndex(itemChart => itemChart.includes(params))
+        const value = res.chart1_data.value_data[index]
+        return `${this.$t(params)} ${value}`
+      }
+      this.drowerpic()
+    },
+    // 请求接口数据
+    loaddata () {
+      this.axios({
+        url: '/monitor/serverView/mockInit',
+        params: { httpget: '', moni: JSON.stringify([1, 1]) },
+        timeout: 5 * 60 * 1000
+      }).then(res => {
+        this.initNum++
+        this.changeData(res.result.data)
+      })
+    },
+    // 渲染图表
+    drowerpic () {
+      this.chartpie = echarts.init(this.$refs.pie)
+      this.chartpie.setOption(this.chartsOptions.pie, true)
+      this.chartview = echarts.init(this.$refs.charts)
+      this.chartview.setOption(this.chartsOptions.charts, true)
+      this.pieHollow = echarts.init(this.$refs.charts_pieHollow)
+      this.pieHollow.setOption(this.chartsOptions.charts_pieHollow, true)
+    },
+    // 处理页面大小改变
+    resizeHandler () {
+      let timer
+      return () => {
+        if (timer) window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          if (this.pieHollow) { this.pieHollow.resize() }
+          if (this.chartview) { this.chartview.resize() }
+          if (this.chartpie) { this.chartpie.resize() }
+          if (this.pieline) { this.pieline.resize() }
+        }, 500)
+      }
+    }
+  }
+}
+</script>

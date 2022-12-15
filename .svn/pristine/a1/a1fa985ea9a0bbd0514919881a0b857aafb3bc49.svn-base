@@ -1,0 +1,183 @@
+<template>
+  <a-spin :spinning="loading" class="container">
+    <a-form :form="form">
+      <div style="height: calc(100vh - 220px)">
+        <a-form-design
+          ref="kFormDesign"
+          :fieldColumns="fieldColumns"
+          :myTemplate="myTemplate"
+          :afterInit="afterInit"
+          :beforeSubmit="beforeSubmit"
+          :formdata="data"
+          :setting="setting"
+          :params="{
+            fieldColumns: fieldColumns,
+            tableList: tableList,
+            tableId: config.tableId
+          }"
+          :entranceType="'appViewDesign'"
+          :fields="componentsList"
+        />
+      </div>
+    </a-form>
+  </a-spin>
+</template>
+<script>
+import Vue from 'vue'
+import AFormDesign from '@/views/admin/AppFormDesign/packages/index'
+Vue.use(AFormDesign)
+export default {
+  props: {
+    configdata: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: {},
+      setting: {},
+      afterInit: '',
+      beforeSubmit: '',
+      myTemplate: [],
+      fieldColumns: [],
+      tableList: [],
+      form: this.$form.createForm(this),
+      componentsList: [
+        'grid',
+        'card',
+        'divider',
+        'gap',
+        'button',
+        'text',
+        'html',
+        'virtualField',
+        'component',
+        'alert',
+        'placeholder',
+        'floatButton',
+        'flowlog',
+        'workRemark',
+        'work',
+        'web_sub_data_window',
+        'web_sub_form_view',
+        'tabs',
+        'line'
+      ]
+    }
+  },
+  // 祖先级组件数据传递，以及被子孙级组件动态修改
+  provide () {
+    this.theme = Vue.observable({
+      viewData: {}
+    })
+    return {
+      theme: this.theme
+    }
+  },
+  mounted () {
+    this.show()
+  },
+  methods: {
+    show () {
+      this.loading = true
+      this.config = this.configdata
+      this.axios({
+        url: 'admin/template/getFormView',
+        data: {
+          id: this.config.record ? this.config.record.id : 0,
+          tableId: this.config.tableId ? this.config.tableId : 0
+        }
+      }).then((res) => {
+        this.loading = false
+        this.theme.viewData = res.result
+        this.form.resetFields()
+        this.data = res.result.data
+        this.fieldColumns = res.result.fieldInfos
+        this.tableList = res.result.tableList
+        this.setting = res.result.setting
+        this.myTemplate = res.result.setting.template ? res.result.setting.template : []
+        this.afterInit = res.result.setting.templateScript ? res.result.setting.templateScript.afterInit : ''
+        this.beforeSubmit = res.result.setting.templateScript ? res.result.setting.templateScript.beforeSubmit : ''
+        if (this.config.action === 'copy') {
+          this.data.name = ''
+        }
+      })
+    },
+    handleSubmit (e) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          const myTemplate = this.$refs.kFormDesign ? this.$refs.kFormDesign.data.list : this.myTemplate
+          if (!values.setting) {
+            values.setting = {}
+          }
+          values.setting.description = this.setting.description
+          values.setting.template = myTemplate
+          // 获取表单规则
+          values.setting.fieldRule = this.theme.viewData.setting.fieldRule || []
+          // tplSettin初始化
+          values.setting.templateScript = {}
+          values.setting.templateScript.afterInit = this.$refs.kFormDesign ? this.$refs.kFormDesign.initJs : this.initJs
+          values.setting.templateScript.beforeSubmit = this.$refs.kFormDesign ? this.$refs.kFormDesign.verifStr : this.beforeSubmit
+          values.setting.helpText = this.setting.helpText
+          values.setting.templatePreviewWidth = this.setting.templatePreviewWidth
+          // 帮助说明内容提交
+          values.module = this.config.module
+          values.name = this.data.name
+          values.accessLevel = this.data.accessLevel
+          values.remarks = this.data.remarks
+          if (this.config.action === 'edit') {
+            values.id = this.data.id
+          } else {
+            values.type = this.config.type
+            values.tableId = this.config.tableId
+          }
+          this.axios({
+            url: '/admin/template/checkRepeat',
+            data: { id: this.config.action === 'edit' ? this.data.id : 0, name: values.name, type: 'appFormView', tableId: this.config.tableId }
+          }).then((res) => {
+            if (res.code) {
+              this.$message.error(res.message)
+              this.loading = false
+            } else {
+              this.loading = true
+              this.axios({
+                url: this.config.submitUrl || this.config.url,
+                data: values
+              }).then((res) => {
+                if (e !== 'save') {
+                  this.visible = false
+                }
+                this.loading = false
+                this.$emit('ok', values)
+                this.$emit('refresh', values, (res.result.id || this.data.id))
+                if (res.code) {
+                  this.$message.warning(res.message)
+                } else {
+                  this.$message.success(res.message)
+                  if (this.config.action !== 'edit') {
+                    this.config.action = 'edit'
+                    this.config.submitUrl = ''
+                    this.data.id = res.result.id
+                    this.data.templateId = res.result.templateId
+                  }
+                }
+              })
+            }
+          })
+        } else {
+          this.$refs.kFormDesign.showPropertie = false
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+        }
+      })
+    }
+  }
+}
+</script>

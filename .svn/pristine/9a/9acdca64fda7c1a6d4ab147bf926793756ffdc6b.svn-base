@@ -1,0 +1,371 @@
+<template>
+  <a-popover v-model="selectshow" trigger="click" placement="bottomLeft" @click.stop="changeStatus">
+    <a-form-item>
+      <a-select
+        v-decorator="[name, { initialValue: contents || undefined, rules: [{ required: required, message: message }] }]"
+        read-only
+        :allowClear="true"
+        :mode="multiple ? 'multiple' : 'default'"
+        :placeholder="placeholder"
+        :open="false"
+        style="cursor: pointer"
+        :dropdownMatchSelectWidth="true"
+        @change="onChange"
+      >
+        <a-select-option v-for="node in selectTagList" :key="node.value">{{ node.label }}</a-select-option>
+      </a-select>
+    </a-form-item>
+    <div slot="content" style="width: 500px; max-height: 500px; overflow-y: auto; overflow-x: hidden; padding: 0 4px">
+      <a-spin :spinning="loading">
+        <!-- 搜索区 -->
+        <a-row type="flex" :gutter="8" align="middle">
+          <a-col :span="10" style="max-height: 28px">
+            <a-select
+              v-model="searchObj.tagCategory"
+              class="tagCategory"
+              mode="multiple"
+              style="width: 100%"
+              :placeholder="$t('分类搜索')"
+              @change="searchTagCategory"
+            >
+              <a-select-option v-for="(item, index) in tagCategoryList" :key="index" :value="item.tagCategoryNumber">
+                {{ item.tagCategoryName }}
+              </a-select-option>
+            </a-select>
+          </a-col>
+          <a-col :span="13">
+            <a-input-search
+              v-model="searchObj.tagName"
+              :placeholder="$t('请输入标签名称搜索')"
+              allowClear
+              @search="tagdataRefresh"
+            />
+          </a-col>
+          <a-col :span="1">
+            <a-popover placement="right">
+              <template slot="content">
+                <div style="margin-bottom: 8px">
+                  <a-tag class="tagPrimary">{{ $t('手动标签') }}</a-tag>
+                  <span>为手动标签</span>
+                </div>
+                <div>
+                  <a-tag color="red">{{ $t('自动标签') }}</a-tag>
+                  <span>为自动标签</span>
+                </div>
+              </template>
+              <a-icon type="question-circle" />
+            </a-popover>
+          </a-col>
+        </a-row>
+        <!-- 已选标签区 -->
+        <a-card
+          size="small"
+          :bordered="false"
+          style="background: #f2f2f2; margin: 8px 0; max-height: 98px; overflow-y: auto"
+          @mouseenter="delShow = true"
+          @mouseleave="delShow = false"
+        >
+          <a-row v-if="tagList.length" class="selectTagArea">
+            <a-col :span="23">
+              <template v-if="selectTagList.length">
+                <a-tag
+                  v-for="item in selectTagList"
+                  :key="item.value"
+                  class="tagClose"
+                  style="margin: 4px"
+                  :class="item.tagType === 1 ? 'tagPrimary' : ''"
+                  :color="item.tagType === 1 ? '' : 'red'"
+                  :closable="item.tagType === 1 ? true : false"
+                  @close="() => closeTab(item)"
+                >
+                  <div slot="closeIcon">
+                    <a-icon type="question-circle" />
+                  </div>
+                  {{ item.label }}
+                </a-tag>
+              </template>
+              <span v-else style="color: #7f7f7f">{{ $t('未选中标签') }}</span>
+            </a-col>
+            <a-col :span="1" style="text-align: right">
+              <a-icon v-if="delShow" type="delete" class="delIcon" @click="handleDel" />
+            </a-col>
+          </a-row>
+        </a-card>
+        <!-- 分类 标签区 -->
+        <a-spin :spinning="loadingTag">
+          <template v-if="tagList.length">
+            <div v-for="item in tagList" :key="item.id">
+              <h3>{{ item.label }} ({{ item.selectType === 0 ? $t('单选') : $t('多选') }})</h3>
+              <a-card
+                v-if="item.children.length"
+                size="small"
+                :bordered="false"
+                class="tagColor"
+                style="margin-top: -8px"
+              >
+                <!-- tagType 标签类型，0自动标签，1手动标签 -->
+                <a-tag
+                  v-for="(childItem, childIndex) in item.children"
+                  :key="childIndex"
+                  :class="
+                    item.tagType === 0
+                      ? ''
+                      : selectTagList.every((item) => item.label !== childItem.label)
+                      ? 'tagGray'
+                      : 'tagBlue'
+                  "
+                  :style="{
+                    margin: '4px',
+                    cursor: item.tagType === 0 ? 'no-drop' : 'pointer'
+                  }"
+                  :color="item.tagType === 0 ? 'red' : ''"
+                  @click="addTag(childItem, item.tagType)"
+                >
+                  {{ childItem.label }}
+                </a-tag>
+              </a-card>
+            </div>
+          </template>
+          <a-empty v-else />
+        </a-spin>
+      </a-spin>
+    </div>
+  </a-popover>
+</template>
+
+<script>
+export default {
+  props: {
+    placeholder: {
+      type: String,
+      default: () => ''
+    },
+    name: {
+      type: String,
+      default: () => 'contents'
+    },
+    required: {
+      type: Boolean,
+      default: false
+    },
+    message: {
+      type: String,
+      default: '请选择'
+    },
+    multiple: {
+      type: Boolean,
+      default: true
+    },
+    options: {
+      type: Array,
+      default: () => []
+    },
+    config: {
+      type: Object,
+      default: () => { }
+    },
+    value: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      selectshow: false,
+      loading: false,
+      loadingTag: false,
+      contents: undefined,
+      searchObj: {},
+      tagCategoryList: [],
+      delShow: false,
+      tagList: [],
+      parameter: {},
+      selectTagList: []
+    }
+  },
+  watch: {
+    name (newVal) {
+      this.contents = undefined
+      this.selectTagList = []
+    },
+    value: {
+      handler (newVal) {
+        if (newVal && newVal.length) {
+          this.contents = newVal
+          this.selectTagList = this.config.field.tagData.map(item => {
+            const obj = {}
+            obj.value = item.number
+            obj.label = item.name
+            obj.tagType = item.tagType
+            return obj
+          })
+        } else {
+          this.contents = undefined
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    searchTagCategory (e) {
+      this.loadingTag = true
+      this.tagdataRefresh()
+    },
+    changeStatus () {
+      this.loading = true
+      this.tagCategoryList = []
+      this.tagList = []
+      this.searchObj = {}
+      this.parameter = {
+        pageNo: 1,
+        pageSize: 999,
+        sortField: 'id',
+        sortOrder: 'descend',
+        tagCategoryNumber: this.config.field.setting.form.tagSetting.rnumber
+      }
+      this.getCategory()
+      this.getTagOption()
+    },
+    // 获取分类
+    getCategory () {
+      this.axios({
+        url: '/admin/tag/categoryInit',
+        data: this.parameter
+      }).then(res => {
+        this.loadingTag = this.loading = false
+        this.tagCategoryList = res.result.data
+      })
+    },
+    // 获取标签
+    getTagOption () {
+      this.axios({
+        url: '/admin/tag/tagOption',
+        data: this.parameter
+      }).then(res => {
+        this.tagList = res.result.option
+        this.tagList.reverse()
+        this.delShow = true
+        this.loadingTag = this.loading = false
+
+        if (this.value?.length) {
+          // 初始化是否有值 有值显示选中值
+          this.selectTagList = []
+          this.tagList.forEach(item => {
+            item.children.forEach(subItem => {
+              if (this.value.includes(subItem.value)) {
+                this.selectTagList.push({
+                  label: subItem.label,
+                  value: subItem.value,
+                  tagType: item.tagType
+                })
+              }
+            })
+          })
+        }
+      })
+    },
+    tagdataRefresh () {
+      this.parameter = {
+        pageNo: 1,
+        pageSize: 999,
+        sortField: 'id',
+        sortOrder: 'descend',
+        tagName: this.searchObj.tagName,
+        tagCategoryNumber: this.searchObj.tagCategory
+      }
+      this.getTagOption()
+    },
+    handleDel () {
+      this.selectTagList = []
+    },
+    addTag (option, tagType) {
+      if (tagType === 1) {
+        const isExit = this.selectTagList.every(item => item.label !== option.label)
+        if (isExit) {
+          this.selectTagList.push({
+            label: option.label,
+            value: option.value,
+            tagType: tagType
+          })
+        } else {
+          this.selectTagList = this.selectTagList.filter(item => {
+            return item.label !== option.label
+          })
+        }
+      }
+      this.contents = this.selectTagList.map(item => item.value)
+      console.log('this.contents', this.contents)
+      this.$emit('select', this.contents)
+    },
+    closeTab (tagItem) {
+      const tags = this.selectTagList.filter(tag => tag.value !== tagItem.value)
+      this.selectTagList = tags
+      this.contents = this.selectTagList.map(item => item.value)
+      this.$emit('select', this.contents)
+    },
+    onChange (e, type) {
+      this.selectTagList = e.map(item => { const obj = this.selectTagList.filter(subItem => item === subItem.value)[0]; return obj })
+      this.contents = this.selectTagList.map(item => item.value)
+      this.$emit('select', this.contents)
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.tagPrimary {
+  background: #108ee9;
+  color: #fff;
+}
+.selectTagArea {
+  .delIcon:hover {
+    color: #f5222d;
+  }
+}
+// 分类下拉框固定高度
+/deep/.tagCategory {
+  .ant-select-selection--multiple {
+    max-height: 28px;
+    overflow: hidden;
+  }
+}
+// 标签颜色
+/deep/.tagColor {
+  .tagBlue {
+    color: #1890ff;
+    background: #e6f7ff;
+    border-color: #91d5ff;
+  }
+  .tagGray {
+    color: rgba(0, 0, 0, 0.85);
+    background: #fafafa;
+    border-color: #d9d9d9;
+  }
+}
+// 标签关闭图标更改颜色
+/deep/.tagClose {
+  .anticon-close {
+    color: #fff;
+  }
+}
+div::-webkit-scrollbar {
+  text-align: right;
+  width: 8px;
+  height: 8px;
+}
+div::-webkit-scrollbar-track {
+  background: rgb(239, 239, 239);
+  border-radius: 2px;
+}
+div::-webkit-scrollbar-thumb {
+  background: #bfbfbf;
+  border-radius: 10px;
+}
+div::-webkit-scrollbar-thumb:hover {
+  background: #333;
+}
+div::-webkit-scrollbar-corner {
+  background: #179a16;
+}
+</style>

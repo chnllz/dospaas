@@ -1,0 +1,401 @@
+<template>
+  <div class="useMonitor">
+    <div class="box">
+      <div class="content">
+        <div class="color-fff gloTime font-12">
+          <div>{{ nowTime }}</div>
+          <div>{{ $t('信息化系统解决方案提供商') }}</div>
+        </div>
+        <!-- 头部 -->
+        <div class="globalClass">
+          <div class="topLogo topLogoImg">
+            <img :src="heardImg" alt="" />
+          </div>
+          <div class="centerTitleHeight centerTitleImg">
+            <div class="centerTitle">{{ $t('坐席状态监控') }}</div>
+          </div>
+        </div>
+        <!-- 说明 -->
+        <div
+          class="gloExplainClass"
+          @click="
+            () => {
+              openExplain = true
+            }
+          "
+        >
+          <img src="./assets/image/explain.png" class="explainImage" alt="" />
+          <div class="color-ffc font-12">{{ $t('帮助说明') }}</div>
+        </div>
+        <!-- 中间 -->
+        <div class="tableBox" style="flex-direction: row">
+          <!-- 左部分 -->
+          <subTable class="flex-2" style="margin-right: 20px">
+            <div slot="body" class="seTableBox tableBoxBody">
+              <a-table
+                ref="onetable"
+                size="small"
+                rowKey="id"
+                :pagination="paginationOpt"
+                :columns="Columns"
+                :data-source="tabledata1"
+                @change="changeTableData"
+              >
+                <template slot="status" slot-scope="text">
+                  <img
+                    :src="
+                      require(`./assets/image/${
+                        text == '-1'
+                          ? 'offLine'
+                          : text == '0'
+                          ? 'free'
+                          : text == '1'
+                          ? 'onThePhone'
+                          : text == '2'
+                          ? 'showBusy'
+                          : text == '4'
+                          ? 'offLine'
+                          : text == '8'
+                          ? 'ringing'
+                          : text == '16'
+                          ? 'ringing'
+                          : ''
+                      }.png`)
+                    "
+                    alt=""
+                  />
+                  <span
+                    :style="{
+                      color:
+                        text == '-1'
+                          ? '#FFFFFF'
+                          : text == '0'
+                          ? '#75E2EC'
+                          : text == '1'
+                          ? '#26DD7E'
+                          : text == '2'
+                          ? '#FE1757'
+                          : text == '4'
+                          ? '#FFFFFF'
+                          : text == '8'
+                          ? '#FFCF23'
+                          : text == '16'
+                          ? '#10b1e9'
+                          : '#75E2EC'
+                    }"
+                  >
+                    {{
+                      text == '-1'
+                        ? $t('离线')
+                        : text == '0'
+                        ? $t('空闲')
+                        : text == '1'
+                        ? $t('通话中')
+                        : text == '2'
+                        ? $t('示忙')
+                        : text == '4'
+                        ? $t('离线')
+                        : text == '8'
+                        ? $t('振铃中')
+                        : text == '16'
+                        ? $t('保持中')
+                        : ''
+                    }}
+                  </span>
+                </template>
+              </a-table>
+            </div>
+          </subTable>
+          <!-- 右部分 -->
+          <div class="flex-1 naTableBox">
+            <div class="naTableHead font-14">
+              <div>{{ $t('ID') }}</div>
+              <div>{{ $t('来电号码') }}</div>
+              <div>{{ $t('来电时间') }}</div>
+              <div>{{ $t('等候时长') }}</div>
+              <div>{{ $t('状态') }}</div>
+            </div>
+            <subTable class="flex-1 fullHeight">
+              <div slot="body" ref="rightBoxRef" class="seTableBox tableBoxBody">
+                <a-table
+                  ref="rightTable"
+                  class="rightTableClass"
+                  size="small"
+                  rowKey="id"
+                  :pagination="false"
+                  :columns="rightColumns"
+                  :data-source="rightTableData"
+                >
+                  <template slot="zt" slot-scope="text">
+                    <span :style="{ color: text === '未处理' ? '#FE1757' : '#26DD7E' }">{{ $t(text) }}</span>
+                  </template>
+                </a-table>
+              </div>
+            </subTable>
+          </div>
+        </div>
+      </div>
+      <a-modal
+        :title="$t('说明')"
+        :visible="openExplain"
+        :bodyStyle="{ maxHeight: '500px', overflowY: 'height' > 500 ? 'scroll' : 'auto' }"
+        @ok="() => (openExplain = false)"
+        @cancel="() => (openExplain = false)"
+      >
+        <div>{{ $t('坐席状态监控') }}</div>
+      </a-modal>
+    </div>
+  </div>
+</template>
+<script>
+import './assets/css/chartframe.less'
+export default {
+  components: {
+    subTable: () => import('./components/subTable')
+  },
+  data () {
+    return {
+      heardImg: '',
+      Columns: [{
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        align: 'center',
+        sorter: (a, b) => a.id - b.id
+      }, {
+        title: this.$t('姓名'),
+        dataIndex: 'realname',
+        align: 'center'
+      }, {
+        title: this.$t('分机'),
+        dataIndex: 'extension',
+        align: 'center',
+        sorter: (a, b) => a.extension - b.extension
+      }, {
+        title: this.$t('持续时间'),
+        dataIndex: 'time',
+        align: 'center',
+        sorter: (a, b) => b.time.localeCompare(a.time)
+      }, {
+        title: this.$t('接听量'),
+        dataIndex: 'call_answer',
+        align: 'center',
+        sorter: (a, b) => a.call_answer - b.call_answer
+
+      }, {
+        title: this.$t('接听总时长'),
+        dataIndex: 'call_answer_time',
+        align: 'center',
+        sorter: (a, b) => b.call_answer_time.localeCompare(a.call_answer_time)
+
+      }, {
+        title: this.$t('呼出量'),
+        dataIndex: 'call_out',
+        align: 'center',
+        sorter: (a, b) => a.call_out - b.call_out
+
+      }, {
+        title: this.$t('呼出总时长'),
+        dataIndex: 'call_out_time',
+        align: 'center',
+        sorter: (a, b) => b.call_out_time.localeCompare(a.call_out_time)
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'status',
+        align: 'center',
+        scopedSlots: { customRender: 'status' }
+      }],
+      sorter: { field: 'id', order: 'descend' },
+      tabledata1: [],
+      tabledata2: [],
+      Interval: null,
+      settimeout: 5,
+      openExplain: false,
+      monitor: {},
+      nowTime: null,
+      // 时间定时器
+      timeid: null,
+      timeOutCurrent: null,
+      paginationOpt: {
+        current: 1,
+        defaultCurrent: 1, // 默认当前页数
+        defaultPageSize: 20, // 默认当前页显示数据的大小
+        showSizeChanger: true,
+        pageSizeOptions: ['15', '20', '30', '40', '50'],
+        showTotal: (total, range) => `${this.$t('显示第')} ${range[0]} ${this.$t('条到')} ${range[1]}${this.$t('条记录, 共')} ${total} ${this.$t('条')}`,
+        onShowSizeChange: (current, pageSize) => {
+          this.paginationOpt.current = 1
+          this.paginationOpt.defaultCurrent = 1
+          this.paginationOpt.defaultPageSize = pageSize
+        },
+        // 改变每页数量时更新显示
+        onChange: (current, size) => {
+          this.paginationOpt.defaultCurrent = current
+          this.paginationOpt.defaultPageSize = size
+        }
+      },
+      rightColumns: [{
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        align: 'center'
+      }, {
+        title: this.$t('来电号码'),
+        dataIndex: 'ldhm',
+        align: 'center'
+      }, {
+        title: this.$t('来电时间'),
+        dataIndex: 'ldsj',
+        align: 'center'
+      }, {
+        title: this.$t('等候时长'),
+        dataIndex: 'waittime',
+        align: 'center'
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'zt',
+        align: 'center',
+        scopedSlots: { customRender: 'zt' }
+      }],
+      rightTableData: [],
+      randomId: 9,
+      jumpPageTime: 10,
+      leftLength: 0,
+      rightTotal: 5
+    }
+  },
+  mounted () {
+    this.loadTabledata()
+    this.changePageCurrent()
+    this.changeTime()
+  },
+  activated () {
+    this.changeTime()
+    this.loadTabledata()
+    this.changePageCurrent()
+  },
+  deactivated () {
+    clearInterval(this.Interval)
+    clearInterval(this.timeid)
+    clearInterval(this.timeOutCurrent)
+  },
+  methods: {
+    setBottom () {
+      this.$refs.rightBoxRef.scrollTop = this.$refs.rightBoxRef.scrollHeight
+    },
+    changePageCurrent () {
+      this.timeOutCurrent = setInterval(() => {
+        const len = Math.ceil(this.leftLength / this.paginationOpt.defaultPageSize)
+        this.loadTabledata()
+        this.paginationOpt.current = len !== this.paginationOpt.current ? this.paginationOpt.current += 1 : 1
+      }, this.jumpPageTime * 1000)
+    },
+    // 自动改变页数
+    changeTableData (pagination, filters, sorter, { currentDataSource }) {
+      this.paginationOpt.current = pagination.current
+    },
+    changeTime () {
+      this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      this.timeid = setInterval(() => {
+        this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      }, 1000)
+    },
+    changeData (res) {
+      this.tabledata1 = res.agent_data.data
+      this.rightTableData = res.call_data.data
+      setTimeout(() => {
+        this.setBottom()
+      }, 1000)
+    },
+    loadTabledata () {
+      this.axios({
+        url: '/monitor/serverState/mockInit',
+        params: {
+          httpget: '',
+          moni: JSON.stringify([1, 1]),
+          rightTotal: this.rightTotal,
+          agentPageNo: this.paginationOpt.current,
+          agentPageSize: this.paginationOpt.defaultPageSize
+        },
+        timeout: 5 * 60 * 1000
+      }).then(res => {
+        this.rightTotal++
+        this.changeData(res.result.data)
+        this.leftLength = res.result.data.agent_data.count
+      })
+    },
+    tervalload (timeout) {
+      this.Interval = setTimeout(() => {
+        this.loadTabledata()
+      }, timeout)
+    }
+  }
+
+}
+</script>
+<style lang="less" scoped>
+/deep/.ant-pagination-total-text {
+  color: #fff;
+}
+/deep/.ant-table-column-title {
+  font-size: 0.07rem;
+}
+
+/deep/.ant-table-tbody {
+  font-size: 0.04rem;
+}
+
+.explainClass {
+  position: absolute;
+  top: 35px;
+  right: 33px;
+  color: #fff;
+  font-size: 18px;
+}
+.topLogo {
+  text-align: center;
+  padding-top: 0.03rem;
+}
+.logo {
+  width: 0.8rem;
+}
+.naTableBox {
+  position: relative;
+}
+.naTableHead {
+  position: absolute;
+  z-index: 30;
+  list-style: none;
+  display: flex;
+  width: 91%;
+  justify-content: space-between;
+  top: 0.135rem;
+  left: 0.1rem;
+  color: #fff;
+  background-color: #0d44b5;
+}
+.naTableHead div {
+  padding: 9px;
+}
+.seTableBox {
+  height: 77vh;
+}
+
+/* 页脚样式 */
+.ant-table-pagination.ant-pagination {
+  padding-top: 0.2rem;
+}
+
+.ant-pagination.mini .ant-pagination-item {
+  margin: 0 0.015rem;
+}
+
+.ant-pagination.mini .ant-pagination-item:not(.ant-pagination-item-active) {
+  background-color: #101e89;
+}
+
+/deep/.ant-pagination.mini .ant-pagination-prev .ant-pagination-item-link,
+/deep/.ant-pagination-item:not(.ant-pagination-item-active) a,
+/deep/.ant-pagination-disabled .ant-pagination-item-link,
+/deep/.ant-pagination-next a {
+  color: #fff;
+}
+</style>

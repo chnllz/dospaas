@@ -1,0 +1,158 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('任务名称')">
+              <a-input v-model.trim="queryParam.taskName" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      class="table-fill"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="handleDetail(record)">{{ $t('查看明细') }}</a>
+      </div>
+    </s-table>
+    <general-export ref="generalExport" />
+    <wait-inspected-details
+      v-if="visibleClick"
+      :key="Date.parse(new Date())"
+      ref="waitInspectedDetails"
+      :statusList="statusList"
+      @visible="changeVisible"
+    />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport'),
+    WaitInspectedDetails: () => import('./WaitInspectedDetails')
+  },
+  data () {
+    return {
+      visibleClick: true,
+      advanced: false,
+      // 搜索参数
+      parameter: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('任务名称'),
+        dataIndex: 'taskName'
+      }, {
+        title: this.$t('质检总数'),
+        dataIndex: 'qualityTotal'
+      }, {
+        title: this.$t('已质检数'),
+        dataIndex: 'qualityNumber'
+      }, {
+        title: this.$t('完成率'),
+        dataIndex: 'accomplishPercent'
+      }, {
+        title: this.$t('质检员'),
+        dataIndex: 'qualityUsers'
+      }],
+      statusList: []
+    }
+  },
+  created () {
+    this.getQualityStatus()
+  },
+  methods: {
+    changeVisible (val) {
+      this.visibleClick = val
+      this.visibleClick = !val
+    },
+    getQualityStatus () {
+      this.axios({
+        url: 'admin/dict/initData',
+        data: {
+          dictCategoryNumber: 'huJiaoZhongXinZhiJianZhuangTai'
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.statusList = res.result
+        }
+      })
+    },
+    // 页面数据渲染
+    loadDataTable (parameter) {
+      this.parameter = parameter
+      return this.axios({
+        url: '/quality/toInspected/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportToInspected',
+        setMenuName: true,
+        parameter: {
+          condition: Object.assign(this.parameter, this.queryParam)
+        }
+      })
+    },
+    // 查看明细
+    handleDetail (record) {
+      this.$refs.waitInspectedDetails.show({
+        data: record,
+        title: this.$t('查看明细')
+      })
+    }
+
+  }
+}
+</script>

@@ -1,0 +1,460 @@
+<template>
+  <div class="useMonitor">
+    <div class="box">
+      <div class="content" style="height: 100%">
+        <div class="color-fff gloTime font-12">
+          <div>{{ nowTime }}</div>
+          <div>信息化系统解决方案提供商</div>
+        </div>
+        <!-- 头部 -->
+        <div class="globalClass toHead">
+          <div class="topLogo topLogoImg">
+            <img :src="heardImg" />
+          </div>
+          <div class="centerTitleHeight centerTitleImg">
+            <div class="centerTitle">全国进线分布</div>
+          </div>
+        </div>
+        <!-- 说明 -->
+        <div
+          class="gloExplainClass"
+          @click="
+            () => {
+              openExplain = true
+            }
+          "
+        >
+          <img src="./assets/image/explain.png" class="explainImage" alt="" />
+          <div class="color-ffc font-12">帮助说明</div>
+        </div>
+        <!-- 中间 -->
+        <div class="tableBox glo-row">
+          <!-- 左部分 -->
+          <div class="flex-3 glo-flex glo-row">
+            <div class="flex-1">
+              <div class="color-fff font-18 toLeftEfficiency">历史进线数</div>
+              <div class="dialogNumListClass glo-flex">
+                <div v-for="(item, index) in historyNumList" :key="index" class="dialogNumBox">
+                  <div class="dialogNumItem dialogNumFirst"></div>
+                  <div class="dialogNumItem dialogNumSecond"></div>
+                  <div class="color-fff dialogNumText">{{ item }}</div>
+                </div>
+              </div>
+              <div class="color-fff font-18 toLeftText">今日进线数</div>
+              <div class="dialogNumListClass glo-flex">
+                <div v-for="(item, index) in todayNumList" :key="index" class="dialogNumBox">
+                  <div class="dialogNumItem dialogNumFirst"></div>
+                  <div class="dialogNumItem dialogNumSecond"></div>
+                  <div class="color-fff dialogNumText">{{ item }}</div>
+                </div>
+              </div>
+              <div class="color-fff font-18 toLeftText">接通率</div>
+              <div ref="charts_connectRate" class="toCenChart"></div>
+            </div>
+            <div class="flex-4">
+              <div ref="charts_map" style="width: 100%; height: 100%"></div>
+            </div>
+          </div>
+          <!-- 右部分 -->
+          <div class="flex-1 naTableBox">
+            <div class="naTableHead font-14">
+              <div>排名</div>
+              <div>省份</div>
+              <div>进线量</div>
+              <div>接通量</div>
+              <div>接通率</div>
+            </div>
+            <subTable style="width: 100%; height: 100%">
+              <div slot="body" ref="rightBoxRef" class="tableBoxBody" style="height: 93%">
+                <a-table
+                  ref="table"
+                  size="small"
+                  rowKey="id"
+                  :pagination="false"
+                  :columns="columns"
+                  :data-source="tableData"
+                >
+                  <template slot="pm" slot-scope="text">
+                    <div
+                      :class="[
+                        text === 1 ? 'firstNum' : text === 2 ? 'secondNum' : text === 3 ? 'thirdNum' : 'otherNum'
+                      ]"
+                    >
+                      {{ text }}
+                    </div>
+                  </template>
+                </a-table>
+              </div>
+            </subTable>
+          </div>
+        </div>
+      </div>
+      <a-modal
+        title="说明"
+        :visible="openExplain"
+        :bodyStyle="{ maxHeight: '500px', overflowY: 'height' > 500 ? 'scroll' : 'auto' }"
+        @ok="() => (openExplain = false)"
+        @cancel="() => (openExplain = false)"
+      >
+        <div>全国进线分布</div>
+      </a-modal>
+    </div>
+  </div>
+</template>
+<script>
+import './assets/css/chartframe.less'
+import echarts from 'echarts'
+// 引入中国地图数据json
+import china from 'echarts/map/json/china.json'
+export default {
+  components: {
+    subTable: () => import('./components/subTable')
+  },
+  data () {
+    return {
+      heardImg: '',
+      nowTime: null,
+      // 时间定时器
+      timeid: null,
+      columns: [{
+        title: '排名',
+        dataIndex: 'pm',
+        scopedSlots: { customRender: 'pm' },
+        align: 'center'
+      }, {
+        title: '省份',
+        dataIndex: 'sf',
+        align: 'center'
+      }, {
+        title: '进线量',
+        dataIndex: 'jxl',
+        align: 'center'
+      }, {
+        title: '接通量',
+        dataIndex: 'jtl',
+        align: 'center'
+      }, {
+        title: '接通率',
+        dataIndex: 'jtl2',
+        align: 'center'
+      }],
+      tableData: [],
+      historyNumList: [],
+      todayNumList: [],
+      chartsOptions: {
+        // 地图
+        charts_map: {},
+        // 接通率
+        charts_connectRate: {
+          color: ['#FF2994', '#582472'],
+          // 圆点中间文字
+          title: {
+            textAlign: 'center',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 16
+            },
+            x: 'middle',
+            y: 'center'
+          },
+          tooltip: {
+            show: false
+          },
+          legend: {
+            show: false,
+            textStyle: {
+              color: '#8AC9FF',
+              fontSize: 12
+            },
+            orient: 'vertical',
+            right: 50, // 图例栏偏移
+            top: 20,
+            formatter: function (name) {
+              return name
+            }
+          },
+          series: [{
+            name: '接通率',
+            type: 'pie',
+            hoverAnimation: false,
+            radius: ['75%', '100%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'inner',
+              formatter: '{b}：\n{c}'
+            },
+            labelLine: {
+              normal: {
+                show: true,
+                length: 30,
+                length2: 55
+              },
+              emphasis: {
+                show: true
+              }
+            },
+            data: [
+              { name: '接通率', value: 38 },
+              { name: '不接通率', value: 62 }
+            ]
+          }]
+        }
+      },
+      chartsMap: null,
+      chartsConnectRate: null,
+      openExplain: false,
+      pageScroll: null
+    }
+  },
+  activated () {
+    this.changeTime()
+  },
+  // 销毁循环
+  deactivated () {
+    clearInterval(this.timeid)
+    clearInterval(this.pageScroll)
+    clearInterval(this.Interval)
+  },
+  mounted () {
+    this.changeTime()
+    this.loaddata()
+  },
+  methods: {
+    // 滚动定时器
+    scrollList () {
+      this.pageScroll = setInterval(() => {
+        if (this.$refs.rightBoxRef.scrollTop < this.$refs.rightBoxRef.scrollHeight - this.$refs.rightBoxRef.clientHeight) {
+          this.$refs.rightBoxRef.scrollTop = this.$refs.rightBoxRef.scrollTop + 60
+        } else {
+          this.$refs.rightBoxRef.scrollTop = 0
+        }
+      }, 5000)
+    },
+    // 时间定时器
+    changeTime () {
+      this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      this.timeid = setInterval(() => {
+        this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      }, 1000)
+    },
+    // 赋值
+    changeData (res) {
+      this.historyNumList = JSON.stringify(res.history_count).split('')
+      this.todayNumList = JSON.stringify(res.today_count).split('')
+      const connectData = this.chartsOptions.charts_connectRate.series[0].data
+      connectData[0].value = res.all_answer_rate
+      connectData[1].value = 100 - res.all_answer_rate
+      this.tableData = res.data.data
+      const connectRate = this.chartsOptions.charts_connectRate
+      connectRate.title.text = `${connectRate.series[0].data[0].value}%`
+      if (this.tableData.length === 0) {
+        res.data.dataList = []
+        const arrProvince = ['贵州', '广西', '广东', '香港', '甘肃', '广州', '福建', '湖南', '江西', '湖北', '安徽', '云南', '四川', '陕西', '海南', '重庆', '河南', '山东', '江苏', '上海', '浙江', '台湾', '河北', '山西', '宁夏', '北京', '天津', '辽宁', '吉林', '黑龙江', '西藏', '青海', '内蒙古', '南海诸岛', '新疆']
+        arrProvince.forEach(item => {
+          res.data.dataList.push({
+            name: item,
+            value: 0
+          })
+        })
+      }
+      this.drawMap(res.data.dataList)
+      this.drowerpic()
+      setTimeout(() => {
+        this.scrollList()
+      }, 1000)
+    },
+    // 接口赋值
+    loaddata () {
+      this.axios({
+        url: '/monitor/NationalIncomeLine/mockInit',
+        params: { pageNo: 1, pageSize: 20 }
+      }).then(res => {
+        this.changeData(res.result.data)
+      })
+    },
+    tervalload (timeout) {
+      this.Interval = setTimeout(() => {
+        this.loadTabledata()
+      }, timeout)
+    },
+    // 绘制地图
+    drawMap (dataList) {
+      this.chartsOptions.charts_map = {
+        visualMap: {
+          show: true,
+          showLabel: true,
+          seriesIndex: [0],
+          textStyle: {
+            color: '#ffffff'
+          },
+          pieces: [
+            {
+              gte: 1000,
+              label: '>= 1000',
+              color: '#151D61'
+            },
+            {
+              gte: 500,
+              lt: 999,
+              label: '500 - 999',
+              color: '#1E2A7F'
+            },
+            {
+              gte: 100,
+              lt: 499,
+              label: '100 - 499',
+              color: '#28389A'
+            },
+            {
+              gte: 10,
+              lt: 99,
+              label: '10 - 99',
+              color: '#2E43B1'
+            },
+            {
+              lt: 10,
+              label: '<10',
+              color: '#3955D3'
+            }
+          ]
+        },
+        geo: {
+          map: 'china',
+          zoom: 1,
+          label: {
+            emphasis: {
+              show: false
+            }
+          },
+          itemStyle: {
+            normal: {
+              borderColor: 'rgba(0, 0, 0, 0.2)'
+            },
+            emphasis: {
+              color: '#fff',
+              areaColor: '#002689',
+              shadowOffsetX: 0,
+              shadowOffsetY: 0,
+              borderWidth: 0
+            }
+          }
+        },
+        series: [
+          {
+            name: '突发事件',
+            type: 'map',
+            geoIndex: 0,
+            data: dataList
+          },
+          {
+            type: 'effectScatter',
+            coordinateSystem: 'geo',
+            zlevel: 2,
+            rippleEffect: {
+              brushType: 'stroke'
+            },
+            symbol: 'circle',
+            symbolSize: 12,
+            itemStyle: {
+              normal: {
+                color: '#FF2994' // 标志颜色
+              }
+            },
+            data: [{
+              name: '北京',
+              value: [116.24, 39.55]
+            }, {
+              name: '贵州',
+              value: [106.42, 26.35]
+            }, {
+              name: '山西',
+              value: [112.33, 37.54]
+            }, {
+              name: '江西',
+              value: [115.55, 28.4]
+            }, {
+              name: '广西',
+              value: [108.19, 22.48]
+            }, {
+              name: '广东',
+              value: [113.14, 23.08]
+            }, {
+              name: '广东',
+              value: [113.4, 34.46]
+            }, {
+              name: '广东',
+              value: [113.4, 34.46]
+            }]
+          }
+        ]
+      }
+      echarts.registerMap('china', china)
+    },
+    // 绘制echart
+    drowerpic () {
+      // 客服服务分布图
+      this.chartsMap = echarts.init(this.$refs.charts_map)
+      this.chartsMap.setOption(this.chartsOptions.charts_map, true)
+      // 接通率
+      this.chartsConnectRate = echarts.init(this.$refs.charts_connectRate)
+      this.chartsConnectRate.setOption(this.chartsOptions.charts_connectRate, true)
+    },
+    // 放大缩小控制
+    resizeHandler () {
+      let timer
+      return () => {
+        if (timer) window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          if (this.chartsMap) { this.chartsMap.resize() }
+          if (this.chartsConnectRate) { this.chartsConnectRate.resize() }
+        }, 500)
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+// 头部
+.toHead {
+  margin-bottom: 0.04em;
+}
+.glo-row {
+  flex-direction: row;
+}
+// 左部
+.toLeftEfficiency {
+  margin-bottom: 0.08rem;
+}
+.toLeftText {
+  margin: 0.13rem 0 0.08rem 0;
+}
+// 中间
+.toCenChart {
+  width: 0.45rem;
+  height: 0.45rem;
+}
+.toCenRate {
+  height: 0.45rem;
+  line-height: 0.45rem;
+}
+// 右部
+.naTableBox {
+  position: relative;
+}
+.naTableHead {
+  position: absolute;
+  z-index: 30;
+  list-style: none;
+  display: flex;
+  width: 91%;
+  justify-content: space-between;
+  top: 0.13rem;
+  left: 0.1rem;
+  color: #fff;
+  background-color: #0d44b5;
+}
+.naTableHead div {
+  padding: 9px;
+}
+</style>

@@ -1,0 +1,107 @@
+<template>
+  <div>
+    <a-modal :title="config.title" :visible="visible" :width="600" :destroyOnClose="true" @cancel="visible = !visible">
+      <a-spin :spinning="loading">
+        <a-form :form="form" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <!-- <a-form-item label="搜索区默认高度">
+            <a-input-number :min="1" :max="24" v-decorator="['info[defaultHeight]', {initialValue: data.defaultHeight || 1, rules: [{ required: true, message: '请输入搜索区默认高度'}]}]"/>
+          </a-form-item> -->
+          <a-form-item :label="$t('搜索区默认状态')">
+            <a-radio-group
+              v-decorator="[
+                'info[defaultStatus]',
+                {
+                  initialValue: data.defaultStatus || '0',
+                  rules: [{ required: true, message: $t('请选择搜索区默认状态') }]
+                }
+              ]"
+            >
+              <a-radio value="0">{{ $t('收起') }}</a-radio>
+              <a-radio value="1">{{ $t('展开') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item :label="$t('组合搜索按钮')">
+            <a-radio-group
+              v-decorator="[
+                'info[combinationShow]',
+                {
+                  initialValue: data.combinationShow || '1',
+                  rules: [{ required: true, message: $t('请选择组合搜索按钮') }]
+                }
+              ]"
+            >
+              <a-radio value="1">{{ $t('显示') }}</a-radio>
+              <a-radio value="0">{{ $t('隐藏') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-row>
+            <a-col :span="12">
+              <a-form-item :label="$t('Label样式')" :labelCol="{ span: 12 }" :wrapperCol="{ span: 12 }">
+                <a-radio-group
+                  v-decorator="[
+                    'info[labelLocation]',
+                    {
+                      initialValue: data.labelLocation || 'left',
+                      rules: [{ required: true, message: $t('请选择组合搜索按钮') }]
+                    }
+                  ]"
+                  @change="(e) => (data.labelLocation = e.target.value)"
+                >
+                  <a-radio value="left">{{ $t('左侧') }}</a-radio>
+                  <a-radio value="top">{{ $t('上方') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </a-col>
+            <a-col v-if="data.labelLocation === 'left'" :span="12">
+              <a-form-item :label="$t('Label宽度')" :labelCol="{ span: 12 }" :wrapperCol="{ span: 12 }">
+                <a-input-number
+                  v-decorator="[
+                    'info[labelWidth]',
+                    { initialValue: data.labelWidth || 100, rules: [{ required: true, message: '请输入Label宽度' }] }
+                  ]"
+                ></a-input-number>
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-spin>
+      <div slot="footer" class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-modal>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      config: {},
+      data: {
+        labelLocation: 'left'
+      },
+      form: this.$form.createForm(this),
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 }
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.data = config.record || {}
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.$emit('ok', values.info)
+          this.visible = false
+        }
+      })
+    }
+  }
+}
+</script>

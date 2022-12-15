@@ -1,0 +1,146 @@
+<template>
+  <div>
+    <a-space>
+      <a-button v-action:add type="primary" icon="plus" @click="handleAdd({})">{{ $t('添加') }}</a-button>
+      <!-- <a-button v-action:import icon="upload" @click="handleImport">{{ $t('导入') }}</a-button>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button> -->
+    </a-space>
+    <a-table
+      ref="categoryTable"
+      size="small"
+      :columns="Columns"
+      :pagination="false"
+      :dataSource="data"
+      rowKey="id"
+      :defaultExpandedRowKeys="['0']"
+      :expandIconColumnIndex="2"
+      :loading="loading"
+    >
+      <span slot="actionCategory" slot-scope="text, record">
+        <a @click="handleAdd(record)">{{ $t('添加') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="record.id == 0" @click="handleEdit(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="record.id == 0" @click="handleDel(record)">{{ $t('删除') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="!record.children" @click="handleSort(record)">{{ $t('排序') }}</a>
+      </span>
+    </a-table>
+    <setting-classify-form ref="settingClassifyForm" @ok="tableRefresh" />
+    <drag-sort ref="dragSort" @ok="tableRefresh" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('knowledge'),
+  components: {
+    SettingClassifyForm: () => import('./SettingClassifyForm'),
+    DragSort: () => import('@/views/admin/Common/DragSort')
+  },
+  data () {
+    return {
+      loading: false,
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      form: this.$form.createForm(this),
+      Columns: [{
+        dataIndex: 'action',
+        key: 'action',
+        title: this.$t('操作'),
+        align: 'center',
+        width: 200,
+        scopedSlots: {
+          customRender: 'actionCategory'
+        }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 80
+      }, {
+        title: this.$t('分类名称'),
+        dataIndex: 'categoryName'
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks'
+      }],
+      data: []
+    }
+  },
+  created () {
+    this.tableRefresh()
+  },
+  methods: {
+    tableRefresh () {
+      this.loading = true
+      this.axios({
+        url: '/knowledge/setting/categoryInit'
+      }).then(res => {
+        this.data = res.result.data
+        // 接口返回的children如果为空数组[] 前端递归转为 null
+        const getTemplate = (array) => {
+          array.forEach((temItem, index) => {
+            if (temItem.children.length > 0) {
+              getTemplate(temItem.children)
+            } else {
+              temItem.children = null
+            }
+          })
+        }
+        getTemplate(this.data)
+        this.data[0].listOrder = 0
+        this.loading = false
+      })
+    },
+    handleAdd (record) {
+      this.$refs.settingClassifyForm.show({
+        title: this.$t('添加'),
+        url: '/knowledge/setting/categoryAdd',
+        record: record,
+        edit: false
+      })
+    },
+    handleEdit (record) {
+      this.$refs.settingClassifyForm.show({
+        title: this.$t('编辑'),
+        url: '/knowledge/setting/categoryEdit',
+        record: record,
+        edit: true
+      })
+    },
+    handleDel (record) {
+      const that = this
+      this.$confirm({
+        title: that.$t('您确认要删除该记录吗？'),
+        okText: that.$t('确认'),
+        cancelText: that.$t('取消'),
+        onOk () {
+          that.axios({
+            tips: false,
+            url: '/knowledge/setting/categoryDel',
+            data: { id: record.id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+              that.tableRefresh()
+            } else {
+              that.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    },
+    handleSort (record) {
+      this.$refs.dragSort.show({
+        tableName: 'knowledge_category',
+        sortName: 'category_name',
+        where: `parent_id = '${record.id}'`
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/ .ant-table-small {
+  border: none;
+}
+</style>

@@ -1,0 +1,68 @@
+<template>
+  <a-drawer :title="config.title" :width="500" :visible="visible" @close="visible = !visible">
+    <a-form :form="form">
+      <a-form-item :required="true" :label="$t('申请复议理由')">
+        <a-textarea v-model="recording.reconside_reason" :auto-size="{ minRows: 3, maxRows: 5 }"></a-textarea>
+      </a-form-item>
+    </a-form>
+    <div class="bbar">
+      <a-button type="primary" @click="submitReconside()">{{ $t('提交') }}</a-button>
+      <a-button @click="visible = false">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-drawer>
+</template>
+<script>
+export default {
+  data () {
+    return {
+      form: this.$form.createForm(this),
+      config: {},
+      visible: false,
+      info: {},
+      recording: {
+        reconside_reason: ''
+      }
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.info = config.data
+    },
+    submitReconside () {
+      this.visible = false
+      this.$emit('ok')
+      this.form.resetFields()
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/.ant-drawer-body {
+  padding: 0;
+  height: calc(100% - 43px) !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  > :first-child:not(.ant-spin-nested-loading) {
+    padding: 16px;
+  }
+  > .ant-spin-nested-loading {
+    height: 100%;
+    > .ant-spin-container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      > :first-child {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 0px;
+      }
+    }
+  }
+  .ant-tabs-bar {
+    margin-top: 2px;
+  }
+}
+</style>

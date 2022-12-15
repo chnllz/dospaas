@@ -1,0 +1,265 @@
+<template>
+  <div>
+    <a-modal :title="config.title" :visible="visible" :width="600" :destroyOnClose="true" @cancel="visible = !visible">
+      <a-spin :spinning="loading">
+        <div>
+          <a-form :form="form" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-alert :message="$t('一旦该功能设置不当，会对系统性能造成巨大影响，请慎重。')" type="error" />
+            <a-form-item :label="$t('搜索框名称')">
+              <a-input
+                v-decorator="[
+                  'info[name]',
+                  {
+                    initialValue: data.name,
+                    rules: [
+                      { required: true, message: $t('请输入Label名称') },
+                      { min: 1, max: 8, message: $t('请输入1-8个字符') }
+                    ]
+                  }
+                ]"
+              >
+                <set-lang slot="addonAfter" />
+              </a-input>
+            </a-form-item>
+            <a-form-item :label="$t('列宽')">
+              <a-input-number
+                v-decorator="[
+                  'info[column]',
+                  { initialValue: data.column || 6, rules: [{ required: true, message: $t('请输入列宽') }] }
+                ]"
+                :min="1"
+                :max="24"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('授权')">
+              <a @click="handleFieldPriv(data)">
+                <a-badge :status="data.usePermissions && data.usePermissions.length ? 'success' : 'default'" />
+                {{ $t('设置') }}
+              </a>
+            </a-form-item>
+            <a-form-item :label="$t('帮助说明')">
+              <a-textarea
+                v-decorator="['info[help]', { initialValue: data.help }]"
+                :auto-size="{ minRows: 1, maxRows: 5 }"
+              />
+            </a-form-item>
+            <a-divider orientation="left">{{ $t('搜索字段设置') }}</a-divider>
+            <a-form-item :label="$t('比对方式')">
+              <a-select v-decorator="['info[comparison]', { initialValue: data.comparison || 'eq' }]">
+                <a-select-option value="eq">{{ $t('等于') }}</a-select-option>
+                <a-select-option value="cn">{{ $t('包含') }}</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-form>
+          <a-form>
+            <a-row :gutter="5">
+              <a-col :span="6">
+                <a-form-item>
+                  <a-select
+                    v-model="queryParam.group"
+                    :allowClear="true"
+                    :placeholder="$t('请选择分类')"
+                    @change="groupChange"
+                  >
+                    <a-select-option v-for="value in fieldCategory" :key="value.value" :value="value.value">
+                      {{ value.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="18">
+                <a-form-item>
+                  <a-input
+                    v-model.trim="queryParam.name"
+                    :placeholder="$t('请输入字段名称或系统名搜索')"
+                    @change="nameSearch"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form>
+          <a-table
+            ref="table"
+            size="small"
+            rowKey="alias"
+            :columns="columns"
+            :scroll="scroll"
+            :dataSource="showList"
+            :pagination="false"
+            :rowSelection="rowSelection"
+          >
+            <div slot="idSort" slot-scope="text, record, index">{{ index + 1 }}</div>
+            <div slot="formType" slot-scope="text">
+              <span v-if="text === 'text'">{{ $t('单行文本') }}</span>
+              <span v-else-if="text === 'combobox'">{{ $t('下拉框') }}</span>
+              <span v-else-if="text === 'associated'">{{ $t('关联数据') }}</span>
+              <span v-else-if="text === 'datetime'">{{ $t('日期时间') }}</span>
+              <span v-else-if="text === 'textarea'">{{ $t('多行文本') }}</span>
+              <span v-else-if="text === 'radio'">{{ $t('单选框') }}</span>
+              <span v-else-if="text === 'checkbox'">{{ $t('复选框') }}</span>
+              <span v-else-if="text === 'editor'">{{ $t('编辑器') }}</span>
+              <span v-else-if="text === 'image'">{{ $t('图片') }}</span>
+              <span v-else-if="text === 'file'">{{ '附件' }}</span>
+              <span v-else-if="text === 'cascader'">{{ $t('级联选择') }}</span>
+              <span v-else-if="text === 'switch'">{{ $t('开关') }}</span>
+              <span v-else-if="text === 'score'">{{ $t('评分') }}</span>
+              <span v-else-if="text === 'serialnumber'">{{ $t('流水号') }}</span>
+              <span v-else-if="text === 'organization'">{{ $t('组织结构') }}</span>
+              <span v-else-if="text === 'subform'">{{ $t('子表') }}</span>
+              <span v-else-if="text === 'autocomplete'">{{ $t('自动完成') }}</span>
+              <span v-else-if="text === 'number'">{{ $t('数字') }}</span>
+              <span v-else-if="text === 'address'">{{ $t('地址') }}</span>
+              <span v-else-if="text === 'treeselect'">{{ $t('树选择') }}</span>
+              <span v-else-if="text === 'tag'">{{ $t('标签') }}</span>
+              <span v-else-if="text === 'location'">{{ '地图选点' }}</span>
+              <span v-else>--</span>
+            </div>
+          </a-table>
+        </div>
+      </a-spin>
+      <div slot="footer" class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-modal>
+    <!-- 访问权限 -->
+    <priv-visit-form ref="privVisitForm" :params="{ formView: data }" @func="getPriv" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    PrivVisitForm: () => import('./PrivVisitForm'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      config: {},
+      data: {},
+      form: this.$form.createForm(this),
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      columns: [{
+        title: '#',
+        width: 40,
+        align: 'center',
+        dataIndex: 'idSort',
+        scopedSlots: { customRender: 'idSort' }
+      }, {
+        title: this.$t('字段名称'),
+        dataIndex: 'name',
+        sorter: (a, b) => a.name.length - b.name.length
+      }, {
+        title: this.$t('UI组件'),
+        dataIndex: 'formType',
+        scopedSlots: { customRender: 'formType' },
+        sorter: (a, b) => a.formType.length - b.formType.length,
+        width: 80
+      }, {
+        title: this.$t('分类名称'),
+        dataIndex: 'category',
+        sorter: (a, b) => a.category.length - b.category.length,
+        customRender: (text) => {
+          return text || '--'
+        },
+        width: 120
+      }],
+      fieldMappings: [],
+      fieldCategory: [],
+      showList: [],
+      queryParam: {},
+      selectedRowKeys: [],
+      selectedRows: [],
+      scroll: {},
+      rowSelection: {
+        selectedRowKeys: this.selectedRowKeys || [],
+        onChange: this.onChange
+      }
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.data = config.record
+      this.showList = JSON.parse(JSON.stringify(config.fieldColumns))
+      this.visible = true
+      this.fieldMappings = this.showList
+      this.fieldCategory = config.fieldCategory
+      this.selectedRows = []
+      this.selectedRowKeys = []
+      this.selectedRows = this.fieldMappings.filter(item => this.data.searchFields && this.data.searchFields.includes(item.alias))
+      this.selectedRowKeys = this.selectedRows.map(item => item.alias)
+      this.scroll.y = document.body.clientHeight - 620
+      this.rowSelection = {
+        selectedRowKeys: this.selectedRowKeys,
+        onChange: this.onChange,
+        getCheckboxProps: record => {
+          return {
+            props: {
+              defaultChecked: this.selectedRowKeys.includes(record.value || record.alias)
+            }
+          }
+        }
+      }
+    },
+    onChange (selectedRowKeys, selectedRows) {
+      this.selectedRowKeys = Array.from(new Set(selectedRowKeys))
+      this.rowSelection = {
+        selectedRowKeys: Array.from(new Set(selectedRowKeys)),
+        onChange: this.onChange
+      }
+      this.selectedRows = selectedRows
+    },
+    handleFieldPriv (record, index) {
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: this.$t('授权'),
+        record: record,
+        index: index,
+        key: 'usePermissions',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    getPriv (permissions) {
+      this.data.usePermissions = permissions
+      this.$forceUpdate()
+    },
+    nameSearch () {
+      if (!this.queryParam.name) {
+        this.showList = this.fieldMappings
+      } else {
+        this.showList = this.fieldMappings.filter(item => item.name.includes(this.queryParam.name))
+      }
+    },
+    groupChange (e) {
+      if (!e) {
+        this.showList = this.fieldMappings
+      } else if (e === '未分组') {
+        this.showList = this.fieldMappings.filter(item => !item.category)
+      } else {
+        this.showList = this.fieldMappings.filter(item => item.category === e)
+      }
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          const data = values.info
+          data.type = 'multiFieldSearch'
+          data.searchFields = this.selectedRowKeys
+          data.usePermissions = this.data.usePermissions
+          data.id = this.config.action === 'add' ? new Date().valueOf() : this.data.id
+          this.$emit('ok', data)
+          this.visible = false
+        }
+      })
+    }
+  }
+}
+</script>

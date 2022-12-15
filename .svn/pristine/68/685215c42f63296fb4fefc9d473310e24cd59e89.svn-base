@@ -1,0 +1,3174 @@
+<template>
+  <div>
+    <a-modal
+      :destroyOnClose="true"
+      :width="900"
+      :bodyStyle="{
+        height: 'calc(100vh - 150px)',
+        overflow: 'auto'
+      }"
+      centered
+      :visible="visible"
+      @cancel="visible = !visible"
+    >
+      <template slot="title">
+        <a-row>
+          <a-col :span="20">{{ config.title }}</a-col>
+          <a-col :span="4" style="text-align: right">
+            <HelpPanel
+              :number="'22041616461504'"
+              :styleStr="'font-size: 16px;margin-right: 26px;color: rgba(0, 0, 0, 0.65);'"
+            ></HelpPanel>
+          </a-col>
+        </a-row>
+      </template>
+      <a-spin :spinning="loading">
+        <a-alert
+          v-if="!aliasDisabled"
+          :message="$t('字段命名提示')"
+          type="warning"
+          show-icon
+          style="margin-bottom: 10px"
+        >
+          <template slot="description">
+            <p style="margin-bottom: 2px">1、字段的{显示名称}尽量控制在6个汉字以内。</p>
+            <p style="margin-bottom: 2px">
+              2、字段的{系统名称}默认由系统自动生成，不允许修改。{系统名称}由{显示名称}的全拼，采用小驼峰写法自动生成，如：客户名称，自动命名为：keHuMingCheng。
+            </p>
+          </template>
+        </a-alert>
+        <a-form :form="form">
+          <!-- 基础设置 -->
+          <a-divider orientation="left">{{ $t('基础设置') }}</a-divider>
+          <a-row>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('显示名称') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      {{ $t('字段在表单视图、数据窗口中的默认显示名称，建议控制在6个字符以内。不允许重复。') }}
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-auto-complete
+                  v-decorator="[
+                    'info[name]',
+                    {
+                      initialValue: data.name,
+                      rules: [
+                        { required: true, message: $t('请输入显示名称') },
+                        { validator: checkName },
+                        { max: 128, message: $t('最多请输入128个字符') }
+                      ]
+                    }
+                  ]"
+                  :placeholder="$t('请输入字段显示名称')"
+                  @blur="handleBlur"
+                  @change="handleChangeName"
+                >
+                  <!-- @focus="getNameList('focus')"
+                @popupScroll="popupScroll" -->
+                  <template slot="dataSource">
+                    <a-select-option v-for="d in nameList" :key="d.c" :value="d.c">{{ d.c }}</a-select-option>
+                  </template>
+                  <a-input>
+                    <set-lang slot="addonAfter" />
+                  </a-input>
+                </a-auto-complete>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('系统名称') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>
+                        {{
+                          $t(
+                            '系统名称创建时由{显示名称}拼音全拼组成，使用小驼峰命名法。如：{显示名称}="我爱祖国"，自动生成的{系统名称}为"woAiZuGuo"。同一模块下，不允许重复。一旦创建，不允许修改。'
+                          )
+                        }}
+                      </span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-auto-complete
+                  v-decorator="[
+                    'info[alias]',
+                    {
+                      initialValue: data.alias,
+                      rules: [
+                        { required: true, message: $t('请输入系统名称') },
+                        {
+                          pattern: new RegExp(/^[a-z]+([A-Z][a-z]+)*$/),
+                          message: $t('仅支持输入大小写字母，且首字母小写，驼峰形式，禁止出现连续大写字母')
+                        },
+                        { max: 128, message: $t('最多请输入128个字符') }
+                      ]
+                    }
+                  ]"
+                  :disabled="aliasDisabled"
+                >
+                  <a-input v-if="config.action === 'add'">
+                    <set-alias
+                      slot="addonAfter"
+                      ref="setAlias"
+                      :name="form.getFieldValue('info[name]')"
+                      :aliasDisabled="aliasDisabled"
+                      @setAlias="setAlias"
+                    />
+                  </a-input>
+                </a-auto-complete>
+                <div
+                  v-if="aliasPinyingObj.hasMultiPinYin && !aliasDisabled"
+                  style="height: 20px; position: relative; left: 0; top: -16px; font-size: 12px; color: #faad14"
+                >
+                  {{ $t('{显示名称}中存在多音字，请注意检查') }}
+                </div>
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('分类名称') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      {{ $t('字段的所属分类，设置好字段分类会提升字段管理、表单视图/数据窗口中选择字段的效率。') }}
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-auto-complete
+                  v-decorator="[
+                    'info[category]',
+                    {
+                      initialValue:
+                        config.action === 'edit'
+                          ? config.record.category
+                          : setting.attribute.typename
+                          ? setting.attribute.typename
+                          : $t('未分类'),
+                      rules: [
+                        { required: true, message: $t('请输入分类名称') },
+                        { max: 32, message: $t('最多请输入32个字符') }
+                      ]
+                    }
+                  ]"
+                  allowClear
+                  :data-source="typeList"
+                  @search="onSearch"
+                  @change="onSearch"
+                  @focus="clickCategory"
+                ></a-auto-complete>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('虚拟字段') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      {{
+                        $t('该字段在数据库中并不真实存在，仅用于显示某关联表的关联字段值。该属性保存后不支持再次编辑。')
+                      }}
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch
+                  v-decorator="[
+                    'info[virtualField]',
+                    { initialValue: data.virtualField == 1, valuePropName: 'checked' }
+                  ]"
+                  :disabled="config.action === 'edit'"
+                  @change="
+                    (checked) => {
+                      data.virtualField = checked ? 1 : 0
+                    }
+                  "
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('留痕') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>{{ $t('当设置为开时，系统将记录该字段的变更日志') }}</span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch v-decorator="['info[trace]', { initialValue: data.trace == 1, valuePropName: 'checked' }]" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('列宽') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">{{ $t('字段在数据窗口的默认列宽。') }}</span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-input-number
+                  v-decorator="[
+                    'setting[width]',
+                    {
+                      initialValue: data.setting ? data.setting.width : 150,
+                      rules: [{ required: true, message: $t('请输入列宽') }]
+                    }
+                  ]"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('允许') + '/' + $t('只读') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      {{
+                        $t(
+                          '字段在表单视图中默认的“可见可编可提交/可见不可编可提交”属性，若表单视图中有新的配置，则会覆盖当前的默认配置。'
+                        )
+                      }}
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-radio-group
+                  v-decorator="['setting[rule]', { initialValue: data.setting ? data.setting.rule : 'allow' }]"
+                >
+                  <a-radio value="allow">{{ $t('可见可编可提交') }}</a-radio>
+                  <a-radio value="readonly">{{ $t('可见不可编可提交') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('字段状态') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      {{ $t('字段的“启用/禁用”状态。“禁用”时，该字段在所有表单视图、数据窗口将不可用。') }}
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-radio-group
+                  v-decorator="[
+                    'info[status]',
+                    {
+                      initialValue:
+                        config.action === 'add' ? 1 : String(data.status) === 'undefined' ? undefined : data.status
+                    }
+                  ]"
+                >
+                  <a-radio :value="1">{{ $t('启用') }}</a-radio>
+                  <a-radio :value="0">{{ $t('禁用') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-row>
+            <a-col :span="12">
+              <a-form-item v-if="userInfo.superAdmin" :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('访问级别') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>
+                        {{
+                          $t(
+                            '请慎重修改。访问级别是为了保护系统重要配置项而设计的，防止因修改系统必须的某些配置内容，而导致系统错误。'
+                          )
+                        }}
+                      </span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-select v-decorator="['info[accessLevel]', { initialValue: data.accessLevel || 0 }]">
+                  <a-select-option :key="0" :value="0">{{ $t('可见可编可删') }}</a-select-option>
+                  <a-select-option :key="1" :value="1">{{ $t('可见可编不可删') }}</a-select-option>
+                  <a-select-option :key="2" :value="2">{{ $t('可见不可编不可删') }}</a-select-option>
+                  <a-select-option :key="3" :value="3">{{ $t('不可见不可编不可删') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <template v-if="data.virtualField == 1">
+            <a-form-item :label="$t('源数据表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-cascader
+                v-decorator="[
+                  'setting[virtualField][source]',
+                  {
+                    initialValue: setting.virtualField.source || [],
+                    rules: [{ required: true, message: '请选择源数据表' }]
+                  }
+                ]"
+                :placeholder="$t('请选择源数据表')"
+                :options="tableField"
+                @change="virtualSourceChange"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('源数据表筛选字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-select
+                v-decorator="[
+                  'setting[virtualField][sourceLinkField]',
+                  {
+                    initialValue: setting.virtualField.sourceLinkField || '',
+                    rules: [{ required: true, message: $t('请选择源数据表筛选字段') }]
+                  }
+                ]"
+                :placeholder="$t('请选择源数据表筛选字段')"
+              >
+                <a-select-option
+                  v-for="sourceField in virtualSourceFields"
+                  :key="sourceField.fieldId"
+                  :value="sourceField.alias"
+                >
+                  {{ sourceField.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item :label="$t('本表筛选字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-select
+                v-decorator="[
+                  'setting[virtualField][currentLinkField]',
+                  {
+                    initialValue: setting.virtualField.currentLinkField || '',
+                    rules: [{ required: true, message: $t('请选择本表筛选字段') }]
+                  }
+                ]"
+                :placeholder="$t('请选择本表筛选字段')"
+              >
+                <a-select-option
+                  v-for="currentItem in virtualCurrentFields"
+                  :key="currentItem.fieldId"
+                  :value="currentItem.alias"
+                >
+                  {{ currentItem.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item :label="$t('显示源数据表字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-select
+                v-decorator="[
+                  'setting[virtualField][sourceField]',
+                  {
+                    initialValue: setting.virtualField.sourceField || '',
+                    rules: [{ required: true, message: $t('请选择显示源数据表字段') }]
+                  }
+                ]"
+                :placeholder="$t('请选择显示源数据表字段')"
+              >
+                <a-select-option
+                  v-for="sourceField in virtualSourceFields"
+                  :key="sourceField.fieldId"
+                  :value="sourceField.alias"
+                >
+                  {{ sourceField.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </template>
+          <a-form-item :label="$t('字段备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-decorator="['info[remarks]', { initialValue: data.remarks || '' }]"
+              :autoSize="{ minRows: 3, maxRows: 6 }"
+            />
+          </a-form-item>
+          <!-- UI组件 -->
+          <template v-if="data.virtualField !== 1">
+            <a-divider orientation="left">{{ $t('UI组件') }}</a-divider>
+            <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <span slot="label">
+                {{ $t('UI组件') }}
+                <a-tooltip placement="top">
+                  <span slot="title">
+                    {{ $t('表单控件在表单视图/数据窗口的展现形式。如：单行、多行、单选、多选、下拉等。') }}
+                  </span>
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-select
+                v-decorator="[
+                  'info[formType]',
+                  { rules: [{ required: true, message: $t('请选择UI组件') }], initialValue: data.formType || '' }
+                ]"
+                :placeholder="$t('请选择UI组件')"
+                show-search
+                option-filter-prop="children"
+                @change="handleComponentChange"
+              >
+                <a-select-option v-for="(item, key, index) in formtypes" :key="index" :value="item.value">
+                  {{ item.text }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-row
+              v-if="
+                ['location', 'combobox', 'checkbox', 'organization', 'treeselect', 'tag', 'editor'].includes(
+                  data.formType
+                )
+              "
+            >
+              <a-col :span="4"></a-col>
+              <a-col :span="20">
+                <a-alert
+                  v-if="['location'].includes(data.formType)"
+                  :message="$t('该字段保存的是经纬度信息，经度在前，纬度在后，使用英文逗号分隔')"
+                  :show-icon="false"
+                />
+                <a-alert
+                  v-else-if="['checkbox', 'tag', 'treeselect'].includes(data.formType)"
+                  :message="$t('请结合实际情况，设置合理的{字段类型}和{字段长度}')"
+                  :show-icon="false"
+                />
+                <a-alert
+                  v-else-if="['editor'].includes(data.formType)"
+                  :message="$t('请结合实际情况，设置合理的{字段类型}')"
+                  :show-icon="false"
+                />
+                <a-alert
+                  v-else-if="['organization'].includes(data.formType)"
+                  :message="$t(`{选择模式}='多选'时，请结合实际情况，设置合理的{字段类型}和{字段长度}`)"
+                  :show-icon="false"
+                />
+                <a-alert
+                  v-else-if="['combobox'].includes(data.formType)"
+                  :message="$t(`{可选择数据模式}='多选'时，请结合实际情况，设置合理的{字段类型}和{字段长度}`)"
+                  :show-icon="false"
+                />
+              </a-col>
+            </a-row>
+            <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <span slot="label">
+                {{ $t('字段类型') }}
+                <a-tooltip placement="top">
+                  <span slot="title">{{ $t('由“UI组件”决定，一般情况下采用默认值即可。') }}</span>
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-select
+                v-decorator="[
+                  'info[fieldType]',
+                  { initialValue: data.fieldType || '', rules: [{ required: true, message: $t('请选择字段类型') }] }
+                ]"
+                :placeholder="$t('请选择字段类型')"
+                @change="changeFieldtype"
+              >
+                <a-select-option v-for="fieldType in fieldtypes" :key="fieldType.value" :value="fieldType.value">
+                  {{ fieldType.text }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <template v-if="data.formType !== 'switch'">
+              <template v-if="data.fieldType === 'VARCHAR'">
+                <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <span slot="label">
+                    {{ $t('字段长度') }}
+                    <a-tooltip placement="top">
+                      <span slot="title">{{ $t('由“UI组件”决定，一般情况下采用默认值即可。') }}</span>
+                      <a-icon type="question-circle" />
+                    </a-tooltip>
+                  </span>
+                  <a-input-number
+                    v-decorator="[
+                      'info[fieldLength]',
+                      {
+                        initialValue: data.fieldLength || fieldLength[data.formType],
+                        rules: [{ required: true, message: $t('请输入字段长度') }]
+                      }
+                    ]"
+                    :precision="0"
+                    :min="1"
+                  />
+                </a-form-item>
+              </template>
+              <template
+                v-else-if="
+                  data.fieldType === 'TINYINT' || data.fieldType === 'SMALLINT' || data.fieldType === 'MEDIUMINT'
+                "
+              >
+                <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <span slot="label">
+                    {{ $t('字段长度') }}
+                    <a-tooltip placement="top">
+                      <span slot="title">{{ $t('由“UI组件”决定，一般情况下采用默认值即可。') }}</span>
+                      <a-icon type="question-circle" />
+                    </a-tooltip>
+                  </span>
+                  <a-input-number
+                    v-decorator="[
+                      'info[fieldLength]',
+                      {
+                        initialValue: data.fieldLength || 11,
+                        rules: [{ required: true, message: $t('请输入字段长度') }]
+                      }
+                    ]"
+                    :precision="0"
+                    :disabled="data.formType === 'switch'"
+                    :min="1"
+                  />
+                </a-form-item>
+              </template>
+              <template v-else-if="data.fieldType === 'DECIMAL'">
+                <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <span slot="label">
+                    {{ $t('字段长度') }}
+                    <a-tooltip placement="top">
+                      <span slot="title">{{ $t('由“UI组件”决定，一般情况下采用默认值即可。') }}</span>
+                      <a-icon type="question-circle" />
+                    </a-tooltip>
+                  </span>
+                  <a-input-number
+                    v-decorator="[
+                      'info[fieldLength]',
+                      {
+                        initialValue: data.fieldLength || 11,
+                        rules: [{ required: true, message: $t('请输入字段长度') }]
+                      }
+                    ]"
+                    :precision="0"
+                    :min="1"
+                  />
+                </a-form-item>
+                <a-form-item
+                  v-if="data.formType === 'number'"
+                  :label="$t('小数位数')"
+                  :labelCol="labelCol"
+                  :wrapperCol="wrapperCol"
+                >
+                  <a-input-number
+                    v-decorator="['info[fieldDecimal]', { initialValue: parseInt(data.fieldDecimal) || 2 }]"
+                    :precision="0"
+                    :min="1"
+                    @change="
+                      (val) => {
+                        data.fieldDecimal = val
+                      }
+                    "
+                  />
+                </a-form-item>
+              </template>
+            </template>
+            <a-form-item
+              v-if="
+                data.formType === 'text' ||
+                data.formType === 'associated' ||
+                data.formType === 'datetime' ||
+                data.formType === 'serialnumber'
+              "
+              :labelCol="labelCol"
+              :wrapperCol="wrapperCol"
+            >
+              <span slot="label">
+                {{ $t('索引唯一') }}
+                <a-tooltip placement="top">
+                  <span slot="title">
+                    {{ $t('索引：即数据库普通Index索引。索引唯一：即数据库Unique Index索引，不允许重复。') }}
+                  </span>
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-radio-group
+                v-decorator="[
+                  'info[fieldKey]',
+                  { initialValue: data.fieldKey || '', rules: [{ required: false, message: $t('请选择索引') }] }
+                ]"
+                :disabled="data.formType === 'serialnumber'"
+              >
+                <a-radio v-for="fieldKey in fieldkeys" :key="fieldKey.value" :value="fieldKey.value">
+                  {{ fieldKey.text }}
+                </a-radio>
+              </a-radio-group>
+            </a-form-item>
+            <a-form-item :label="$t('帮助说明')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-input v-decorator="['setting[attribute][help]', { initialValue: setting.attribute.help || '' }]" />
+            </a-form-item>
+            <a-form-item
+              v-if="data.formType !== 'switch' && data.formType !== 'address' && data.formType !== 'serialnumber'"
+              :labelCol="labelCol"
+              :wrapperCol="wrapperCol"
+            >
+              <span slot="label">
+                {{ $t('是否必填') }}
+                <a-tooltip placement="top">
+                  <span slot="title">
+                    {{ $t('字段在表单视图中默认的“必填”属性，若表单视图中有新的配置，则会覆盖当前的默认配置。') }}
+                  </span>
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-switch
+                v-decorator="[
+                  'setting[attribute][required]',
+                  { initialValue: setting.attribute.required, valuePropName: 'checked' }
+                ]"
+                :un-checked-children="$t('否')"
+                :checked-children="$t('是')"
+                @change="
+                  (e) => {
+                    $set(setting.attribute, 'required', e)
+                  }
+                "
+              />
+            </a-form-item>
+            <!-- 单行文本 -->
+            <div v-if="data.formType === 'text'">
+              <field-text ref="fieldText" :setting="setting" />
+            </div>
+            <!-- 多行文本 -->
+            <div v-else-if="data.formType === 'textarea'">
+              <field-textarea ref="fieldTextarea" :setting="setting" />
+            </div>
+            <!-- 时间日期 -->
+            <div v-else-if="data.formType === 'datetime'">
+              <field-date
+                ref="fieldDate"
+                :setting="setting"
+                :formatOld="format"
+                :tableField="tableField"
+                :config="config"
+                :dataOld="data"
+              />
+            </div>
+            <!-- 单选框 下拉菜单 多选框 -->
+            <div v-else-if="data.formType === 'radio' || data.formType == 'checkbox' || data.formType === 'combobox'">
+              <field-select
+                ref="fieldSelect"
+                :setting="setting"
+                :tableField="tableField"
+                :dataOld="data"
+                :config="config"
+                :formType="data.formType"
+              />
+            </div>
+            <!-- 编辑框 -->
+            <div v-else-if="data.formType === 'editor'">
+              <a-form-item :label="$t('编辑器高度')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input-number
+                  v-decorator="[
+                    'setting[attribute][height]',
+                    {
+                      initialValue: setting.attribute.height || 150,
+                      rules: [{ required: true, message: $t('请输入编辑器高度') }]
+                    }
+                  ]"
+                  :min="100"
+                  :max="1000"
+                />
+                {{ $t('PX(像素)') }}
+              </a-form-item>
+            </div>
+            <!-- 自动完成 -->
+            <div v-else-if="data.formType === 'autocomplete'">
+              <field-auto-complete
+                ref="fieldAutoComplete"
+                :setting="setting"
+                :dataOld="data"
+                :config="config"
+                :tableField="tableField"
+              />
+            </div>
+            <!-- 评分 -->
+            <div v-else-if="data.formType === 'score'">
+              <field-rate
+                ref="fieldRate"
+                :setting="setting"
+                :dataOld="data"
+                :config="config"
+                :tableField="tableField"
+              />
+            </div>
+            <!-- 图片 -->
+            <template v-else-if="data.formType === 'image'">
+              <a-form-item
+                :label="$t('允许上传数量')"
+                :labelCol="labelCol"
+                :wrapperCol="wrapperCol"
+                :validateStatus="imageStatus"
+                :help="imgHelp"
+              >
+                <a-input-number
+                  v-decorator="[
+                    'setting[attribute][minFiles]',
+                    { initialValue: setting.attribute.minFiles || 0, rules: [{ required: true }] }
+                  ]"
+                  :min="0"
+                  :max="10"
+                  :precision="0"
+                  @change="
+                    (value) => {
+                      getImgNum(value, 'min')
+                    }
+                  "
+                />
+                <span style="margin: 0 5px">~</span>
+                <a-input-number
+                  v-decorator="[
+                    'setting[attribute][maxFiles]',
+                    { initialValue: setting.attribute.maxFiles || 10, rules: [{ required: true }] }
+                  ]"
+                  :min="minImg > 0 ? minImg : 1"
+                  :max="10"
+                  :precision="0"
+                  @change="
+                    (value) => {
+                      getImgNum(value, 'max')
+                    }
+                  "
+                />
+              </a-form-item>
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('允许上传格式') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>{{ $t('允许上传的文件类型，以“,”(英文逗号)分隔') }}</span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-input
+                  v-decorator="[
+                    'setting[form][format]',
+                    {
+                      initialValue: setting.form.format || '.png,.jpg,.jpeg,.gif,.bmp',
+                      rules: [{ required: true, message: $t('请输入允许上传的文件类型') }]
+                    }
+                  ]"
+                />
+              </a-form-item>
+              <a-form-item :label="$t('单图片大小限制')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input-number
+                  v-decorator="[
+                    'setting[form][size]',
+                    {
+                      initialValue: setting.form.size || (fileMax > 2 ? 2 : fileMax),
+                      rules: [{ required: true, message: $t('请输入单图片最大限制') }]
+                    }
+                  ]"
+                  :min="1"
+                  :max="fileMax"
+                />
+                MB
+              </a-form-item>
+              <a-form-item :label="$t('移动端配置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-button size="small" @click="openImgSetting">
+                  <a-badge v-if="appSetFlag" status="success" :text="$t('设置')" />
+                  <a-badge v-else status="default" :text="$t('设置')" />
+                </a-button>
+              </a-form-item>
+              <field-img-setting ref="fieldImgSetting" :config="config" :setting="setting" @ok="getAppSetting" />
+            </template>
+            <!-- 附件 -->
+            <template v-else-if="data.formType === 'file'">
+              <a-form-item
+                :label="$t('允许上传数量')"
+                :labelCol="labelCol"
+                :wrapperCol="wrapperCol"
+                :validateStatus="imageStatus"
+                :help="imgHelp"
+              >
+                <a-input-number
+                  v-decorator="[
+                    'setting[attribute][minFiles]',
+                    {
+                      initialValue: setting.attribute.minFiles || 0,
+                      rules: [{ required: true, message: $t('请输入最小附件数') }]
+                    }
+                  ]"
+                  :min="0"
+                  :max="10"
+                  @change="
+                    (value) => {
+                      getImgNum(value, 'min')
+                    }
+                  "
+                />
+                <span style="margin: 0 5px">~</span>
+                <a-input-number
+                  v-decorator="[
+                    'setting[attribute][maxFiles]',
+                    {
+                      initialValue: setting.attribute.maxFiles || 10,
+                      rules: [{ required: true, message: $t('请输入最大附件数') }]
+                    }
+                  ]"
+                  :min="minFiles > 0 ? minFiles : 1"
+                  :max="10"
+                  @change="
+                    (value) => {
+                      getImgNum(value, 'max')
+                    }
+                  "
+                />
+              </a-form-item>
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('允许上传格式') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>{{ $t('允许上传的文件类型，以“,”(英文逗号)分隔') }}</span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-input
+                  v-decorator="[
+                    'setting[form][format]',
+                    {
+                      initialValue:
+                        setting.form.format ||
+                        '.png,.jpg,.jpeg,.gif,.bmp,.flv,.swf,.mkv,.avi,.rm,.rmvb,.mpeg,.mpg,.ogg,.ogv,.mov,.wmv,.mp4,.webm,.mp3,.wav,.mid,.rar,.zip,.tar,.gz,.7z,.bz2,.cab,.iso,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.xml',
+                      rules: [{ required: true, message: $t('请输入允许上传的文件类型') }]
+                    }
+                  ]"
+                />
+              </a-form-item>
+              <a-form-item :label="$t('单附件大小限制')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input-number
+                  v-decorator="[
+                    'setting[form][size]',
+                    {
+                      initialValue: setting.form.size || fileMax,
+                      rules: [{ required: true, message: $t('请输入单附件最大限制') }]
+                    }
+                  ]"
+                  :min="1"
+                  :max="fileMax"
+                />
+                MB
+              </a-form-item>
+            </template>
+            <!-- 数字 -->
+            <template v-else-if="data.formType === 'number'">
+              <field-number
+                ref="fieldNumber"
+                :setting="setting"
+                :fieldType="data.fieldType"
+                :precision="parseInt(data.fieldDecimal)"
+              />
+            </template>
+            <!-- 级联 -->
+            <template v-else-if="data.formType === 'cascader'">
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('数据字典') }}
+                  <a-tooltip :title="$t('只能选择树形字典')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-select
+                  v-decorator="[
+                    'setting[form][src]',
+                    {
+                      initialValue: setting.form.src || undefined,
+                      rules: [{ required: true, message: $t('请选择数据字典') }]
+                    }
+                  ]"
+                  :placeholder="$t('请选择数据字典')"
+                  :showSearch="true"
+                  option-filter-prop="children"
+                  allowClear
+                  @change="getCascader"
+                >
+                  <a-select-option
+                    v-for="value in srcPath"
+                    :key="value.dictCategoryNumber"
+                    :value="value.dictCategoryNumber"
+                  >
+                    {{ value.dictCategoryName }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :label="$t('是否必须选到叶子节点')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-switch
+                  v-decorator="[
+                    'setting[attribute][selectModel]',
+                    { initialValue: setting.attribute.selectModel === 'end', valuePropName: 'checked' }
+                  ]"
+                  :un-checked-children="$t('否')"
+                  :checked-children="$t('是')"
+                  @change="
+                    (e) => {
+                      $set(setting.attribute, 'selectModel', e ? 'end' : 'any')
+                    }
+                  "
+                />
+              </a-form-item>
+              <!-- 回写内容，下拉框且数据字典是会回写的 -->
+              <a-form-item :label="$t('回写策略')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <div v-for="(value, index) in writeBack" :key="index">
+                  <a-row style="margin-left: 5px" :gutter="5">
+                    <a-col :span="2">
+                      <span>{{ index + 1 }}{{ $t('级名称') }}</span>
+                    </a-col>
+                    <a-col :span="6">
+                      <a-input v-model="value.tab" />
+                    </a-col>
+                    <a-col :span="2" style="text-align: center">
+                      <span>{{ $t('回写到') }}</span>
+                    </a-col>
+                    <a-col :span="11">
+                      <a-select v-model="value.value" :allowClear="true">
+                        <a-select-option
+                          v-for="drop in dropDownField"
+                          :key="drop.alias"
+                          :value="drop.alias"
+                          @click="$set(value, 'value', drop.alias)"
+                        >
+                          {{ drop.name }}
+                        </a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col :span="1">
+                      <a-icon
+                        :style="{ fontSize: '24px', color: '#52c41a', 'padding-top': '3px' }"
+                        type="plus-square"
+                        theme="filled"
+                        @click="writeBack.push({ value: undefined, tab: writeBack.length + 1 + $t('级') })"
+                      />
+                    </a-col>
+                    <a-col :span="1">
+                      <a-icon
+                        :style="{
+                          fontSize: '24px',
+                          color: writeBack.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                          'padding-top': '3px'
+                        }"
+                        type="minus-square"
+                        theme="filled"
+                        @click="deletewriteBack(index)"
+                      />
+                    </a-col>
+                  </a-row>
+                </div>
+              </a-form-item>
+              <a-form-item :label="$t('后置图标')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-row>
+                  <a-col :span="8">
+                    <a-radio-group
+                      :defaultValue="setting.form.suffixIcon || ''"
+                      @change="
+                        (e) => {
+                          suffixIcon = e.target.value
+                        }
+                      "
+                    >
+                      <a-radio value="">
+                        {{ $t('无') }}
+                      </a-radio>
+                      <a-radio
+                        value="string"
+                        @click="
+                          () => {
+                            if (setting.form.suffixVal) {
+                              setting.form.suffixVal = ''
+                            }
+                          }
+                        "
+                      >
+                        {{ $t('文字') }}
+                      </a-radio>
+                      <a-radio value="custom">
+                        {{ $t('图标') }}
+                      </a-radio>
+                    </a-radio-group>
+                  </a-col>
+                  <a-col :span="12">
+                    <a-icon
+                      v-if="suffixVal && suffixIcon === 'custom' && suffixVal.indexOf('fa-') === -1"
+                      :type="suffixVal"
+                      theme="filled"
+                    />
+                    <font-awesome-icon
+                      v-else-if="suffixVal && !suffixVal.indexOf('fa-') === -1"
+                      :icon="suffixVal"
+                      class="font-awesome-icon"
+                    />
+                    <a-button
+                      v-if="suffixIcon === 'custom'"
+                      style="margin-left: 10px"
+                      size="small"
+                      @click="handleMenuIcon"
+                    >
+                      <a-badge v-if="suffixVal.length" status="success" />
+                      <a-badge v-else status="default" />
+                      {{ $t('设置') }}
+                    </a-button>
+                    <menu-icon ref="menuIcon" @ok="getIcon" />
+                    <a-form-item v-if="suffixIcon === 'string'" style="width: 80px; margin: 0px">
+                      <a-input
+                        v-decorator="[
+                          'setting[form][suffixVal]',
+                          {
+                            initialValue: setting.form.suffixVal ? setting.form.suffixVal : '',
+                            rules: [{ max: 1, message: $t('字符长度不得大于1') }]
+                          }
+                        ]"
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </a-form-item>
+            </template>
+            <!-- 开关 -->
+            <template v-else-if="data.formType === 'switch'">
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('显示内容') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      {{ $t('开关字段显示内容一旦选择，无法修改；自定义文字时，不能超过2个字') }}
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-radio-group
+                  :defaultValue="setting.form.word.type ? setting.form.word.type : 'open'"
+                  style="margin-top: 10px"
+                  @change="getSwitch"
+                >
+                  <a-radio value="open">{{ $t('开/关') }}</a-radio>
+                  <br />
+                  <a-radio value="yes">{{ $t('是/否') }}</a-radio>
+                  <br />
+                  <a-radio value="enable">{{ $t('启用/禁用') }}</a-radio>
+                  <br />
+                  <a-radio value="custom">
+                    {{ $t('自定义') }}
+                    <template>
+                      {{ $t('"开"文字') }}
+                      <a-input
+                        v-model="openText"
+                        type="text"
+                        style="width: 60px"
+                        size="small"
+                        @change="getSwitchText"
+                      />
+                      <a-divider type="vertical"></a-divider>
+                      {{ $t('"关"文字') }}
+                      <a-input
+                        v-model="closeText"
+                        type="text"
+                        style="width: 60px"
+                        size="small"
+                        @change="getSwitchText"
+                      />
+                    </template>
+                  </a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </template>
+            <!-- 组织结构-->
+            <template v-else-if="data.formType === 'organization'">
+              <a-form-item :label="$t('选择类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-radio-group
+                  v-decorator="['setting[form][optionType]', { initialValue: setting.form.optionType || 'user' }]"
+                  @change="onChange"
+                >
+                  <a-radio value="user">{{ $t('用户') }}</a-radio>
+                  <a-radio value="department">{{ $t('部门') }}</a-radio>
+                  <a-radio value="role">{{ $t('角色') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item :label="$t('选择模式')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-radio-group
+                  v-decorator="['setting[attribute][mode]', { initialValue: setting.attribute.mode || 'default' }]"
+                  @change="
+                    (e) => {
+                      setting.attribute.mode = e.target.value
+                    }
+                  "
+                >
+                  <a-radio value="default">{{ $t('单选') }}</a-radio>
+                  <a-radio value="multiple">{{ $t('多选') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item :label="$t('可选范围')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-select
+                  v-decorator="['setting[form][optionRange]', { initialValue: setting.form.optionRange || '3' }]"
+                  style="width: 150px; margin-right: 10px"
+                  @change="handleOptionChange"
+                >
+                  <a-select-option value="3">{{ $t('不限制') }}</a-select-option>
+                  <a-select-option value="0">{{ $t('自定义') }}</a-select-option>
+                  <a-select-option value="1">{{ $t('数据联动') }}</a-select-option>
+                  <a-select-option value="2">{{ $t('公式编辑') }}</a-select-option>
+                </a-select>
+                <a-button v-if="optionValue === '0'" @click="handleSetting('optionCustom')">
+                  <a-badge v-if="custom.length" status="success" />
+                  <a-badge v-else status="default" />
+                  {{ $t('设置') }}
+                </a-button>
+                <a-button v-else-if="optionValue === '1'" @click="handleDataLinkage">{{ $t('数据联动') }}</a-button>
+                <a-button v-else-if="optionValue === '2'" @click="handleFormulateEdit">{{ $t('公式编辑') }}</a-button>
+              </a-form-item>
+            </template>
+            <!-- 地址选择 -->
+            <template v-else-if="data.formType === 'address'">
+              <field-address ref="fieldAddress" :setting="setting" :tableField="tableField" :config="config" />
+            </template>
+            <!-- 树选择 -->
+            <template v-else-if="data.formType === 'treeselect'">
+              <field-treeselect ref="fieldTreeselect" :setting="setting" :tableField="tableField" :config="config" />
+            </template>
+            <template v-else-if="data.formType === 'tag'">
+              <a-form-item :label="$t('标签设置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <!-- 该input只是为了给label前添加红星以示必填项， setting[form][tagSetting]中的数据在提交时会被重新覆盖-->
+                <a-input
+                  v-decorator="[
+                    'setting[form][tagSetting]',
+                    {
+                      initialValue:
+                        setting.form.tagSetting &&
+                        setting.form.tagSetting.tagRule &&
+                        setting.form.tagSetting.tagRule.length > 0
+                          ? JSON.stringify(setting.form.tagSetting)
+                          : undefined,
+                      rules: [{ required: true, message: $t('请设置标签') }]
+                    }
+                  ]"
+                  style="z-index: -999; position: absolute"
+                ></a-input>
+                <a-button
+                  @click="$refs.fieldTagsSetting.show({ title: $t('标签设置'), tagSetting: setting.form.tagSetting })"
+                >
+                  <a-badge
+                    v-if="
+                      setting.form.tagSetting &&
+                      setting.form.tagSetting.tagRule &&
+                      setting.form.tagSetting.tagRule.length > 0
+                    "
+                    status="success"
+                  />
+                  <a-badge v-else status="default" />
+                  {{ $t('标签设置') }}
+                </a-button>
+                <field-tags-setting
+                  ref="fieldTagsSetting"
+                  :tableId="config.tableId"
+                  @ok="
+                    (data) => {
+                      $set(setting.form, 'tagSetting', data)
+                      if (data.tagRule.length > 0) {
+                        form.setFieldsValue({
+                          'setting[form][tagSetting]': JSON.stringify(data)
+                        })
+                      }
+                    }
+                  "
+                />
+              </a-form-item>
+              <a-form-item label="分值回写字段" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-select
+                  v-decorator="['setting[form][scoreWriteBack]', { initialValue: setting.form.scoreWriteBack }]"
+                  :allowClear="true"
+                  :placeholder="$t('请选择分值回写字段')"
+                >
+                  <a-select-option v-for="scoreWrite in tagDownField" :key="scoreWrite.alias" :value="scoreWrite.alias">
+                    {{ scoreWrite.name }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :label="$t('默认值')" :labelCol="labelCol" :wrapperCol="wrapperCol"></a-form-item>
+              <a-form-item :label="$t('默认值加载时机')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-select
+                  v-decorator="['setting[form][quoteType]', { initialValue: setting.form.quoteType || undefined }]"
+                  :allowClear="true"
+                  :placeholder="$t('请选择默认值加载时机')"
+                >
+                  <a-select-option v-for="quoteType in quoteTypes" :key="quoteType.value" :value="quoteType.value">
+                    {{ quoteType.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('数据保存时强制更新') }}
+                  <a-tooltip placement="top" :title="$t('后端事件。无论前端提交什么数据，将强制执行该更新策略。')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch
+                  v-decorator="[
+                    'setting[form][forcedUpdate]',
+                    { initialValue: setting.form.forcedUpdate == 1, valuePropName: 'checked' }
+                  ]"
+                  @change="(checked) => (setting.form.forcedUpdate = checked)"
+                />
+              </a-form-item>
+              <a-form-item
+                v-if="Number(setting.form.forcedUpdate) || setting.form.forcedUpdate == 1"
+                :labelCol="labelCol"
+                :wrapperCol="wrapperCol"
+              >
+                <span slot="label">
+                  {{ $t('强制更新为') }}
+                  <a-tooltip placement="top" :title="$t('其定义数据强制更新策略，支持公式编辑器。')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-row type="flex" align="middle">
+                  <a-col :span="24">
+                    <querier-codemirror-input
+                      ref="querierCodemirrorInput"
+                      :lineStyle="{ lineHeight: '18px', paddingRight: '12px' }"
+                      :params.sync="setting.form.forcedDefaultValue"
+                    />
+                  </a-col>
+                  <div
+                    style="position: absolute; right: 4px; cursor: pointer; z-index: 10"
+                    @click="forcedHandleCodemirror"
+                  >
+                    fx
+                  </div>
+                  <a-input
+                    v-show="false"
+                    v-decorator="[
+                      'forcedDefaultValue',
+                      {
+                        initialValue: setting.form.forcedDefaultValue ? setting.form.forcedDefaultValue.value : '',
+                        rules: [{ required: true, message: $t('请输入更新值') }]
+                      }
+                    ]"
+                  />
+                </a-row>
+              </a-form-item>
+              <a-form-item
+                v-if="Number(setting.form.forcedUpdate) || setting.form.forcedUpdate == 1"
+                :labelCol="labelCol"
+                :wrapperCol="wrapperCol"
+              >
+                <span slot="label">
+                  {{ $t('强制更新时机') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      <div>{{ $t('强制更新的时机。') }}</div>
+                      <div>{{ $t('新建时：仅新建数据时执行默认值策略。') }}</div>
+                      <div>{{ $t('新建+编辑时：新建数据、编辑数据时，均执行默认值策略。') }}</div>
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-select
+                  v-decorator="[
+                    'setting[form][forcedQuoteType]',
+                    { initialValue: setting.form.forcedQuoteType || 'insert' }
+                  ]"
+                  :placeholder="$t('请选择默认值加载时机')"
+                >
+                  <a-select-option v-for="quoteType in quoteTypes" :key="quoteType.value" :value="quoteType.value">
+                    {{ quoteType.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </template>
+            <!-- 关联数据 -->
+            <template v-else-if="data.formType === 'associated'">
+              <LinkData ref="linkData" :setting="setting" :tableField="tableField" :config="config" />
+            </template>
+            <!-- 默认值 -->
+            <template
+              v-if="
+                [
+                  'text',
+                  'textarea',
+                  'number',
+                  'autocomplete',
+                  'datetime',
+                  'switch',
+                  'score',
+                  'cascader',
+                  'address',
+                  'organization',
+                  'tag',
+                  'editor',
+                  'file',
+                  'image',
+                  'location'
+                ].includes(data.formType)
+              "
+            >
+              <a-form-item :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <span slot="label">
+                  {{ $t('默认值') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      <div>{{ $t('打开表单视图时，该字段默认显示的值。按生效时机分为：新建时、新建+编辑时。') }}</div>
+                      <div>{{ $t('不设置：不设置默认值策略。') }}</div>
+                      <div>{{ $t('自定义：自定义或公式编辑默认值策略。') }}</div>
+                      <div>{{ $t('数据联动：根据本表其他字段的值，联动调用其他数据表的数据。') }}</div>
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-row type="flex" align="middle">
+                  <a-col :span="4">
+                    <a-select
+                      v-decorator="[
+                        'setting[form][defaultTemplate]',
+                        { initialValue: setting.form.defaultTemplate || '' }
+                      ]"
+                      :placeholder="$t('请选择默认值模板')"
+                      @change="changeDefault"
+                    >
+                      <a-select-option
+                        v-for="defaultTemplate in defalutTemplates"
+                        :key="defaultTemplate.value"
+                        :value="defaultTemplate.value"
+                      >
+                        {{ defaultTemplate.text }}
+                      </a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col :span="20">
+                    <a-form-item>
+                      <a-button v-if="defaultType === 'linkData'" @click="handleDefaultLink">
+                        {{ $t('数据联动') }}
+                      </a-button>
+                      <template v-else-if="defaultType === 'value'">
+                        <a-input-number
+                          v-if="data.formType === 'number'"
+                          v-decorator="[
+                            'setting[form][defaultValue]',
+                            {
+                              initialValue: setting.form.defaultValue ? setting.form.defaultValue : null,
+                              rules: [{ required: true, message: $t('请输入默认值') }]
+                            }
+                          ]"
+                          :precision="data.fieldType === 'INT' ? 0 : parseInt(data.fieldDecimal) || 2"
+                          @change="
+                            (e) => {
+                              setting.form.defaultValue = e
+                            }
+                          "
+                        />
+                        <a-switch
+                          v-else-if="data.formType === 'switch'"
+                          :checked-children="onText || $t('开')"
+                          :un-checked-children="offText || $t('关')"
+                          :default-checked="setting.form.defaultValue === onText"
+                          style="margin-left: 8px"
+                          @change="
+                            (checked) => {
+                              setting.form.defaultValue = checked ? 1 : 0
+                            }
+                          "
+                        />
+                        <a-input-number
+                          v-else-if="data.formType === 'score'"
+                          v-decorator="[
+                            'setting[form][defaultValue]',
+                            { initialValue: Number(setting.form.defaultValue) || 0 }
+                          ]"
+                          :precision="setting.attribute.half === '1' ? 1 : 0"
+                          :step="setting.attribute.half === '1' ? 0.5 : 1"
+                          :min="0"
+                          :max="5"
+                        />
+                        <template v-else-if="data.formType === 'cascader'">
+                          <a-input
+                            v-show="false"
+                            v-decorator="[
+                              'setting[form][defaultValue]',
+                              { initialValue: setting.form.defaultValue || '' }
+                            ]"
+                          />
+                          <tabs-select
+                            ref="tabsSelect"
+                            :valueKey="cascaderValue"
+                            :action="config.action"
+                            :defaultValue="setting.form.defaultValue"
+                            :writeBack="writeBack"
+                            fieldType="field"
+                            @send="getcascaderValue"
+                          />
+                        </template>
+                        <address-select
+                          v-else-if="data.formType === 'address'"
+                          ref="addressSelect"
+                          :series="setting.form.showSeries"
+                          :defaultValue="setting.form.defaultValue"
+                          fieldType="field"
+                          @send="getDefaultValue"
+                        />
+                        <a-button
+                          v-else-if="data.formType === 'organization'"
+                          style="margin-left: 8px"
+                          @click="handleSetting('default')"
+                        >
+                          <a-badge v-if="defaultCustom.length" status="success" />
+                          <a-badge v-else status="default" />
+                          {{ $t('设置') }}
+                        </a-button>
+                        <a-input
+                          v-else
+                          v-decorator="[
+                            'setting[form][defaultValue]',
+                            {
+                              initialValue: setting.form.defaultValue ? setting.form.defaultValue : '',
+                              rules: [{ required: true, message: $t('请输入默认值') }]
+                            }
+                          ]"
+                          @change="
+                            (e) => {
+                              setting.form.defaultValue = e.target.value
+                            }
+                          "
+                        />
+                      </template>
+                      <a-row v-else-if="defaultType === 'formula'" type="flex" align="middle">
+                        <a-col :span="24">
+                          <querier-codemirror-input
+                            ref="querierCodemirrorInput"
+                            :lineStyle="{ lineHeight: '18px', paddingRight: '12px' }"
+                            :params.sync="setting.form.defaultFormula"
+                          />
+                        </a-col>
+                        <div
+                          style="position: absolute; right: 4px; cursor: pointer; z-index: 10"
+                          @click="handleCodemirror"
+                        >
+                          fx
+                        </div>
+                        <a-input
+                          v-show="false"
+                          v-decorator="[
+                            'defaultValueCheck',
+                            {
+                              initialValue: setting.form.defaultFormula ? setting.form.defaultFormula.value : '',
+                              rules: [{ required: true, message: $t('请输入默认值') }]
+                            }
+                          ]"
+                        />
+                      </a-row>
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </a-form-item>
+              <a-form-item v-if="setting.form.defaultTemplate" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('默认值加载时机') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      <div>{{ $t('默认值设置的生效时机。') }}</div>
+                      <div>{{ $t('新建时：仅新建数据时执行默认值策略。') }}</div>
+                      <div>{{ $t('新建+编辑时：新建数据、编辑数据时，均执行默认值策略。') }}</div>
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-select
+                  v-decorator="['setting[form][quoteType]', { initialValue: setting.form.quoteType || 'insert' }]"
+                  :placeholder="$t('请选择默认值加载时机')"
+                >
+                  <a-select-option v-for="quoteType in quoteTypes" :key="quoteType.value" :value="quoteType.value">
+                    {{ quoteType.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('数据保存时强制更新') }}
+                  <a-tooltip placement="top" :title="$t('后端事件。无论前端提交什么数据，将强制执行该更新策略。')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch
+                  v-decorator="[
+                    'setting[form][forcedUpdate]',
+                    { initialValue: setting.form.forcedUpdate == 1, valuePropName: 'checked' }
+                  ]"
+                  @change="(checked) => (setting.form.forcedUpdate = checked)"
+                />
+              </a-form-item>
+              <a-form-item
+                v-if="Number(setting.form.forcedUpdate) || setting.form.forcedUpdate == 1"
+                :labelCol="labelCol"
+                :wrapperCol="wrapperCol"
+              >
+                <span slot="label">
+                  {{ $t('强制更新为') }}
+                  <a-tooltip placement="top" :title="$t('其定义数据强制更新策略，支持公式编辑器。')">
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-row v-if="data.formType !== 'switch'" type="flex" align="middle">
+                  <a-col :span="24">
+                    <querier-codemirror-input
+                      ref="querierCodemirrorInput"
+                      :lineStyle="{ lineHeight: '18px', paddingRight: '12px' }"
+                      :params.sync="setting.form.forcedDefaultValue"
+                    />
+                  </a-col>
+                  <div
+                    style="position: absolute; right: 4px; cursor: pointer; z-index: 10"
+                    @click="forcedHandleCodemirror"
+                  >
+                    fx
+                  </div>
+                  <a-input
+                    v-show="false"
+                    v-decorator="[
+                      'forcedDefaultValue',
+                      {
+                        initialValue: setting.form.forcedDefaultValue ? setting.form.forcedDefaultValue.value : '',
+                        rules: [{ required: true, message: $t('请输入更新值') }]
+                      }
+                    ]"
+                  />
+                </a-row>
+                <a-switch
+                  v-else-if="data.formType === 'switch'"
+                  :checked-children="onText || $t('开')"
+                  :un-checked-children="offText || $t('关')"
+                  :default-checked="setting.form.forcedDefaultValue"
+                  @change="
+                    (checked) => {
+                      setting.form.forcedDefaultValue = checked ? 1 : 0
+                    }
+                  "
+                />
+              </a-form-item>
+              <a-form-item
+                v-if="Number(setting.form.forcedUpdate) || setting.form.forcedUpdate == 1"
+                :labelCol="labelCol"
+                :wrapperCol="wrapperCol"
+              >
+                <span slot="label">
+                  {{ $t('强制更新时机') }}
+                  <a-tooltip placement="top">
+                    <span slot="title">
+                      <div>{{ $t('强制更新的时机。') }}</div>
+                      <div>{{ $t('新建时：仅新建数据时执行默认值策略。') }}</div>
+                      <div>{{ $t('新建+编辑时：新建数据、编辑数据时，均执行默认值策略。') }}</div>
+                    </span>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-select
+                  v-decorator="[
+                    'setting[form][forcedQuoteType]',
+                    { initialValue: setting.form.forcedQuoteType || 'insert' }
+                  ]"
+                  :placeholder="$t('请选择默认值加载时机')"
+                >
+                  <a-select-option v-for="quoteType in quoteTypes" :key="quoteType.value" :value="quoteType.value">
+                    {{ quoteType.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </template>
+            <!-- 链表查看 -->
+            <template v-if="data.formType == 'text' || data.formType === 'associated'">
+              <a-form-item :label="$t('链接查看')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-switch
+                  v-decorator="[
+                    'setting[autofill][sourceLinkOnOff]',
+                    { initialValue: setting.autofill.sourceLinkOnOff == 1, valuePropName: 'checked' }
+                  ]"
+                  @change="(checked) => (setting.autofill.sourceLinkOnOff = checked)"
+                />
+              </a-form-item>
+              <template v-if="setting.autofill.sourceLinkOnOff">
+                <a-form-item :label="$t('链接源数据表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <a-cascader
+                    v-decorator="[
+                      'setting[autofill][source]',
+                      {
+                        initialValue: setting.autofill.source || [],
+                        rules: [{ required: true, message: $t('链接源数据表不能为空') }]
+                      }
+                    ]"
+                    :show-search="true"
+                    optionFilterProp="children"
+                    :placeholder="$t('请选择源数据表')"
+                    :options="tableField"
+                    @change="sourceChange"
+                  />
+                </a-form-item>
+                <a-form-item :label="$t('链接关联条件')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <a-row :gutter="24">
+                    <a-col :span="9">
+                      <a-select
+                        v-decorator="[
+                          'setting[autofill][sourceField]',
+                          {
+                            initialValue: setting.autofill.sourceField || '',
+                            rules: [{ required: true, message: $t('链接关联条件不能为空') }]
+                          }
+                        ]"
+                        showSearch
+                        optionFilterProp="children"
+                        :placeholder="$t('请选择源数据表关联字段')"
+                      >
+                        <a-select-option
+                          v-for="sourceField in sourceFields"
+                          :key="sourceField.fieldId"
+                          :value="sourceField.alias"
+                        >
+                          {{ sourceField.name }}
+                        </a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col :span="3" style="text-align: center">{{ $t('值等于') }}</a-col>
+                    <a-col :span="9">
+                      <a-input style="width: 100%" disabled :value="data.name" :placeholder="$t('当前字段的名称')" />
+                    </a-col>
+                    <a-col :span="3">{{ $t('的值时') }}</a-col>
+                  </a-row>
+                </a-form-item>
+                <a-form-item :label="$t('链接表单依赖的数据窗口')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <a-select
+                    v-decorator="[
+                      'setting[autofill][sourceLinkView]',
+                      {
+                        initialValue: setting.autofill.sourceLinkView || '',
+                        rules: [{ required: true, message: $t('链接表单依赖的数据窗口不能为空') }]
+                      }
+                    ]"
+                    :placeholder="$t('请选择链接查看表单依赖的数据窗口')"
+                  >
+                    <a-select-option v-for="table in tableFormLists" :key="table.value" :value="table.value">
+                      {{ table.text }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item :label="$t('表单状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                  <a-radio-group
+                    v-decorator="[
+                      'setting[autofill][sourceStatus]',
+                      { initialValue: setting.autofill.sourceStatus || 'inherit' }
+                    ]"
+                  >
+                    <a-radio value="inherit">{{ $t('继承数据窗口设置') }}</a-radio>
+                    <a-radio value="readonly">{{ $t('只读') }}</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </template>
+            </template>
+            <!-- 流水号 -->
+            <template v-else-if="data.formType === 'serialnumber'">
+              <field-serial ref="fieldSerial" :setting="setting" :config="config" />
+            </template>
+            <a-form-item :label="$t('附加属性')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-button size="small" @click="codeEditor">
+                <a-badge v-if="attributeFlag" status="success" :text="$t('设置')" />
+                <a-badge v-else status="default" :text="$t('设置')" />
+              </a-button>
+            </a-form-item>
+          </template>
+        </a-form>
+        <code-editor ref="codeEditor" @func="getCode" />
+      </a-spin>
+      <div slot="footer">
+        <a-spin :spinning="loading">
+          <span slot="indicator"></span>
+          <a-button type="primary" :hidden="!!config.record" @click="handleSubmit(true)">
+            {{ $t('保存并添加') }}
+          </a-button>
+          <a-button type="primary" @click="handleSubmit(false)">
+            {{ $t('保存') }}
+          </a-button>
+          <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+        </a-spin>
+      </div>
+      <field-form-fillset
+        ref="fieldFormFillset"
+        :params="{ currentFields: currentFields, sourceFields: sourceFields, sourceFillset: sourceFillset }"
+      />
+      <field-form-datalink ref="fieldFormDatalink" :key="refreshKey" :tableField="tableField" @ok="handleDataLink" />
+      <formula-edit ref="FormulaEdit" :params="formulaData" @ok="handleFormulate" />
+      <field-form-depart ref="fieldFormDepart" :key="departKey" @ok="handleUser" />
+      <field-form-user ref="fieldFormUser" :key="userKey" @ok="handleUser" />
+      <tplview-data-form ref="tplviewDataForm" @ok="getDataForm" />
+      <DateLinkage ref="dataLinkage" :key="linkKey" @ok="getDateLinkage" />
+      <form-rule-way-condition ref="formRuleWayCondition" @func="getCondition" />
+    </a-modal>
+    <a-modal :title="$t('提示')" :width="600" :visible="confirmModalShow" :closable="false">
+      <p>{{ $t(confirmModalMsg) }}</p>
+      <template slot="footer">
+        <a-button key="back" @click="handleCancel">{{ $t('继续保存') }}</a-button>
+        <a-button key="submit" type="primary" :loading="loading" @click="handleOk">{{ $t('返回修改') }}</a-button>
+      </template>
+    </a-modal>
+  </div>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    FieldFormFillset: () => import('./FieldFormFillset'),
+    CodeEditor: () => import('@/views/admin/CodeEditor'),
+    FieldFormDatalink: () => import('./FieldFormDatalink'),
+    FormulaEdit: () => import('./FormulaEdit'),
+    FieldFormDepart: () => import('./FieldFormDepart'),
+    TplviewDataForm: () => import('../TplviewDataForm'),
+    FieldFormUser: () => import('./FieldFormUser'),
+    LinkData: () => import('./LinkData'),
+    FieldText: () => import('./FieldText'),
+    FieldTextarea: () => import('./FieldTextarea'),
+    FieldNumber: () => import('./FieldNumber'),
+    FieldDate: () => import('./FieldDate'),
+    FieldSelect: () => import('./FieldSelect'),
+    FieldAutoComplete: () => import('./FieldAutoComplete'),
+    FieldRate: () => import('./FieldRate'),
+    DateLinkage: () => import('./DataLinkage'),
+    FieldSerial: () => import('./FieldSerial'),
+    FieldAddress: () => import('./FieldAddress'),
+    MenuIcon: () => import('@/components/SelectIcon'),
+    TabsSelect: () => import('./TabsSelect'),
+    FieldTreeselect: () => import('./FieldTreeselect'),
+    FieldTagsSetting: () => import('./FieldTagsSetting'),
+    FieldImgSetting: () => import('./FieldImgSetting'),
+    AddressSelect: () => import('./AddressSelect'),
+    FormRuleWayCondition: () => import('@/views/admin/Flow/modules/FormRuleWayCondition'),
+    QuerierCodemirrorInput: () => import('@/views/admin/Table/QuerierCodemirrorInput'),
+    SetLang: () => import('@/components/SetLang'),
+    SetAlias: () => import('@/components/SetAlias/SetAlias'),
+    HelpPanel: () => import('@/views/admin/HelpPanel')
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 500)
+    this.getNameList = debounce(this.getNameList, 500)
+    return {
+      dataLink: {},
+      defaultDataLink: {},
+      refreshKey: 0,
+      departKey: 2,
+      userKey: 4,
+      formulaData: {},
+      typeValue: 'user',
+      optionValue: '0',
+      defaultValue: '0',
+      config: {},
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      visible: false,
+      loading: false,
+      aliasDisabled: false,
+      data: {},
+      form: this.$form.createForm(this),
+      typeList: [],
+      nameList: [],
+      // 所有分类名称
+      categoryList: [],
+      editable: false,
+      tableField: [],
+      setting: {
+        form: {},
+        attribute: {},
+        autofill: {},
+        virtualField: {}
+      },
+      imageStatus: 'success',
+      imgHelp: '',
+      attributeFlag: false, // 设置
+      defaultFlag: false, // 公式编辑
+      codeType: 'setting', // 代码编辑器是由哪个打开
+      formulateValue: [],
+      sourceFields: [],
+      currentFields: [],
+      tableFormLists: [],
+      tableFormViews: [],
+      virtualSourceFields: [],
+      virtualCurrentFields: [],
+      parentNumber: [],
+      cascaderValue: '',
+      sourceStatus: false,
+      sourceFillset: [],
+      forcedType: '',
+      fieldLength: {
+        text: 64,
+        associated: 64,
+        autocomplete: 64,
+        combobox: 256,
+        radio: 32,
+        switch: 4,
+        checkbox: 256,
+        cascader: 32,
+        address: 32,
+        serialnumber: 32,
+        organization: 256,
+        treeselect: 256,
+        tag: 256,
+        location: 32
+      },
+      formtypes: {
+        text: {
+          value: 'text',
+          text: this.$t('单行文本'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        textarea: {
+          value: 'textarea',
+          text: this.$t('多行文本'),
+          fieldtypes: [
+            { value: 'TEXT', text: 'TEXT' },
+            { value: 'MEDIUMTEXT', text: 'MEDIUMTEXT' },
+            { value: 'LONGTEXT', text: 'LONGTEXT' }
+          ]
+        },
+        datetime: {
+          value: 'datetime',
+          text: this.$t('日期时间'),
+          fieldtypes: [
+            { value: 'DATETIME', text: this.$t('DATETIME-日期时间') },
+            { value: 'DATE', text: this.$t('DATE-日期') },
+            { value: 'TIME', text: this.$t('TIME-时间') }
+          ]
+        },
+        combobox: {
+          value: 'combobox',
+          text: this.$t('下拉框'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        radio: {
+          value: 'radio',
+          text: this.$t('单选框'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        checkbox: {
+          value: 'checkbox',
+          text: this.$t('复选框'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        editor: {
+          value: 'editor',
+          text: this.$t('编辑器'),
+          fieldtypes: [
+            { value: 'TEXT', text: 'TEXT' },
+            { value: 'MEDIUMTEXT', text: 'MEDIUMTEXT' },
+            { value: 'LONGTEXT', text: 'LONGTEXT' }
+          ]
+        },
+        image: {
+          value: 'image',
+          text: this.$t('图片'),
+          fieldtypes: [
+            { value: 'JSON', text: 'JSON' }
+          ]
+        },
+        file: {
+          value: 'file',
+          text: this.$t('附件'),
+          fieldtypes: [
+            { value: 'JSON', text: 'JSON' }
+          ]
+        },
+        number: {
+          value: 'number',
+          text: this.$t('数字'),
+          fieldtypes: [
+            { value: 'INT', text: this.$t('INT-整数') },
+            { value: 'BIGINT', text: this.$t('BIGINT-长整数') },
+            { value: 'DECIMAL', text: this.$t('DECIMAL-小数') }
+          ]
+        },
+        cascader: {
+          value: 'cascader',
+          text: this.$t('级联选择'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        switch: {
+          value: 'switch',
+          text: this.$t('开关'),
+          fieldtypes: [
+            { value: 'TINYINT', text: 'TINYINT' }
+          ]
+        },
+        score: {
+          value: 'score',
+          text: this.$t('评分'),
+          fieldtypes: [
+            { value: 'DECIMAL', text: 'DECIMAL' }
+          ]
+        },
+        serialnumber: {
+          value: 'serialnumber',
+          text: this.$t('流水号'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        organization: {
+          value: 'organization',
+          text: this.$t('组织结构'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        address: {
+          value: 'address',
+          text: this.$t('地址选择'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        treeselect: {
+          value: 'treeselect',
+          text: this.$t('树选择'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        associated: {
+          value: 'associated',
+          text: this.$t('关联数据'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        autocomplete: {
+          value: 'autocomplete',
+          text: this.$t('自动完成'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        tag: {
+          value: 'tag',
+          text: this.$t('标签'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        location: {
+          value: 'location',
+          text: this.$t('地图选点'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        }
+      },
+      fieldtypes: [],
+      fieldkeys: [
+        { value: '', text: this.$t('无') },
+        { value: 'unique_key', text: this.$t('唯一') },
+        { value: 'key', text: this.$t('索引') }
+      ],
+      defalutTemplates: [
+        { value: '', text: this.$t('不设置') },
+        { value: 'value', text: this.$t('自定义') },
+        { value: 'formula', text: this.$t('公式编辑') },
+        { value: 'linkData', text: this.$t('数据联动') }
+      ],
+      defaultType: '',
+      quoteTypes: [
+        { value: 'insert', text: this.$t('新建时') },
+        { value: 'always', text: this.$t('新建+编辑时') }
+      ],
+      regexs: [
+        { value: '', text: this.$t('常用正则') },
+        { value: '/^([+-]?)\\d*\\.?\\d+$/', text: this.$t('数字') },
+        { value: '/^-?[1-9]\\d*$/', text: this.$t('整数') },
+        { value: '/^[A-Za-z]+$/', text: this.$t('字母') },
+        { value: '/^\\w+$/', text: this.$t('字母+数字') },
+        { value: '/^\\w+((-\\w+)|(\\.\\w+))*\\@[A-Za-z0-9]+((\\.|-)[A-Za-z0-9]+)*\\.[A-Za-z0-9]+$/', text: 'E-mail' },
+        { value: '/^[1-9]*[1-9][0-9]*$/', text: 'QQ' },
+        { value: '/^http:///', text: this.$t('超级链接') },
+        { value: '/^(1)[0-9]{10}$/', text: this.$t('手机号码') },
+        { value: '/^[0-9-]{6,13}$/', text: this.$t('电话号码') },
+        { value: '/^[0-9]{6}$/', text: this.$t('邮政编码') }
+      ],
+      limitLevelTypes: [
+        { value: '>', text: '>' },
+        { value: '>=', text: '>=' },
+        { value: '==', text: '=' },
+        { value: '<', text: '<' },
+        { value: '<=', text: '<=' }
+      ],
+      count: 0,
+      columns: [{
+        title: this.$t('当前表字段'),
+        dataIndex: 'currentFieldName'
+      }, {
+        title: this.$t('源数据表字段'),
+        dataIndex: 'sourceFieldName'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        scopedSlots: { customRender: 'action' }
+      }],
+      optionCustom: [],
+      custom: [],
+      customObj: {},
+      initMode: '', // 判断已保存数据与当前模式是否匹配
+      defaultCustom: [],
+      openText: '',
+      closeText: '',
+      onText: '',
+      offText: '',
+      customText: '',
+      minFiles: 0, // 最小附件数
+      minImg: 0, // 最小图片数
+      maxImg: 10,
+      fileMax: Infinity, // 图片附件最大存储限制
+      switchValue: '', // 开关显示的值
+      subformStatus: 'success',
+      subformHelp: undefined,
+      sonField: '1',
+      currentField: '1',
+      suffixIcon: '',
+      suffixVal: '',
+      srcPath: [],
+      currentFieldArr: [], // 当前表字段
+      linkFields: [], // 关联数据表字段
+      tpl: [], // 关联数据表窗口
+      tableId: '',
+      record: { id: '' },
+      dropDownField: [], // 下拉字段
+      tagDownField: [], // 分值回写字段
+      writeBack: [{ value: undefined, tab: '1级' }, { value: undefined, tab: '2级' }], // 回写策略
+      dataFormId: true,
+      format: '', // 时间格式,
+      linkKey: 'linkKey',
+      appSetFlag: false,
+      nameLoading: false,
+      noMore: false,
+      nameParams: {
+        pageNo: 1,
+        pageSize: 20
+      },
+      confirmModalShow: false,
+      confirmModalMsg: '',
+      valuesObj: null,
+      copyVisible: false,
+      aliasPinyingObj: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    // popupScroll (e) {
+    //   const scrollTop = e.target.scrollTop
+    //   const scrollHeight = e.target.scrollHeight
+    //   const clientHeight = e.target.clientHeight
+    //   const scrollBottom = scrollHeight - clientHeight - scrollTop
+    //   if (scrollBottom === 0) {
+    //     this.nameParams.pageNo++
+    //     this.getNameList()
+    //   }
+    // },
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.aliasPinyingObj = {}
+      this.editable = false
+      this.config = config
+      this.aliasDisabled = config.action === 'edit'
+      this.nameList = []
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ tableId: config.tableId ? config.tableId : 0, fieldId: config.record ? config.record.fieldId : 0 })
+      }).then((res) => {
+        this.form.resetFields()
+        if (config.action === 'edit') {
+          this.data = {}
+          this.data = res.result.data
+          this.data.setting = JSON.parse(this.data.setting)
+        } else {
+          this.data = {}
+        }
+        this.fieldtypes = this.aliasDisabled ? this.formtypes[this.data.formType]?.fieldtypes : []
+        this.parentNumber = res.result.parentNumber
+        this.setting = res.result.setting || {}
+        this.setting.autofill = this.setting.autofill || {}
+        this.attributeFlag = !!this.setting.form.attribute
+        // 默认值初始化
+        this.defaultType = this.setting.form.defaultTemplate || ''
+        if (this.setting.form.defaultTemplate === 'formula') {
+          this.defaultFlag = !!this.setting.form.defaultValue
+        }
+        if (this.data.formType === 'datetime') {
+          if (config.action === 'add') {
+            this.format = 'Y-m-d h:m:s'
+          } else {
+            this.format = this.setting.attribute.format
+          }
+        } else if (this.data.formType === 'tag') {
+          this.axios({
+            url: '/admin/field/getFieldInfos',
+            data: { tableId: this.config.tableId, formType: 'number' }
+          }).then(res => {
+            this.tagDownField = res.result.filter(item => item.formType === 'number')
+          })
+        } else if (this.data.formType === 'organization') {
+          // 创建或显示组织结构
+          this.typeValue = this.setting.form.optionType || 'user'
+          this.initMode = this.setting.form.optionType + '_' + this.setting.attribute.mode
+          this.optionValue = this.setting.form.optionRange || '3'
+          this.defaultCustom = this.setting.form.defaultValue
+          this.custom = this.optionValue !== '3' ? this.setting.form.optionCustom : []
+          this.customObj = {
+            type: this.typeValue,
+            value: this.custom,
+            defaultCustom: this.defaultCustom
+          }
+          this.formulateValue = this.setting.form.formulateValue || {}
+          this.defaultFormulateValue = this.setting.form.defaultFormulateValue || {}
+          this.dataLink = this.setting.form.dataLink || {}
+          this.defaultDataLink = this.setting.form.defaultDataLink || {}
+        } else if (this.data.formType === 'switch') {
+          this.onText = this.setting.form.word.value[1] || this.$t('开')
+          this.offText = this.setting.form.word.value[0] || this.$t('关')
+          if (this.setting.form.word.type === 'custom') {
+            this.openText = this.setting.form.word.value[1]
+            this.closeText = this.setting.form.word.value[0]
+          }
+        } else if (this.data.formType === 'image' || this.data.formType === 'file') {
+          this.minImg = parseInt(this.setting.attribute.minFiles)
+          this.maxImg = parseInt(this.setting.attribute.maxFiles)
+          this.appSetFlag = this.setting.form && !!this.setting.form.appSetting && this.setting.form.appSetting.length > 0
+          this.axios({
+            url: '/admin/field/getUploadMax'
+          }).then(res => {
+            this.fileMax = res.result.max
+          })
+        } else if (this.data.formType === 'cascader') {
+          this.writeBack = this.setting.form.writeBack && this.setting.form.writeBack.length > 0 ? this.setting.form.writeBack : [{ value: undefined, tab: '1级' }]
+          this.writeBack.forEach(item => {
+            if (!item.value) {
+              item.value = undefined
+            }
+          })
+          this.suffixIcon = this.setting.form.suffixIcon
+          if (this.suffixIcon === 'custom') {
+            this.suffixVal = this.setting.form.suffixVal
+          }
+          this.axios({
+            url: '/admin/dict/listCategory',
+            data: { dictMode: 1, pageSize: 999, pageNo: 1 }
+          }).then(res => {
+            this.srcPath = res.result.data
+          })
+          this.cascaderValue = this.setting.form.src
+          this.axios({
+            url: '/admin/field/getFieldInfos',
+            data: { tableId: this.config.tableId, formType: 'combobox' }
+          }).then(res => {
+            this.dropDownField = res.result.filter(item => item.setting.attribute.dataSource === 'dictionaryBack')
+          })
+        }
+        this.tableField = res.result.tableField
+        // 虚拟字段
+        if (this.setting.virtualField && typeof (this.setting.virtualField.source) !== 'undefined' && this.setting.virtualField.source.length > 0) {
+          this.axios({
+            url: '/admin/field/getSourceOptions',
+            data: Object.assign({ sourceTableId: this.setting.virtualField.source, currentTableId: this.config.tableId, virtualField: 0 })
+          }).then(res => {
+            this.virtualSourceFields = res.result.sourceFields
+            this.virtualCurrentFields = res.result.currentFields
+          })
+        }
+        if (this.setting.autofill && typeof (this.setting.autofill.source) !== 'undefined' && this.setting.autofill.source.length > 0) {
+          this.axios({
+            url: '/admin/field/getSourceOptions',
+            data: Object.assign({ sourceTableId: this.setting.autofill.source[1], currentTableId: this.config.tableId, virtualField: 0 })
+          }).then(res => {
+            this.sourceFields = res.result.sourceFields
+            this.currentFields = res.result.currentFields
+            this.tableFormLists = res.result.tableFormLists
+            this.tableFormViews = res.result.tableFormViews
+            this.sourceStatus = true
+            if (typeof (this.setting.autofill.sourceFillset) !== 'undefined') {
+              this.sourceFillset = JSON.parse(this.setting.autofill.sourceFillset)
+            }
+          })
+        }
+        this.loading = false
+      })
+      this.axios({
+        url: 'admin/field/category',
+        params: {
+          tableId: this.config.tableId,
+          category: ''
+        }
+      }).then(res => {
+        this.typeList = res.result
+        this.categoryList = res.result
+      })
+    },
+    // 自动完成搜索
+    onSearch (val) {
+      if (val) {
+        this.typeList = this.categoryList.filter(item => item.includes(val))
+      } else {
+        this.typeList = JSON.parse(JSON.stringify(this.categoryList))
+      }
+    },
+    clickCategory () {
+      const val = this.$t(this.form.getFieldValue('info[category]'))
+      this.typeList = this.categoryList.filter(item => item.includes(val))
+    },
+    getNameList (type) {
+      const val = this.$t(this.form.getFieldValue('info[name]'))
+      if (!type || !this.nameList.length) {
+        this.nameLoading = true
+        this.axios({
+          url: '/admin/systemLibrary/list',
+          data: {
+            pageNo: this.nameParams.pageNo,
+            pageSize: this.nameParams.pageSize,
+            sortField: 'id',
+            sortOrder: 'descend',
+            name: val
+          }
+        }).then(res => {
+          this.nameLoading = false
+          this.nameList = [...this.nameList, ...res.result.data]
+          // 添加c属性，用于渲染。使a-select-option不换行
+          this.nameList.forEach(item => {
+            item.c = item.langZhCn
+          })
+          this.noMore = res.result.data.length < this.nameParams.pageSize
+        })
+      }
+    },
+    deletewriteBack (index) {
+      if (this.writeBack.length > 1) {
+        this.writeBack.splice(index, 1)
+      }
+    },
+    // 获取级联菜单数据
+    getCascader (value) {
+      this.cascaderValue = value
+      if (this.$refs.tabsSelect) {
+        this.$refs.tabsSelect.contents = ''
+        this.$refs.tabsSelect.showData = [{ data: '', tab: this.$t('1级') }]
+        this.$refs.tabsSelect.activeKey = 0
+      }
+      this.form.setFieldsValue({
+        'setting[form][defaultValue]': ''
+      })
+    },
+    getcascaderValue (val) {
+      this.form.setFieldsValue({
+        'setting[form][defaultValue]': val
+      })
+    },
+    setAlias (item) {
+      if (this.config.action === 'add') {
+        this.aliasPinyingObj = item
+        const { setFieldsValue } = this.form
+        setFieldsValue({ 'info[alias]': item.pinYin })
+      }
+    },
+    // 根据显示名称赋值系统名称
+    handleChangeName (e) {
+      // this.nameParams = {
+      //   pageNo: 1,
+      //   pageSize: 20
+      // }
+      this.nameList = []
+      this.getNameList()
+    },
+    handleBlur () {
+      if (!this.form.getFieldValue('info[alias]')) {
+        this.$refs.setAlias.searchAlias()
+      }
+    },
+    handleEdit () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要修改系统名称吗？'),
+        content: this.$t('修改系统名称会造成系统未知错误，强烈建议不要修改'),
+        onOk () {
+          that.aliasDisabled = false
+        }
+      })
+    },
+    // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    sourceChange (value) {
+      this.axios({
+        url: '/admin/field/getSourceOptions',
+        data: Object.assign({ sourceTableId: value[1], currentTableId: this.config.tableId, virtualField: 0 })
+      }).then(res => {
+        this.sourceFields = res.result.sourceFields
+        this.currentFields = res.result.currentFields
+        this.tableFormLists = res.result.tableFormLists
+        this.tableFormViews = res.result.tableFormViews
+        this.sourceStatus = true
+      })
+    },
+    // 获取图片最小数
+    getImgNum (value, type) {
+      if (type !== 'min') {
+        this.maxImg = value
+      } else {
+        this.minImg = value
+        if (this.minImg > this.maxImg) {
+          this.form.setFieldsValue({
+            'setting[attribute][maxFiles]': value
+          })
+          this.setting.attribute.maxFiles = this.minImg
+          this.maxImg = this.minImg
+        }
+      }
+      if (!this.minImg && this.minImg !== 0) {
+        this.imageStatus = 'error'
+        this.imgHelp = this.$t('请输入最小图片数')
+      } else if (!this.maxImg && this.maxImg !== 0) {
+        this.imageStatus = 'error'
+        this.imgHelp = this.$t('请输入最大图片数')
+      } else {
+        this.imgHelp = ''
+        this.imageStatus = 'success'
+      }
+    },
+    // 获取附件最小数
+    getMinFiles (e) {
+      this.minFiles = e
+    },
+    // 获取图标
+    getIcon (value) {
+      this.suffixVal = value
+    },
+    // 后置图标
+    handleLatter (val) {
+      this.suffixIcon = val.target.value
+    },
+    // 打开图标库
+    handleMenuIcon () {
+      this.$refs.menuIcon.show()
+    },
+    // 打开设置附加属性
+    codeEditor () {
+      this.codeType = 'setting'
+      this.$refs.codeEditor.show({
+        value: this.setting.form.attribute || ''
+      })
+    },
+    // 获取附加属性
+    getCode (value) {
+      if (this.codeType === 'setting') {
+        this.setting.form.attribute = value
+        this.attributeFlag = !!value
+      } else {
+        this.setting.form.defaultValue = value
+        this.defaultFlag = !!value
+      }
+    },
+    // 选择UI组件
+    handleComponentChange (value) {
+      this.data.formType = value
+      this.fieldtypes = this.formtypes[value].fieldtypes
+      const fieldType = this.formtypes[value].fieldtypes[0].value
+      const { setFieldsValue } = this.form
+      this.data.fieldType = fieldType
+      this.$nextTick(() => {
+        setFieldsValue({ 'info[fieldType]': fieldType })
+        if (['text', 'associated', 'datetime', 'serialnumber'].includes(value)) {
+          setFieldsValue({ 'info[fieldKey]': '' })
+        }
+      })
+      this.defaultType = this.setting.form.defaultTemplate = ''
+      setFieldsValue({ 'setting[form][defaultTemplate]': '' })
+      if (['text', 'associated', 'autocomplete', 'combobox', 'radio', 'switch', 'checkbox', 'cascader', 'address', 'serialnumber', 'organization', 'treeselect', 'tag', 'location'].includes(value)) {
+        setFieldsValue({ 'info[fieldLength]': this.fieldLength[value] })
+      } else if (value === 'number') {
+        setFieldsValue({ 'info[fieldLength]': 11 })
+      }
+      switch (value) {
+        case 'datetime':
+          this.setting.attribute.format = 'Y-m-d H:i:s'
+          this.format = 'Y-m-d H:i:s'
+          break
+        case 'switch':
+          this.setting.form = this.setting.form || {}
+          this.$set(this.setting.form, 'defaultType', 'switch')
+          this.$set(this.setting.form, 'defaultValue', 0)
+          this.setting.form.word = {
+            type: 'open',
+            value: {
+              1: this.$t('开'),
+              0: this.$t('关')
+            }
+          }
+          this.onText = this.$t('开')
+          this.offText = this.$t('关')
+          break
+        case 'organization':
+          this.setting.formType = '0'
+          this.setting.attribute.mode = 'default'
+          this.setting.form.optionRange = '3'
+          this.setting.form.defaultValue = ''
+          this.setting.form.defaultLoadTime = '0'
+          this.setting.form.optionCustom = []
+          this.setting.form.defaultOptionCustom = []
+          this.setting.form.dataLink = {}
+          this.setting.form.defaultDataLink = {}
+          this.setting.form.formulateValue = {}
+          this.setting.form.defaultFormulateValue = {}
+          this.defaultValue = '0'
+          this.optionValue = '3'
+          break
+        case 'image':
+        case 'cascader':
+          this.axios({
+            url: '/admin/field/getFieldInfos',
+            data: { tableId: this.config.tableId, formType: 'combobox' }
+          }).then(res => {
+            this.dropDownField = res.result.filter(item => item.setting.attribute.dataSource === 'dictionaryBack')
+          })
+          this.axios({
+            url: '/admin/dict/listCategory',
+            data: { dictMode: 1, pageSize: 999, pageNo: 1 }
+          }).then(res => {
+            this.srcPath = res.result.data
+          })
+          break
+        case 'file':
+          this.axios({
+            url: '/admin/field/getUploadMax'
+          }).then(res => {
+            this.fileMax = res.result.max
+          })
+          break
+        case 'serialnumber':
+          this.setting.form = this.setting.form
+          this.form.setFieldsValue({ 'info[fieldKey]': 'unique_key' })
+          this.data.fieldKey = 'unique_key'
+          break
+        case 'tag':
+          this.axios({
+            url: '/admin/field/getFieldInfos',
+            data: { tableId: this.config.tableId, formType: 'number' }
+          }).then(res => {
+            this.tagDownField = res.result.filter(item => item.formType === 'number')
+          })
+          break
+        default:
+          break
+      }
+    },
+    // 选择字段类型
+    changeFieldtype (value) {
+      this.data.fieldType = value
+      if (this.data.formType === 'number') {
+        if (!this.setting.attribute) {
+          this.setting.attribute = {}
+          this.data.fieldDecimal = 2
+        }
+        this.data.fieldLength = ''
+      } else if (this.data.formType === 'datetime') {
+        switch (value) {
+          case 'DATETIME':
+            this.$set(this.setting.attribute, 'format', 'Y-m-d H:i:s')
+            this.format = 'Y-m-d H:i:s'
+            break
+          case 'DATE':
+            this.$set(this.setting.attribute, 'format', 'Y-m-d')
+            this.format = 'Y-m-d'
+            break
+          case 'TIME':
+            this.$set(this.setting.attribute, 'format', 'H:i:s')
+            this.format = 'H:i:s'
+            break
+          default:
+            break
+        }
+        const fieldDate = this.$refs.fieldDate
+        if (fieldDate.minType === 'custom') {
+          this.$refs.fieldDate.minValue = this.moment().format(this.format)
+        } else {
+          this.$refs.fieldDate.minValue = undefined
+          this.$refs.fieldDate.form.setFieldsValue({
+            'setting[form][minValue]': undefined
+          })
+        }
+        if (fieldDate.maxType === 'custom') {
+          this.$refs.fieldDate.maxValue = this.moment().format(this.format)
+        } else {
+          this.$refs.fieldDate.maxValue = undefined
+          this.$refs.fieldDate.form.setFieldsValue({
+            'setting[form][maxValue]': undefined
+          })
+        }
+      }
+    },
+    // 选择默认值
+    changeDefault (val) {
+      this.setting.form.defaultTemplate = val
+      this.defaultType = val
+      if (val === 'formula' && !this.setting.form.defaultFormula) {
+        this.$set(this.setting.form, 'defaultFormula', { html: '', value: '' })
+      }
+    },
+    // 默认值数据联动
+    handleDefaultLink () {
+      this.linkKey = this.linkKey === 'linkKey' ? 'linkKey_1' : 'linkKey'
+      this.$nextTick(() => {
+        this.$refs.dataLinkage.show({
+          data: this.data,
+          setting: this.setting,
+          tableField: this.tableField,
+          tableId: this.config.tableId
+        })
+      })
+    },
+    // 获取数据联动值
+    getDateLinkage (val) {
+      this.setting.form.defaultValueLink = val
+    },
+    // 默认值公式编辑
+    handleDefaultEdit () {
+      this.codeType = 'defaultSetting'
+      this.$refs.codeEditor.show({
+        value: this.setting.form.defaultValueLink || ''
+      })
+    },
+
+    // 图片移动端设置
+    openImgSetting () {
+      this.$refs.fieldImgSetting.show()
+    },
+
+    // 组织结构
+    // 选择类型
+    onChange (e) {
+      this.typeValue = e.target.value
+      if (this.typeValue !== this.customObj.type) {
+        this.custom = []
+        this.defaultCustom = []
+      } else {
+        this.custom = this.customObj.value
+        this.defaultCustom = this.customObj.defaultCustom
+      }
+    },
+    // 选择默认值
+    handleDefaultChange (value) {
+      this.defaultValue = value
+    },
+    handleDataLink (res) {
+      if (res.dataType === 'dataLink') {
+        this.datalink = res.data
+        this.setting.form.dataLink = this.datalink
+      } else {
+        this.defaultDataLink = res.data
+        this.setting.form.defaultDataLink = this.defaultDataLink
+      }
+    },
+    // 进入选择页面
+    handleSetting (dataType) {
+      let optionType = ''
+      let url = ''
+      if (this.typeValue === 'user') {
+        this.userKey = this.userKey === 4 ? 4 : 5
+        optionType = 'user'
+        this.$nextTick(() => {
+          this.$refs.fieldFormUser.show({
+            optionCustom: this.custom || [],
+            defaultValue: this.defaultCustom || [],
+            initMode: this.initMode,
+            mode: dataType === 'optionCustom' ? 'multiple' : this.setting.attribute.mode,
+            dataType: dataType,
+            optionType
+          })
+        })
+        return
+      } else if (this.typeValue === 'department') {
+        optionType = 'department'
+        url = '/admin/department/getChildren'
+      } else if (this.typeValue === 'role') {
+        optionType = 'role'
+        url = '/admin/role/getRoleData'
+      }
+      this.departKey = this.departKey === 2 ? 3 : 2
+      this.$nextTick(() => {
+        this.$refs.fieldFormDepart.show({
+          optionCustom: this.custom || [],
+          defaultValue: this.defaultCustom || [],
+          mode: dataType === 'optionCustom' ? 'multiple' : this.setting.attribute.mode,
+          initMode: this.initMode,
+          dataType: dataType,
+          optionType: optionType,
+          url: url
+        })
+      })
+    },
+    // 获取选择的值
+    handleUser (val, dataType, initMode, mode) {
+      // 选择范围值
+      this.initMode = initMode
+      this.customObj.type = this.typeValue
+      if (dataType === 'optionCustom') {
+        this.custom = val
+        this.customObj.value = val
+      } else {
+        this.defaultCustom = val
+        this.customObj.defaultCustom = this.defaultCustom
+      }
+    },
+    // 虚拟字段
+    virtualSourceChange (value) {
+      return this.axios({
+        url: '/admin/field/getSourceOptions',
+        data: Object.assign({ sourceTableId: value[1], currentTableId: this.config.tableId, virtualField: 0 })
+      }).then(res => {
+        this.virtualSourceFields = res.result.sourceFields
+        this.virtualCurrentFields = res.result.currentFields
+      })
+    },
+    handleFormulateEdit () {
+      this.setting.form.formulateValue = this.formulateValue
+      this.formulaData = {
+        tableId: this.config.tableId,
+        data: this.setting.form.formulateValue || {}
+      }
+      this.$refs.FormulaEdit.show({
+        title: this.$t('公式编辑器'),
+        dataType: 'formulateValue'
+      })
+    },
+    handleDefaultFormulateEdit () {
+      this.setting.form.defaultFormulateValue = this.defaultFormulateValue
+      this.formulaData = {
+        tableId: this.config.tableId,
+        data: this.setting.form.defaultFormulateValue || {}
+      }
+      this.$refs.FormulaEdit.show({
+        title: this.$t('公式编辑器'),
+        dataType: 'defaultFormulateValue'
+      })
+    },
+    handleDataLinkage () {
+      this.setting.form.datalink = this.datalink
+      const { form: { getFieldValue } } = this
+      const alias = getFieldValue('info[alias]')
+      const name = getFieldValue('info[name]')
+      if (this.refreshKey) {
+        this.refreshKey = 0
+      } else {
+        this.refreshKey = 1
+      }
+      this.$nextTick(() => {
+        this.$refs.fieldFormDatalink.show({
+          tableId: this.config.tableId,
+          data: this.setting.form.dataLink,
+          name: name,
+          alias: alias,
+          dataType: 'dataLink'
+        })
+      })
+    },
+    handleDefaultDataLinkage () {
+      this.setting.form.defaultDataLink = this.defaultDataLink
+      const { form: { getFieldValue } } = this
+      const alias = getFieldValue('info[alias]')
+      const name = getFieldValue('info[name]')
+      if (this.refreshKey) {
+        this.refreshKey = 0
+      } else {
+        this.refreshKey = 1
+      }
+      this.$nextTick(() => {
+        this.$refs.fieldFormDatalink.show({
+          tableId: this.config.tableId,
+          data: this.setting.form.defaultDataLink,
+          name: name,
+          alias: alias,
+          dataType: 'defaultDataLink'
+        })
+      })
+    },
+    handleOptionChange (value) {
+      this.optionValue = value
+      if (value !== '1') {
+        this.defaultValue = '0'
+        this.setting.form.defaultValue = '0'
+        this.custom = ''
+      }
+    },
+    handleFormulate (res) {
+      if (res.dataType === 'formulateValue') {
+        this.formulateValue = res.data
+      } else {
+        this.defaultFormulateValue = res.data
+      }
+    },
+    handleAdd () {
+      this.$refs.fieldFormFillset.show({
+        action: 'add',
+        title: this.$t('添加填充设置'),
+        record: {
+          id: new Date().valueOf()
+        }
+      })
+    },
+    handleDelete (record) {
+      const dataSource = [...this.sourceFillset]
+      this.sourceFillset = dataSource.filter(item => item.id !== record.id)
+    },
+    // 开关文字
+    getSwitch (e) {
+      const value = e.target.value
+      this.setting.form.word.type = value
+      const obj = {
+        open: this.$t('开/关'),
+        yes: this.$t('是/否'),
+        enable: this.$t('启用/禁用'),
+        custom: this.openText + '/' + this.closeText
+      }
+      this.setting.form.word.value = {
+        0: obj[value].split('/')[1],
+        1: obj[value].split('/')[0]
+      }
+      this.onText = obj[value].split('/')[0]
+      this.offText = obj[value].split('/')[1]
+    },
+    getSwitchDef (e) {
+      this.setting.form.defaultType = e.target.value
+      this.setting.form.defaultValue = e.target.value === 'switch' ? 0 : {}
+    },
+    getSwitchText () {
+      this.onText = this.openText = this.openText.slice(0, 2)
+      this.offText = this.closeText = this.closeText.slice(0, 2)
+      this.setting.form.word.value = {
+        1: this.openText,
+        0: this.closeText
+      }
+    },
+    // 选择关联字段
+    handleSonField (val) {
+      this.sonField = val
+      if (!this.sonField || !this.currentField) {
+        this.subformHelp = this.$t('请选择关联字段')
+        this.subformStatus = 'error'
+      } else {
+        this.subformHelp = ''
+        this.subformStatus = 'success'
+      }
+    },
+    handleCurrentField (val) {
+      this.currentField = val
+      if (!this.sonField || !this.currentField) {
+        this.subformHelp = this.$t('请选择关联字段')
+        this.subformStatus = 'error'
+      } else {
+        this.subformHelp = ''
+        this.subformStatus = 'success'
+      }
+    },
+    // 获取数据窗口id
+    handleChangeDataForm (val) {
+      this.dataFormId = !!val
+      this.tpl.forEach(item => {
+        if (item.uid === val) {
+          this.tableId = item.value
+          this.record.id = item.id
+          this.record.name = item.name
+        }
+      })
+    },
+    getDefaultValue (label, value) {
+      this.setting.form.defaultValue = value
+    },
+    // 显示名称验证是否重复
+    checkName (rule, value, callback) {
+      this.axios({
+        url: '/admin/field/checkUnique',
+        data: {
+          id: this.config.record ? this.config.record.id : null,
+          tableId: this.config.tableId,
+          name: value
+        }
+      }).then(res => {
+        if (res.code) {
+          callback(res.message)
+        } else {
+          callback()
+        }
+      })
+    },
+    // 打开数据窗口
+    handleDataForm (action) {
+      if (action === 'add') {
+        this.$refs.tplviewDataForm.show({
+          action: 'add',
+          title: this.$t('添加: 子表视图'),
+          tableId: this.tableId,
+          submitUrl: '/admin/template/addData',
+          config: this.config,
+          url: '/admin/template/editData',
+          variable: 'webSubformDataWindow'
+        })
+      } else {
+        this.$refs.tplviewDataForm.show({
+          action: 'edit',
+          title: `${this.$t('编辑')}：${this.record.name}`,
+          url: '/admin/template/editData',
+          tableId: this.tableId,
+          config: this.config,
+          record: this.record,
+          variable: 'webSubformDataWindow'
+        })
+      }
+    },
+    // 获取设置数据窗口
+    getDataForm (value, uid) {
+      this.axios({
+        url: '/admin/table/getFieldsAndTemplates',
+        data: { tableId: this.tableId, variable: 'webSubformDataWindow' }
+      }).then(res => {
+        if (res.code === 0) {
+          this.linkFields = res.result.fields
+          this.tpl = res.result.templates
+          this.setting.form.subDataForm = value
+          if (uid) {
+            const { setFieldsValue } = this.form
+            setFieldsValue({ 'setting[form][dataView]': uid })
+            this.dataFormId = true
+            this.tpl.forEach(item => {
+              if (item.uid === uid) {
+                this.record.id = item.id
+                this.record.name = item.name
+              }
+            })
+          }
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+    },
+
+    // 获取移动端图片设置
+    getAppSetting (value) {
+      this.appSetFlag = !(!value || value.length === 0)
+      this.setting.form.appSetting = value
+    },
+    // 显示公式编辑器
+    handleCodemirror () {
+      this.forcedType = ''
+      this.$refs.formRuleWayCondition.show({
+        tableId: this.config.tableId,
+        data: { wayCondition: this.setting.form.defaultFormula }
+      })
+    },
+    forcedHandleCodemirror () {
+      this.forcedType = 'forced'
+      this.$refs.formRuleWayCondition.show({
+        tableId: this.config.tableId,
+        data: { wayCondition: this.setting.form.forcedDefaultValue }
+      })
+    },
+    getCondition (data) {
+      if (this.forcedType === 'forced') {
+        this.setting.form.forcedDefaultValue = data
+      } else {
+        this.setting.form.defaultFormula = data
+      }
+    },
+    // 提交数据
+    handleSubmit (visible = false) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.valuesObj = values
+          this.copyVisible = visible
+          if (values.info.name.length > 6) {
+            this.confirmModalShow = true
+            this.confirmModalMsg = '{显示名称}超过6个字，建议优化到6个字以内。'
+          } else {
+            this.toSubmit(values, visible)
+          }
+        } else {
+          this.loading = false
+          if (errors.setting && errors.setting.form && (errors.setting.form.currentField || errors.setting.form.sonField)) {
+            this.subformStatus = 'error'
+            this.subformHelp = this.$t('请选择关联字段')
+          } else {
+            this.$message.warning('表单填写不符合要求，请参考页面内具体提示修改')
+          }
+        }
+      })
+    },
+    toSubmit (values, visible) {
+      this.confirmModalShow = false
+      this.loading = true
+      values.info.category = values.info.category ? values.info.category.replace(/\s+/g, '') : ''
+      values.setting.form = values.setting.form || {}
+      values.setting.attribute = values.setting.attribute || {}
+      values.info.trace = values.info.trace ? 1 : 0
+      if (this.sourceFillset.length > 0) {
+        values.setting.autofill.sourceFillset = JSON.stringify(this.sourceFillset)
+      }
+      let val = {}
+      values.defaultValueCheck = values.forcedDefaultValue = undefined
+      if (values.info.formType !== 'cascader') {
+        values.setting.form.defaultValue = this.setting.form.defaultValue
+      }
+      values.setting.form.defaultFormula = this.setting.form.defaultFormula
+      values.setting.form.forcedDefaultValue = this.setting.form.forcedDefaultValue
+      switch (values.info.formType) {
+        case 'switch':
+          values.setting.form = values.setting.form ? values.setting.form : {}
+          values.setting.form.word = {}
+          values.info.fieldLength = 4
+          values.setting.form.defaultType = this.setting.form.defaultType
+          values.setting.form.defaultValue = this.setting.form.defaultValue
+          values.setting.form.word.type = this.setting.form.word.type
+          values.setting.form.word.value = this.setting.form.word.value
+          if (this.setting.form.word.type === 'custom') {
+            const value = this.setting.form.word.value
+            if (!value[0] || !value[1]) {
+              this.$message.error('请填写自定义的显示内容')
+              this.loading = false
+              return
+            }
+          }
+          break
+        case 'organization':
+          let idName = ''
+          switch (this.typeValue) {
+            case 'user':
+              idName = 'username'
+              break
+            case 'department':
+              idName = 'departmentId'
+              break
+            case 'role':
+              idName = 'roleId'
+              break
+            default:
+              break
+          }
+          // 组织结构单选默认值
+          if (this.optionValue === '3') {
+            this.custom = []
+          }
+          // 多选默认值
+          this.defaultCustom = this.defaultCustom.filter(item => {
+            return this.custom && this.custom.length ? this.custom.some(item1 => item1[idName] === item[idName]) : item
+          })
+          values.setting.form.optionCustom = this.custom
+          values.setting.form.defaultValue = this.defaultCustom
+          values.setting.form.dataLink = this.datalink
+          values.setting.form.defaultDataLink = this.defaultDataLink
+          values.setting.form.formulateValue = this.formulateValue
+          values.setting.form.defaultFormulateValue = this.defaultFormulateValue
+          values.setting.form.subDataForm = this.setting.form.subDataForm
+          break
+        case 'associated':
+          val = this.$refs.linkData.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'text':
+          val = this.$refs.fieldText.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'textarea':
+          val = this.$refs.fieldTextarea.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'number':
+          val = this.$refs.fieldNumber.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'datetime':
+          val = this.$refs.fieldDate.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.attribute.format = this.format
+          values.setting.form = values.setting.form ? values.setting.form : {}
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'combobox':
+        case 'radio':
+        case 'checkbox':
+          val = this.$refs.fieldSelect.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.attribute.checkAll = values.setting.attribute.checkAll ? '1' : '0'
+          values.setting.form = values.setting.form ? values.setting.form : {}
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'file':
+          let format = values.setting.form.format || ''
+          format = format.trim()
+          const arr = format.split(',')
+          const arr1 = arr.map(item => item.trim())
+          values.setting.form.format = arr1.join(',')
+          break
+        case 'autocomplete':
+          val = this.$refs.fieldAutoComplete.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.form = values.setting.form ? values.setting.form : {}
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'score':
+          val = this.$refs.fieldRate.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.info.fieldDecimal = 2
+          values.setting.attribute = Object.assign(values.setting.attribute, val.setting.attribute)
+          values.setting.form = values.setting.form ? values.setting.form : {}
+          values.setting.form = Object.assign(values.setting.form, val.setting.form)
+          break
+        case 'cascader':
+          values.setting.attribute.selectModel = values.setting.attribute.selectModel ? 'end' : 'any'
+          values.setting.form.writeBack = this.writeBack.filter(item => item.value || item.tab)
+          values.setting.form.writeBack.forEach(item => {
+            item.value = item.value ? item.value : ''
+          })
+          values.setting.form.suffixIcon = this.suffixIcon
+          if (this.suffixIcon === 'custom') {
+            values.setting.form.suffixVal = this.suffixVal
+          }
+          break
+        case 'address':
+          val = this.$refs.fieldAddress.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          if (!values.setting.attribute) {
+            values.setting.attribute = {
+              required: !!(val.setting.attribute && val.setting.attribute.required)
+            }
+          } else {
+            values.setting.attribute.required = !!(val.setting.attribute && val.setting.attribute.required)
+          }
+          values.setting.form = val.setting.form
+          break
+        case 'treeselect':
+          values.setting.attribute.inherit = values.setting.attribute.inherit ? '1' : '0'
+          values.setting.attribute.multiple = values.setting.attribute.multiple ? '1' : '0'
+          values.setting.attribute.selectModel = values.setting.attribute.selectModel ? 'end' : 'any'
+          values.setting.form.suffixIcon = this.$refs.fieldTreeselect.suffixIcon
+          values.setting.form.suffixVal = this.$refs.fieldTreeselect.suffixIcon !== 'string' ? this.$refs.fieldTreeselect.suffixVal : values.setting.form.suffixVal
+          values.setting.form.writeBack = this.$refs.fieldTreeselect.writeBack
+          break
+        case 'serialnumber':
+          val = this.$refs.fieldSerial.handleSubmit()
+          if (Object.keys(val).length === 0) {
+            this.loading = false
+            return false
+          }
+          values.setting.form.serialRule = val
+          break
+        case 'image':
+          values.setting.form.appSetting = this.$refs.fieldImgSetting.dynamicData
+          break
+        case 'tag':
+          values.setting.form.tagSetting = this.setting.form.tagSetting
+          break
+        default:
+          break
+      }
+      values.setting.form.attribute = this.setting.form.attribute
+      if ((values.setting.form.defaultTemplate === 'linkData' || values.setting.form.defaultTemplate === 'formula' || this.setting.form.defaultType === 'linkData') && values.info.formType !== 'address') {
+        values.setting.form.defaultValueLink = this.setting.form.defaultValueLink
+      }
+      // 虚拟字段默认设置为单行文本，VARCHAR，1
+      if (values.info.virtualField) {
+        values.info.fieldType = 'VARCHAR'
+        values.info.fieldLength = 1
+      }
+      values.info.formType = values.info.virtualField ? 'text' : values.info.formType
+      values.info.virtualField = values.info.virtualField ? 1 : 0
+      this.axios({
+        url: this.config.url,
+        data: Object.assign(values, { action: 'submit', tableId: this.config.tableId, fieldId: this.config.record ? this.config.record.fieldId : 0 })
+      }).then((res) => {
+        if (res.code) {
+          this.$message.warning(res.message)
+        } else {
+          this.$message.success(res.message)
+          this.openText = ''
+          this.closeText = ''
+          this.form.resetFields()
+          this.visible = visible
+          this.$emit('ok', values)
+          if (visible) {
+            this.show(this.config)
+          }
+        }
+        this.$nextTick(() => {
+          this.loading = false
+        })
+      })
+    },
+    handleOk () {
+      this.confirmModalShow = false
+    },
+    handleCancel () {
+      this.toSubmit(this.valuesObj, this.copyVisible)
+    }
+  }
+}
+</script>

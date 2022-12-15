@@ -1,0 +1,219 @@
+<template>
+  <div class="page">
+    <a-space>
+      <a-form layout="inline">
+        <a-form-item :label="$t('角色名称')">
+          <a-input v-model="queryParam.roleName" />
+        </a-form-item>
+      </a-form>
+      <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+      <a-button
+        @click="
+          () => {
+            queryParam = {}
+            $refs.table.refresh(true)
+          }
+        "
+      >
+        {{ $t('重置') }}
+      </a-button>
+      <a-button v-action:add type="primary" icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+      <a-button icon="sort-descending" @click="handleSort">{{ $t('排序') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'listOrder', order: 'ascend' }"
+    >
+      <span slot="status" slot-scope="text">
+        <a-badge v-if="text == 1" status="success" :text="$t('启用')" />
+        <a-badge v-else status="error" :text="$t('禁用')" />
+      </span>
+      <div slot="action" slot-scope="text, record">
+        <a :disabled="!(record.id != 1 && $auth('priv'))" @click="handlePriv(record)">{{ $t('权限设置') }}</a>
+        <a-divider type="vertical" />
+        <a
+          v-action:edit
+          :disabled="!(record.id != 1 && $auth('edit')) || !!record.accessLevel === 2"
+          @click="handleEdit(record)"
+        >
+          {{ $t('编辑') }}
+        </a>
+        <a-divider v-action:edit type="vertical" />
+        <a-dropdown>
+          <a>
+            {{ $t('更多') }}
+            <a-icon type="down" />
+          </a>
+          <a-menu slot="overlay">
+            <a-menu-item
+              :disabled="!(record.id != 1 && $auth('workflow_priv'))"
+              @click="$message.warning($t('功能暂未开放'))"
+            >
+              {{ $t('工作流权限') }}
+            </a-menu-item>
+            <a-menu-item @click="$message.warning($t('功能暂未开放'))">{{ $t('弹屏设置') }}</a-menu-item>
+            <a-menu-item :disabled="record.id == 1" @click="queuePrivEdit(record)">{{ $t('队列权限') }}</a-menu-item>
+            <a-menu-item
+              :disabled="!(record.id != 1 && $auth('priv_synch'))"
+              @click="$message.warning($t('功能暂未开放'))"
+            >
+              {{ $t('权限同步') }}
+            </a-menu-item>
+            <a-menu-item
+              v-action:delete
+              :disabled="!(record.id != 1 && $auth('delete')) || !!record.accessLevel"
+              @click="handleDelete(record)"
+            >
+              {{ $t('删除') }}
+            </a-menu-item>
+          </a-menu>
+        </a-dropdown>
+      </div>
+    </s-table>
+    <role-form ref="roleForm" @ok="handleOk" />
+    <role-priv ref="rolePriv" @ok="handleOk" />
+    <drag-sort ref="dragSort" @ok="handleOk" />
+    <queue-priv ref="queuePriv" @ok="handleOk" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    RoleForm: () => import('./RoleForm'),
+    RolePriv: () => import('./RolePriv'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    QueuePriv: () => import('./QueuePriv')
+  },
+  data () {
+    return {
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 150,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 80,
+        sorter: true
+      }, {
+        title: this.$t('排序'),
+        width: 80,
+        dataIndex: 'listOrder',
+        sorter: true
+      }, {
+        title: this.$t('编号'),
+        dataIndex: 'roleId',
+        width: 270,
+        sorter: true
+      }, {
+        title: this.$t('角色名称'),
+        dataIndex: 'roleName',
+        width: 150,
+        sorter: true
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'status',
+        scopedSlots: { customRender: 'status' },
+        width: 150,
+        sorter: true
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 150,
+        sorter: true
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 150,
+        sorter: true
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks',
+        width: 200,
+        sorter: true
+      }]
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/role/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleAdd () {
+      this.$refs.roleForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        url: '/admin/role/add'
+      })
+    },
+    handleEdit (record) {
+      this.$refs.roleForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}：${record.roleName}`,
+        url: '/admin/role/edit',
+        record: record
+      })
+    },
+    queuePrivEdit (record) {
+      this.$refs.queuePriv.show({
+        title: this.$t('队列权限'),
+        url: '/admin/role/queuePriv',
+        record: record
+      })
+    },
+    handleSort () {
+      this.$refs.dragSort.show({
+        tableName: 'admin_role',
+        sortName: 'roleName'
+      })
+    },
+    handlePriv (record) {
+      this.$refs.rolePriv.show({
+        title: `${this.$t('权限设置')}:` + this.$t(record.roleName),
+        url: '/admin/role/priv',
+        record: record
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    handleDelete (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该角色吗？'),
+        onOk () {
+          that.$setLoading(true)
+          that.axios({
+            url: '/admin/role/delete',
+            data: { roleId: record.roleId }
+          }).then(res => {
+            that.$setLoading(false)
+            if (res.code) {
+              that.$message.error(res.message)
+            } else {
+              that.$refs.table.refresh()
+              that.$message.success(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

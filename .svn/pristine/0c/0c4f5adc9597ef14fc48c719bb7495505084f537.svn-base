@@ -1,0 +1,73 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('表单')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'tplview',
+              { rules: [{ required: true, message: $t('请选择表单') }], initialValue: data.templateId }
+            ]"
+            :placeholder="$t('请选择表单')"
+            :show-search="true"
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in formViewMappings" :key="key" :value="value.value">
+              {{ value.text }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      data: {},
+      formViewMappings: [],
+      bindingFormViews: []
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.data = config.record
+      this.recordIndex = config.index
+      this.formViewMappings = config.params.formViewMappings
+      this.bindingFormViews = config.params.bindingFormViews
+      this.form.resetFields()
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          values = Object.assign(this.data, values)
+          values.enableCondition = []
+          if (this.config.action === 'add') {
+            this.bindingFormViews.push(values)
+          } else {
+            this.$set(this.bindingFormViews, this.recordIndex, values)
+          }
+          this.visible = false
+          this.$message.success(this.$t('操作成功'))
+          this.$emit('func', this.bindingFormViews)
+        }
+      })
+    }
+  }
+}
+</script>

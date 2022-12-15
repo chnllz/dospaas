@@ -1,0 +1,205 @@
+<template>
+  <div>
+    <a-drawer :destroyOnClose="true" :width="1100" :visible="visible" @close="visible = false">
+      <a-spin :spinning="false">
+        <a-form :form="form" style="margin-top: 16px">
+          <a-card size="small" style="margin-bottom: 8px" :headStyle="{ height: '8px' }" :bordered="false">
+            <a-alert :message="$t('满足以下条件时，当前表单视图被启用')" type="info" show-icon size="small" />
+            <div style="width: 100%; height: 16px"></div>
+            <ConditionalRules
+              ref="conditionalRules"
+              :conditionSetting="conditionSetting"
+              :fieldArr="fieldArr"
+              :tableId="tableId"
+            />
+          </a-card>
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+          <a-button @click="visible = false">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+export default {
+  name: 'QuerierFormRule',
+  i18n: window.lang('admin'),
+  components: {
+    ConditionalRules: () => import('./ConditionalRules')
+  },
+  data () {
+    return {
+      config: {},
+      recordIndex: 0,
+      record: {},
+      recordKey: {},
+      visible: false,
+      labelCol: { span: 3 },
+      wrapperCol: { span: 4 },
+      tableId: '',
+      form: this.$form.createForm(this),
+      tagOption: [],
+      conditionSetting: {
+        logic: 'and',
+        conditionVisual: []
+      },
+      fieldArr: [] // 所有字段的所有信息,用来获取数据字典
+    }
+  },
+  inject: {
+    theme: {
+      default: () => ({})
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      var formViewData = JSON.parse(JSON.stringify(this.theme.viewData))
+      this.tableId = formViewData.tableId || formViewData.data.value
+      this.recordIndex = config.index
+      this.record = config.record
+      this.conditionSetting = config.record.formCondition || {
+        logic: 'and',
+        conditionVisual: []
+      }
+      this.visible = true
+      // 请求某个表单的所有字段
+      this.axios({
+        url: '/admin/field/init',
+        data: {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'ascend',
+          tableId: this.tableId
+        }
+      }).then(res => {
+        this.fieldArr = res.result.data.filter(item => {
+          return ['text', 'textarea', 'radio', 'checkbox', 'combobox', 'number', 'datetime', 'cascader', 'associated', 'address', 'treeselect', 'serialnumber', 'tag', 'score', 'organization'].indexOf(item.formType) !== -1
+        })
+        // 遍历规则
+        if (this.conditionSetting.conditionVisual && this.conditionSetting.conditionVisual.length !== 0) {
+          this.conditionSetting.conditionVisual.forEach((item, simpleIndex) => {
+            if (item.type === 'field') {
+              this.fieldArr.forEach((fieldItem, fieldIndex) => {
+                if (item.alias === fieldItem.alias) {
+                  fieldItem.settings = JSON.parse(fieldItem.setting)
+                  item.src = fieldItem.settings.form.src ? fieldItem.settings.form.src : ''
+                  item.formType = fieldItem.formType
+                  item.fieldId = fieldItem.fieldId
+                  if (fieldItem.formType === 'treeselect') {
+                    item.dataSource = fieldItem.settings.attribute.dataSource
+                    item.condition.forEach(condItem => {
+                      condItem.option = condItem.optionCustom || []
+                    })
+                  } else if (['address', 'cascader'].includes(fieldItem.formType)) {
+                    item.condition.forEach(condItem => {
+                      condItem.option = condItem.optionCustom || []
+                    })
+                  } else if (fieldItem.formType === 'combobox' && fieldItem.settings.form.customDataList && fieldItem.settings.form.customDataList.length) {
+                    item.option = fieldItem.settings.form.customDataList.map(customItem => {
+                      const obj = {
+                        label: customItem.value,
+                        value: customItem.value
+                      }
+                      return obj
+                    })
+                  } else if (item.src) {
+                    this.getOption(item)
+                  } else {
+                    item.option = []
+                  }
+                  // 根据字段，给出相应条件
+                  if (['text', 'textarea', 'serialnumber'].indexOf(fieldItem.formType) !== -1) {
+                    item.conditionArr = [
+                      { enName: 'equal', cnName: this.$t('等于') },
+                      { enName: 'ne', cnName: this.$t('不等于') },
+                      { enName: 'contain', cnName: this.$t('包含') },
+                      { enName: 'nc', cnName: this.$t('不包含') },
+                      { enName: 'bw', cnName: this.$t('开始于') },
+                      { enName: 'ew', cnName: this.$t('结束于') },
+                      { enName: 'em', cnName: this.$t('为空') },
+                      { enName: 'nem', cnName: this.$t('不为空') }]
+                  } else if (['radio', 'combobox', 'score'].indexOf(fieldItem.formType) !== -1) {
+                    item.conditionArr = [
+                      { enName: 'equal', cnName: this.$t('等于') },
+                      { enName: 'ne', cnName: this.$t('不等于') },
+                      { enName: 'em', cnName: this.$t('为空') },
+                      { enName: 'nem', cnName: this.$t('不为空') }]
+                  } else if (['number', 'datetime'].indexOf(fieldItem.formType) !== -1) {
+                    item.conditionArr = [
+                      { enName: 'equal', cnName: this.$t('等于') },
+                      { enName: 'ne', cnName: this.$t('不等于') },
+                      { enName: 'great', cnName: this.$t('大于') },
+                      { enName: 'ge', cnName: this.$t('大于等于') },
+                      { enName: 'lt', cnName: this.$t('小于') },
+                      { enName: 'le', cnName: this.$t('小于等于') },
+                      { enName: 'em', cnName: this.$t('为空') },
+                      { enName: 'nem', cnName: this.$t('不为空') }]
+                  } else if (['address', 'treeselect', 'tag', 'organization'].indexOf(fieldItem.formType) !== -1) {
+                    item.conditionArr = [
+                      { enName: 'contain', cnName: this.$t('包含') },
+                      { enName: 'nc', cnName: this.$t('不包含') },
+                      { enName: 'em', cnName: this.$t('为空') },
+                      { enName: 'nem', cnName: this.$t('不为空') }]
+                  } else if (['cascader', 'checkbox'].indexOf(fieldItem.formType) !== -1) {
+                    item.conditionArr = [
+                      { enName: 'equal', cnName: this.$t('等于') },
+                      { enName: 'ne', cnName: this.$t('不等于') },
+                      { enName: 'contain', cnName: this.$t('包含') },
+                      { enName: 'nc', cnName: this.$t('不包含') },
+                      { enName: 'em', cnName: this.$t('为空') },
+                      { enName: 'nem', cnName: this.$t('不为空') }]
+                  }
+                }
+              })
+            }
+          })
+        }
+      })
+    },
+    getOption (item) {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: { dictCategoryNumber: item.src }
+      }).then(res => {
+        this.$set(item, 'option', res.result)
+      })
+    },
+    // 提交数据
+    handleSubmit () {
+      const conditionalRules = this.$refs.conditionalRules
+      const data = conditionalRules.data || []
+      const conditionVisual = data.map(item => {
+        let obj = {}
+        if (item.type === 'field') {
+          const { type, logic, alias, condition } = item
+          obj = { type, logic, alias, condition }
+        } else {
+          obj = item
+        }
+        return obj
+      })
+      const logic = conditionalRules.logic
+      const conditionSetting = {
+        logic,
+        conditionVisual
+      }
+      this.$emit('ok', this.recordIndex, conditionSetting)
+      this.visible = false
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.card-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+/deep/ .ant-input-group-addon {
+  padding: 0 0 !important;
+}
+</style>

@@ -1,0 +1,44 @@
+<template>
+  <a-tabs class="tabs-flex">
+    <a-tab-pane v-for="(tabItem, tabIndex) in tabsData" :key="tabIndex" :tab="tabItem.name">
+      <component :is="tabItem.coms" :query="tabItem.query" :tabKey="tabIndex" />
+    </a-tab-pane>
+  </a-tabs>
+</template>
+<script>
+export default {
+  data () {
+    return {
+      tabsData: []
+    }
+  },
+  created () {
+    this.tabsData = this.$route.meta.view
+    if (this.$route.query && this.$route.query.openPath) {
+      const menuData = JSON.parse(sessionStorage.getItem('menuData'))
+      const pathArr = this.$route.query.openPath.split('/')
+      const path = pathArr[pathArr.length - 1]
+      this.tabsData = menuData.find(item => item.name === path).view
+    }
+    this.tabsData.forEach(item => {
+      if (item.viewPath.includes('?')) {
+        item.query = {}
+        const data = item.viewPath.split('?')
+        const vars = data[1].split('&').filter(item => item)
+        if (vars.length) {
+          for (let i = 0; i < vars.length; i++) {
+            const pair = vars[i].split('=')
+            if (pair[0] === 'url') {
+              pair[1] = decodeURIComponent(pair[1])
+            }
+            item.query[pair[0]] = pair[1]
+          }
+        }
+        item.coms = () => import('@' + '/views/' + data[0])
+      } else {
+        item.coms = () => import('@' + '/views/' + item.viewPath)
+      }
+    })
+  }
+}
+</script>

@@ -1,0 +1,727 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="1000" :visible="visible" @close="close">
+    <a-spin :spinning="loading">
+      <a-tabs v-model="activeKey">
+        <a-tab-pane :key="1" :tab="$t('导出数据')">
+          <a-alert :message="messageExport" type="info" />
+          <a-row v-if="!config.customExport" :gutter="10">
+            <a-col :span="16">
+              <div style="display: flex; margin: 8px 0">
+                <a-input-search
+                  :placeholder="$t('请输入字段名称搜索')"
+                  @search="
+                    (e) => {
+                      showWord = e
+                    }
+                  "
+                  @change="
+                    (e) => {
+                      if (!e.target.value) {
+                        showWord = e.target.value
+                      }
+                    }
+                  "
+                />
+                <a-button style="margin: 0 8px" @click="handleField">{{ $t('选择字段') }}</a-button>
+                <a-button @click="handleSort">{{ $t('排序') }}</a-button>
+              </div>
+              <a-table
+                ref="table"
+                rowKey="dataIndex"
+                :columns="columns"
+                :dataSource="dataSource.filter((item) => item.title && item.title.includes(showWord))"
+                :sorter="{ field: 'id', order: 'descend' }"
+                size="small"
+                :pagination="false"
+              ></a-table>
+            </a-col>
+            <a-col :span="8">
+              <s-table
+                ref="tableTemp"
+                style="margin-top: 8px"
+                rowKey="id"
+                :columns="columnsTemplate"
+                :data="templateData"
+                size="small"
+                :showPagination="false"
+              >
+                <div
+                  slot="name"
+                  slot-scope="text, record, index"
+                  @mouseenter="onMouseOver(record)"
+                  @mouseleave="onMouseOut(record)"
+                >
+                  <div>
+                    <a-col :span="1" style="margin-right: 5px">
+                      <a-icon v-show="chiose[index]" type="check" style="margin-top: 4px; color: #52c41a" />
+                    </a-col>
+                    <a-col :span="21" style="cursor: pointer" @click="changTemplate(record, index)">
+                      <span>{{ record.name }}</span>
+                    </a-col>
+                    <a-col :span="1">
+                      <a-icon
+                        v-show="record.display"
+                        type="close"
+                        style="float: right; margin-top: 4px; color: #ff4d4f"
+                        @click="Tempdelete(record)"
+                      />
+                    </a-col>
+                  </div>
+                </div>
+              </s-table>
+            </a-col>
+          </a-row>
+          <a-alert v-else :message="$t('定制导出功能，请直接点击“导出”按钮')" type="info" />
+        </a-tab-pane>
+        <a-tab-pane :key="2" :tab="$t('我的任务')">
+          <a-alert :show-icon="false" :message="message" style="margin-bottom: 8px" />
+          <div style="display: flex; margin-bottom: 8px">
+            <a-input
+              v-model="queryParamTask.fileName"
+              :placeholder="$t('请输入文件名搜索')"
+              @keydown.enter="$refs.tableTask.refresh()"
+            />
+            <a-space style="margin-left: 8px">
+              <a-button type="primary" @click="$refs.tableTask.refresh()">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParamTask = {}
+                    $refs.tableTask.refresh()
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+          </div>
+          <s-table ref="tableTask" size="small" rowKey="id" :columns="columnsTask" :data="loadDataTable">
+            <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+            <span slot="status" slot-scope="text, record">
+              <a-badge v-if="text == '0'" status="error" :text="$t('未开始')" />
+              <a-tooltip
+                v-else-if="text == '1'"
+                :title="$t('总导出数: {0}, 已导出数: {1}', { 0: record.totalCount, 1: record.completeCount })"
+              >
+                <a-progress :percent="record.processing || 0" status="active" />
+              </a-tooltip>
+              <a-badge v-else-if="text == '2'" status="success" :text="$t('已完成')" />
+              <a-badge v-else-if="text == '3'" status="error" :text="$t('失败')" />
+            </span>
+            <span slot="duration" slot-scope="text">{{ text }}</span>
+            <div slot="action" slot-scope="text, record">
+              <a @click="handleView(record)">{{ $t('查看') }}</a>
+              <a-divider type="vertical" />
+              <a :disabled="record.status != 2" @click="handleDownload(record)">{{ $t('下载') }}</a>
+              <a-divider type="vertical" />
+              <a :disabled="record.status == 1" @click="handleDelete(record)">{{ $t('删除') }}</a>
+            </div>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane :key="3" :tab="$t('所有任务')">
+          <div style="display: flex; margin-bottom: 8px">
+            <a-input
+              v-model="queryParamAll.fileName"
+              :placeholder="$t('请输入文件名搜索')"
+              @keydown.enter="$refs.tableAll.refresh()"
+            />
+            <a-space style="margin-left: 8px">
+              <a-button type="primary" @click="$refs.tableAll.refresh()">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParamAll = {}
+                    $refs.tableAll.refresh()
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+          </div>
+          <s-table ref="tableAll" size="small" rowKey="id" :columns="columnsAll" :data="AllDataTable">
+            <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+            <span slot="status" slot-scope="text, record">
+              <a-badge v-if="text == '0'" status="error" :text="$t('未开始')" />
+              <a-tooltip
+                v-else-if="text == '1'"
+                :title="$t('总导出数: {0}, 已导出数: {1}', { 0: record.totalCount, 1: record.completeCount })"
+              >
+                <a-progress :percent="record.processing || 0" status="active" />
+              </a-tooltip>
+              <a-badge v-else-if="text == '2'" status="success" :text="$t('已完成')" />
+              <a-badge v-else-if="text == '3'" status="error" :text="$t('失败')" />
+            </span>
+            <span slot="duration" slot-scope="text">{{ text }}</span>
+          </s-table>
+        </a-tab-pane>
+      </a-tabs>
+      <div class="bbar">
+        <div v-if="activeKey === 1 && !config.customExport" style="float: left">
+          <a-button style="margin-left: 0" @click="reset">{{ $t('重置') }}</a-button>
+          <a-button @click="check ? setFileName('update') : setFileName('template')">
+            {{ check ? $t('更新导出模板') : $t('保存导出模板') }}
+          </a-button>
+        </div>
+        <a-button v-if="activeKey === 1" type="primary" @click="setName">{{ $t('导出') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <a-modal
+      :title="exportConfig.title"
+      :visible="fileVisible"
+      :confirmLoading="fileLoading"
+      @cancel="fileVisible = !fileVisible"
+      @ok="handleOk"
+    >
+      <div>
+        <a-form :form="formfile">
+          <a-form-item :label="$t('导出文件名称')" :colon="false" :label-col="{ span: 5 }" :wrapper-col="{ span: 19 }">
+            <a-input
+              v-decorator="[
+                'fileName',
+                {
+                  initialValue: check ? fileName : nowtime,
+                  rules: [{ required: true, message: $t('请输入导出文件名称') }, { validator: checkName }]
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-form>
+      </div>
+    </a-modal>
+    <a-modal
+      :title="exportConfig.title"
+      :visible="exportVisible"
+      :confirmLoading="exportLoading"
+      @cancel="exportVisible = !exportVisible"
+      @ok="handleOk('template')"
+    >
+      <div>
+        <a-form :form="form">
+          <a-form-item :label="$t('导出模板名称')" :colon="false" :label-col="{ span: 5 }" :wrapper-col="{ span: 19 }">
+            <a-input
+              v-decorator="[
+                'name',
+                { initialValue: check ? fileName : '', rules: [{ required: true, message: $t('请输入导出模板名称') }] }
+              ]"
+            />
+          </a-form-item>
+        </a-form>
+      </div>
+    </a-modal>
+    <drag-sort ref="dragSort" @ok="getSort" />
+    <user-table-import-view ref="userTableImportView" />
+    <column-check
+      ref="columnCheck"
+      :dataList="
+        dataSource.map((item) => {
+          const obj = {}
+          obj.name = item.title
+          obj.display = item.display
+          obj.value = item.dataIndex
+          return obj
+        })
+      "
+      @ok="getList"
+    />
+  </a-drawer>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    ColumnCheck: () => import('@/views/admin/Table/ColumnCheck'),
+    UserTableImportView: () => import('@/views/admin/General/UserTableImportView')
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 1000)
+    return {
+      config: {},
+      exportConfig: {},
+      activeKey: 1,
+      visible: false,
+      exportVisible: false,
+      exportLoading: false,
+      fileLoading: false,
+      fileVisible: false,
+      loading: false,
+      length: '',
+      chiose: [],
+      check: false,
+      showWord: '',
+      nowtime: null,
+      fileName: '',
+      // 全部字段
+      plainOptions: [],
+      form: this.$form.createForm(this),
+      formfile: this.$form.createForm(this),
+      selectedRowKeys: [],
+      columns: [{
+        title: '#',
+        width: 60,
+        customRender: (text, record, index) => index + 1
+      }, {
+        title: this.$t('字段列名称'),
+        dataIndex: 'title'
+      }],
+      dataSource: [],
+      // 表头
+      columnsTemplate: [{
+        title: this.$t('导出模板'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'name' }
+      }],
+      labelCol: { span: 5 },
+      wrapperCol: { span: 17 },
+      // 搜索参数
+      queryParamTask: {},
+      queryParamAll: {},
+      // 表头
+      columnsTask: [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('文件名'),
+        dataIndex: 'fileName',
+        width: 170
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 150
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'runTime',
+        width: 150
+      }, {
+        title: this.$t('耗时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' },
+        width: 100
+      }, {
+        title: this.$t('任务状态'),
+        dataIndex: 'status',
+        width: 130,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('文件大小'),
+        dataIndex: 'fileSize'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 120,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsAll: [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('文件名'),
+        dataIndex: 'fileName',
+        width: 170
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 150
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'runTime',
+        width: 150
+      }, {
+        title: this.$t('耗时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' },
+        width: 100
+      }, {
+        title: this.$t('任务状态'),
+        dataIndex: 'status',
+        width: 130,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser',
+        width: 90
+      }],
+      parentQueryParam: {},
+      type: '',
+      customTitle: {},
+      Interval: null,
+      message: '',
+      messageExport: (<div>
+        <div>{this.$t('1、初始打开时，已勾选的为表格中显示的字段，未勾选的为表格中隐藏的字段。')}</div>
+        <div>{this.$t('2、点击【保存导出模板】按钮，保存当前的导出模板。点击右侧的模板，加载已保存好的模板，更改后，点击【更新导出模板】以更新当前右侧选中的模板。')}</div>
+        <div>{this.$t('3、点击【重置】，恢复到初始打开导出界面时的状态，可保存更多导出模板。')}</div></div>)
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  methods: {
+    // 验证首字符是否输入空格
+    checkName (rule, value, callback) {
+      if (value) {
+        const string = '请输入内容，且不能为纯空格字符'
+        const regLength = value.split(' ').join('').length
+        if (regLength === 0) {
+          callback(string)
+        }
+      }
+      callback()
+    },
+    // 接收传参&获取字段
+    templateData () {
+      return this.axios({
+        url: '/admin/general/customTemplate',
+        data: { action: 'get', type: 'list_export', templateId: this.config.templateId }
+      }).then(res => {
+        for (const i in res.result.data) {
+          res.result.data[i]['display'] = false
+          this.chiose.push(false)
+          res.result.data[i].name = JSON.parse(res.result.data[i].setting).name
+        }
+        this.length = res.result.data.length
+        return res.result
+      })
+    },
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.parentQueryParam = config.whereQueryParam
+      this.selectedRowKeys = []
+      const time = new Date()
+      this.nowtime = String(time.getFullYear()) + ((time.getMonth() + 1) < 10 ? '0' + (time.getMonth() + 1) : (time.getMonth() + 1)) + (time.getDate() < 10 ? '0' + time.getDate() : time.getDate()) + '-' + (new Date()).valueOf()
+      this.dataSource = []
+      for (const i in config.columns) {
+        if (config.columns[i].customTitle) {
+          config.columns[i].title = config.columns[i].customTitle
+          const alias = config.columns[i].dataIndex
+          const title = config.columns[i].customTitle
+          this.customTitle[alias] = title
+        }
+      }
+      this.plainOptions = config.columns
+      for (let i = 0; i < this.plainOptions.length; i++) {
+        if (this.plainOptions[i].type === 'action') {
+          this.plainOptions.splice(i, 1)
+        }
+        if (this.plainOptions[i].display === 'd') {
+          this.plainOptions.splice(i, 1)
+        }
+        if (this.plainOptions[i].display === 'v') {
+          this.dataSource.push(this.plainOptions[i])
+        }
+        this.selectedRowKeys.push(this.plainOptions[i].dataIndex)
+        this.plainOptions[i].id = i
+      }
+    },
+    // 删除模板
+    Tempdelete (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该模板吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/general/customTemplate',
+            data: {
+              action: 'delete',
+              type: 'list_export',
+              id: record.id
+            }
+          }).then(res => {
+            that.check = false
+            for (const i in that.chiose) {
+              that.chiose[i] = false
+            }
+            that.$nextTick(() => {
+              that.reset()
+              that.$refs.tableTemp.refresh()
+            })
+            return res.result
+          })
+        }
+      })
+    },
+    handleSort () {
+      const data = this.dataSource.map(item => {
+        const obj = item
+        obj.name = item.title
+        return obj
+      })
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        sortData: data
+      })
+    },
+    getSort (data) {
+      this.dataSource = data
+      this.selectedRowKeys = data.map(item => item.dataIndex)
+    },
+    handleField () {
+      this.plainOptions.forEach(item => {
+        item.name = item.title
+      })
+      const data = this.plainOptions.map(item => {
+        const obj = {}
+        obj.name = item.title
+        obj.display = item.display
+        obj.value = item.dataIndex
+        return obj
+      })
+      this.$refs.columnCheck.show({
+        action: 'edit',
+        title: this.$t('选择字段'),
+        data: data
+      })
+    },
+    getList (data) {
+      this.dataSource = []
+      data.forEach(item => {
+        const obj = this.plainOptions.find(plaItem => plaItem.dataIndex === item.value)
+        this.dataSource.push(obj)
+      })
+      this.selectedRowKeys = data.map(item => item.value)
+    },
+    // 重置
+    reset () {
+      this.selectedRowKeys = this.plainOptions.map(item => item.dataIndex)
+      this.dataSource = this.plainOptions.filter(item => item.display === 'v')
+      this.check = false
+      for (const i in this.chiose) {
+        this.$set(this.chiose, i, false)
+      }
+    },
+    onMouseOver (record) {
+      record.display = true
+    },
+    onMouseOut (record) {
+      record.display = false
+    },
+    // 设置文件名称
+    setFileName (type) {
+      this.type = type
+      if (type === 'template') {
+        if (this.length >= 10) {
+          this.exportConfig.action = 'template'
+          this.$error({
+            title: this.$t('同一数据窗口下最多只能保存10个导出模板')
+          })
+        } else {
+          this.exportVisible = true
+          this.exportConfig = {
+            title: this.$t('请输入保存的导出模板名称'),
+            action: 'template'
+          }
+        }
+      } else {
+        const that = this
+        this.$confirm({
+          title: this.$t('您确认要更新模板吗？'),
+          onOk () {
+            that.axios({
+              url: '/admin/general/customTemplate',
+              data: {
+                templateId: that.config.templateId,
+                tableId: that.config.tableId,
+                type: 'list_export',
+                data: {
+                  fields: that.selectedRowKeys,
+                  name: that.fileName
+                },
+                action: 'edit',
+                id: that.templateid
+              }
+            }).then(res => {
+              that.$refs.tableTemp.refresh()
+              that.exportVisible = false
+            })
+          }
+        })
+      }
+    },
+    // 查看
+    handleView (record) {
+      this.$refs.userTableImportView.show({
+        action: 'view',
+        title: this.$t('查看'),
+        url: '/admin/task/get',
+        record: record
+      })
+    },
+    // 设置名字弹窗
+    setName (type) {
+      this.fileVisible = true
+      this.exportConfig = {
+        title: this.$t('请输入导出文件的名称'),
+        action: 'file'
+      }
+    },
+    // 选择模板
+    changTemplate (record, index) {
+      this.fileName = record.name
+      this.templateid = record.id
+      for (const i in this.chiose) {
+        this.$set(this.chiose, i, false)
+      }
+      this.chiose[index] = true
+      this.selectedRowKeys = JSON.parse(record.setting).fields
+      this.dataSource = []
+      this.selectedRowKeys.forEach(item => {
+        const obj = this.plainOptions.find(plaItem => plaItem.dataIndex === item)
+        if (obj) {
+          this.dataSource.push(obj)
+        }
+      })
+      this.check = true
+    },
+    handleOk (type) {
+      // 模板数据提交
+      if (type === 'template') {
+        const table = this.$refs.tableTemp
+        this.form.validateFields((err, values) => {
+          values['fields'] = this.selectedRowKeys
+          if (!err) {
+            this.exportLoading = true
+            this.axios({
+              url: '/admin/general/customTemplate',
+              data: {
+                templateId: this.config.templateId,
+                tableId: this.config.tableId,
+                type: 'list_export',
+                data: values,
+                action: 'add'
+              }
+            }).then(res => {
+              table.refresh()
+              this.exportLoading = false
+              this.exportVisible = false
+            })
+          }
+        })
+      } else {
+        // 导出数据提交
+        this.formfile.validateFields((err, values) => {
+          if (!err) {
+            const me = this
+            me.loading = true
+            me.fileLoading = true
+            const time = new Date()
+            const parameter = {
+              exportFields: me.selectedRowKeys,
+              tableId: me.config.tableId,
+              columns: me.selectedRowKeys,
+              customTitle: me.customTitle,
+              flowStatus: me.config.flowStatus,
+              condition: me.config.condition,
+              templateId: me.config.flowCondition ? me.config.templateId : undefined,
+              flowCondition: me.config.flowCondition
+            }
+            this.axios({
+              url: '/admin/task/add',
+              data: {
+                number: me.config.templateId,
+                type: 'export',
+                className: me.config.className ? me.config.className : 'GeneralTask',
+                parameter: parameter,
+                filePath: 'public/upload/' + time.getFullYear() + '/' + ((time.getMonth() + 1) < 10 ? '0' + (time.getMonth() + 1) : (time.getMonth() + 1)) + '/' + (time.getDate() < 10 ? '0' + time.getDate() : time.getDate()) + '/' + (new Date()).valueOf() + '.xlsx',
+                fileName: values.fileName + '.xlsx',
+                name: values.fileName + '.xlsx'
+              }
+            }).then((res) => {
+              me.fileVisible = false
+              me.fileLoading = false
+              me.loading = false
+              me.activeKey = 2
+              // 第一次tab跳转表格未创建
+              me.$nextTick(() => {
+                me.$refs.tableTask.refresh()
+              })
+            })
+          }
+        })
+      }
+    },
+    // 我的任务显示
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/task/list',
+        data: Object.assign(parameter, this.queryParamTask, { type: 'export', number: this.config.templateId, sortField: 'inputTime', sortOrder: 'descend', access: 'myTask' })
+      }).then(res => {
+        res.result.data = this.changeData(res.result.data)
+        this.message = res.result.processMsg
+        clearInterval(this.Interval)
+        if (res.result.data.some(item => item.status !== 2)) {
+          this.runtime()
+        }
+        return res.result
+      })
+    },
+    // 所有任务显示
+    AllDataTable (parameter) {
+      return this.axios({
+        url: '/admin/task/list',
+        data: Object.assign(parameter, this.queryParamTask, { type: 'export', number: this.config.templateId, sortField: 'inputTime', sortOrder: 'descend', access: 'allTask' })
+      }).then(res => {
+        res.result.data = this.changeData(res.result.data)
+        clearInterval(this.Interval)
+        if (res.result.data.some(item => item.status !== 2)) {
+          this.runtime()
+        }
+        return res.result
+      })
+    },
+    runtime () {
+      this.Interval = setTimeout(() => {
+        if (this.activeKey === 2) {
+          this.$refs.tableTask.refresh()
+        } else if (this.activeKey === 3) {
+          this.$refs.tableAll.refresh()
+        } else {
+          clearInterval(this.Interval)
+        }
+      }, 5000)
+    },
+    changeData (array) {
+      return array.map(item => {
+        const obj = item
+        const setting = item.setting
+        obj.fileName = setting.fileName ? setting.fileName.replace(/.xlsx/, '') : ''
+        obj.filePath = setting.filePath ? setting.filePath : ''
+        obj.processing = item.complete_count / item.total_count
+        return obj
+      })
+    },
+    close () {
+      this.visible = !this.visible
+      clearInterval(this.Interval)
+    },
+    // 导出文件下载
+    handleDownload (record) {
+      const filePath = encodeURIComponent(record.filePath)
+      const fileName = encodeURIComponent(record.fileName)
+      window.open(`${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}&fileName=${fileName}`)
+    },
+    // 导出任务删除
+    handleDelete (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/task/delete',
+            params: { id: record.id }
+          }).then(res => {
+            that.$refs.tableTask.refresh()
+            return res.result
+          })
+        }
+      })
+    }
+  }
+}
+</script>

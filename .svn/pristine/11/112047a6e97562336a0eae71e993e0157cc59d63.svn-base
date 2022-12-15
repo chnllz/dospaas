@@ -1,0 +1,224 @@
+<template>
+  <a-spin v-if="!showError" :spinning="loading">
+    <div style="height: calc(100vh); overflow-y: auto" class="questionnaire">
+      <user-table-form-view
+        ref="userTableFormView"
+        :params="{
+          tableName,
+          template,
+          fieldRule: fieldRule,
+          parentParams: params,
+          page: 'create',
+          handleWayData: handleWayData,
+          templateOther: templateOther,
+          handleFormRules: handleFormRules,
+          remarksRule: remarksRule
+        }"
+        :formThis="this"
+        @ok="getVisible"
+        @start="handleStart"
+      />
+      <div style="text-align: center; margin: 36px 0px">
+        <a-button v-if="buttonShow" type="primary" size="large" @click="handleSubmit">
+          {{ $route.query.lang === 'de' ? 'Eingereicht' : $route.query.lang === 'it' ? 'Inviato' : 'Submitted' }}
+        </a-button>
+      </div>
+    </div>
+    <user-table-components ref="userTableComponents" />
+  </a-spin>
+  <div v-else class="exception">
+    <div class="imgBlock">
+      <div
+        class="imgEle"
+        :style="{ backgroundImage: `url('https://gw.alipayobjects.com/zos/rmsportal/KpnpchXsobRgLElEozzI.svg')` }"
+      ></div>
+    </div>
+    <div class="content">
+      <div class="desc" style="font-size: 28px; line-height: 32px">The page you visited does not exist</div>
+    </div>
+  </div>
+</template>
+<script>
+import UserTableComponents from '@/views/admin/UserTable/UserTableComponents'
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    UserTableFormView: () => import('@/views/admin/UserTable/UserTableFormView'),
+    UserTableComponents
+  },
+  data () {
+    return {
+      data: [],
+      form: this.$form.createForm(this),
+      // 关联数据表
+      relationTable: [],
+      labelCol: { style: 'width: 100px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 100px); display: inline-block' },
+      tableName: '',
+      template: [],
+      templateOther: [],
+      fieldRule: [],
+      copyAlias: [],
+      params: {
+        url: '/admin/userTable/api/edit',
+        viewType: 'create',
+        title: '创建流程: 服务单流程',
+        pageThis: this,
+        templateId: this.$route.query.templateId
+      },
+      title: this.$t('新增服务单信息'),
+      loading: false,
+      handleWayData: [],
+      handleFormRules: [],
+      remarksRule: '',
+      formData: {},
+      // 站点名称
+      siteName: '',
+      // 表单默认数据
+      buttonShow: false,
+      // 错误页面显示
+      showError: false
+    }
+  },
+  created () {
+    this.$setSetting({ language: this.$route.query.lang })
+    this.checkSign().then(() => {
+      this.createForm()
+    })
+  },
+  methods: {
+    handleStart () {
+      this.$set(this, 'loading', true)
+    },
+    getVisible (values, tableName, message) {
+      this.$set(this, 'loading', false)
+      if (message !== 'error') {
+        this.buttonShow = false
+        this.createForm()
+        this.$emit('ok', values, tableName)
+      }
+    },
+    // 创建表单
+    createForm () {
+      this.$set(this, 'loading', true)
+      const query = this.$route.query
+      this.template = []
+      this.axios({
+        url: '/admin/userTable/api/edit',
+        data: {
+          action: 'edit',
+          flowStatus: 'proceed',
+          id: Number(query.id) || 0,
+          templateId: query.templateId
+        }
+      }).then(res => {
+        this.params.tableId = res.result.tableId
+        this.params.record = res.result.data || {}
+        this.params.record.id = Number(query.id) || 0
+        this.params.caseId = res.result.caseId
+        this.params.action = 'edit'
+        this.tableName = res.result.tableName
+        this.handleFormRules = res.result.handleFormRules
+        this.handleWayData = res.result.handleMethods
+        this.remarksRule = res.result.remarksRule
+        this.fieldRule = res.result.fieldRule || []
+        this.relationTable = res.result.relationTable || []
+        this.verifJs = res.result.tplSetting ? res.result.tplSetting.verifJs : ''
+        this.template = JSON.parse(JSON.stringify(res.result.template)) || []
+        this.templateOther = JSON.parse(JSON.stringify(res.result.template))
+        // 表单初始化loader
+        if (res.result.tplSetting && res.result.tplSetting.tplInitJs) {
+          var initAttribute = res.result.tplSetting.tplInitJs
+          var initTemplate = {
+            type: 'component',
+            attribute: initAttribute
+          }
+          this.template.push(initTemplate)
+        }
+        const getComponent = (array) => {
+          array.forEach((item, index) => {
+            const arr = item.columns || item.trs || item.tds || item.list
+            if (arr) {
+              getComponent(arr)
+            } else {
+              if (item.type === 'component') {
+                item.component = {
+                  template: `<span>${item.attribute}</span>`,
+                  data: () => {
+                    return {
+                      parent: this
+                    }
+                  }
+                }
+              } else if (item.field && item.field.alias === 'return_visit_finished') {
+                if (item.field.value === '是') {
+                  this.buttonShow = false
+                } else {
+                  this.buttonShow = true
+                }
+              } else if (item.field && item.field.alias === 'siteId') {
+                const obj = item.field.option.find(findItem => findItem.value === item.field.value)
+                this.siteName = obj ? obj.label : item.field.value
+              }
+            }
+          })
+        }
+        getComponent(this.template)
+        this.$nextTick(() => {
+          this.formData = this.$refs.userTableFormView.form.getFieldsValue()['record']
+        })
+        this.loading = false
+      })
+    },
+    checkSign () {
+      return new Promise((resolve, reject) => {
+        const query = this.$route.query
+        this.loading = true
+        this.showError = false
+        this.axios({
+          url: '/crm/assist/api/returnVisitCheck',
+          data: {
+            id: Number(query.id),
+            sign: query.sign
+          }
+        }).then(res => {
+          if (!res.code) {
+            resolve()
+          } else {
+            this.showError = true
+            this.loading = false
+          }
+        })
+      })
+    },
+    // 提交表单
+    handleSubmit () {
+      this.checkSign().then(() => {
+        const data = {
+          extFormData: {}
+        }
+        data.extFormData['record'] = {}
+        data.extFormData['record']['return_visit_finished'] = '是'
+        this.$refs.userTableFormView.handleSubmit(data)
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/.questionnaire {
+  .ant-form-item-label {
+    font-weight: bold;
+    font-size: 20px;
+    label {
+      font-size: 20px;
+    }
+  }
+  .ant-form label {
+    font-size: 16px;
+  }
+  .ant-rate {
+    font-size: 24px !important;
+  }
+}
+</style>

@@ -1,0 +1,450 @@
+<template>
+  <a-drawer :title="$t(config.title)" :width="1200" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <div>
+        <a-form-item>
+          <a-card :title="$t('基本信息')" size="small">
+            <audio ref="audio" controls style="margin: 10px">
+              <source :src="info.recordFile" type="audio/wav" />
+            </audio>
+            <a-card size="small">
+              <a-col :span="4">
+                <p>
+                  {{ $t('主叫号码') }}：
+                  <a-input v-model="agent" class="input" :disabled="true" />
+                </p>
+              </a-col>
+              <a-col :span="1"></a-col>
+              <a-col :span="4">
+                <p>
+                  {{ $t('被叫号码') }}：
+                  <a-input v-model="info.customerNumber" class="input" :disabled="true" />
+                </p>
+              </a-col>
+              <a-col :span="1"></a-col>
+              <a-col :span="4">
+                <p>
+                  {{ $t('呼叫时间') }}：
+                  <a-input v-model="info.callTime" class="input" :disabled="true" />
+                </p>
+              </a-col>
+              <a-col :span="1"></a-col>
+              <a-col :span="4">
+                <p>
+                  {{ $t('质检员') }}：
+                  <a-input v-model="info.qualityUser" class="input" :disabled="true" />
+                </p>
+              </a-col>
+              <a-col :span="1"></a-col>
+              <a-col :span="4">
+                <p>
+                  {{ $t('质检得分') }}:
+                  <a-input v-model="info.qualityScore" class="input" :disabled="true" />
+                </p>
+              </a-col>
+            </a-card>
+          </a-card>
+        </a-form-item>
+        <!-- 复议信息 -->
+        <div v-if="action === 'review'">
+          <a-space>
+            <tag-icon class="tagIcon" />
+            <h3 style="margin-top: 10px">{{ $t('复议信息') }}</h3>
+          </a-space>
+          <a-card>
+            <a-form :form="form">
+              <a-form-item :label="$t('审核结果')" :labelCol="{ span: 3 }" :wrapperCol="{ span: 18 }">
+                <a-radio-group
+                  v-decorator="['handleType', { rules: [{ required: true, message: '请选择审核结果' }] }]"
+                  name="handleType"
+                >
+                  <a-radio value="2">{{ $t('同意复议') }}</a-radio>
+                  <a-radio value="3" style="margin-left: 62px">{{ $t('不同意复议') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item
+                :labelCol="{ span: 3 }"
+                :required="true"
+                :wrapperCol="{ span: 18 }"
+                :label="$t('申请复议理由')"
+                style="margin-bottom: 10px"
+              >
+                <a-textarea v-model="reason" :disabled="true" :auto-size="{ minRows: 3, maxRows: 5 }" />
+              </a-form-item>
+              <a-form-item
+                :label="$t('审核说明')"
+                style="margin-bottom: 10px"
+                :required="true"
+                :labelCol="{ span: 3 }"
+                :wrapperCol="{ span: 18 }"
+              >
+                <a-textarea
+                  v-decorator="['remark', { rules: [{ required: true, message: '审核说明不能为空' }] }]"
+                  :auto-size="{ minRows: 3, maxRows: 5 }"
+                />
+              </a-form-item>
+            </a-form>
+          </a-card>
+        </div>
+        <div v-else-if="action === 'reconside'">
+          <a-space>
+            <tag-icon class="tagIcon" />
+            <h3 style="margin-top: 10px">{{ $t('复议信息') }}</h3>
+          </a-space>
+          <a-card>
+            <a-form :form="form">
+              <a-form-item
+                :labelCol="{ span: 3 }"
+                :required="true"
+                :wrapperCol="{ span: 18 }"
+                :label="$t('申请复议理由')"
+                style="margin-bottom: 10px"
+              >
+                <a-textarea v-model="reason" :disabled="true" :auto-size="{ minRows: 3, maxRows: 5 }" />
+              </a-form-item>
+              <a-form-item
+                :label="$t('审核说明')"
+                style="margin-bottom: 10px"
+                :required="true"
+                :labelCol="{ span: 3 }"
+                :wrapperCol="{ span: 18 }"
+              >
+                <a-textarea v-model="review" :disabled="true" :auto-size="{ minRows: 3, maxRows: 5 }" />
+              </a-form-item>
+              <a-form-item :label="$t('审核结果')" :labelCol="{ span: 3 }" :wrapperCol="{ span: 18 }">
+                <a-radio-group
+                  v-decorator="['handleType', { rules: [{ required: true, message: '请选择审核结果' }] }]"
+                  name="handleType"
+                >
+                  <a-radio value="4">{{ $t('同意复议') }}</a-radio>
+                  <a-radio value="5" style="margin-left: 62px">{{ $t('不同意复议') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item
+                :labelCol="{ span: 3 }"
+                :required="true"
+                :wrapperCol="{ span: 18 }"
+                :label="$t('质检复议说明')"
+              >
+                <a-textarea
+                  v-decorator="['remark', { rules: [{ required: true, message: '质检复议说明不能为空' }] }]"
+                  :auto-size="{ minRows: 3, maxRows: 5 }"
+                />
+              </a-form-item>
+            </a-form>
+          </a-card>
+        </div>
+        <!-- 一票否决 -->
+        <div v-if="vetoCollList">
+          <a-form>
+            <a-form-item>
+              <a-card :title="$t('一票否决')" size="small">
+                <a-form-item v-for="(item, index) in vetoCollList" :key="index">
+                  <a-col :span="14">
+                    <a-form-item :label="index + 1" :label-col="{ span: 2 }" :wrapper-col="{ span: 21 }">
+                      <a-col :span="1">
+                        <a-tooltip>
+                          <template slot="title">
+                            <div v-dompurify-html="item.vetoItem.vetoDetail || ''">
+                              {{ item.vetoItem.vetoDetail || '' }}
+                            </div>
+                          </template>
+                          <a-icon type="question-circle" />
+                        </a-tooltip>
+                      </a-col>
+                      <a-col :span="23">
+                        <a-input class="input" :disabled="true" :value="item.vetoItem.veto || ''" />
+                      </a-col>
+                    </a-form-item>
+                  </a-col>
+                  <a-col :span="3">
+                    <a-checkbox
+                      :disabled="action === 'query' || action === 'review'"
+                      :checked="parseInt(item.vetoScore.selected) === 1"
+                      @change="changeCheck(index, $event)"
+                    ></a-checkbox>
+                  </a-col>
+                  <a-col :span="7">
+                    <a-form-item :label="$t('备注')" :label-col="{ span: 4 }" :wrapper-col="{ span: 18 }">
+                      <a-tooltip>
+                        <template slot="title">
+                          <div v-show="item.vetoScore.vetoRemark" v-dompurify-html="item.vetoScore.vetoRemark || ''">
+                            {{ item.vetoScore.vetoRemark || '' }}
+                          </div>
+                        </template>
+                        <a-input
+                          class="input"
+                          :disabled="action === 'query' || action === 'review'"
+                          :value="item.vetoScore.vetoRemark !== '备注' ? item.vetoScore.vetoRemark || '' : ''"
+                          @change="changeVetoRemark(index, $event)"
+                        />
+                      </a-tooltip>
+                    </a-form-item>
+                  </a-col>
+                </a-form-item>
+              </a-card>
+            </a-form-item>
+          </a-form>
+        </div>
+        <!-- 服务、业务部分 -->
+        <div v-for="(items, keys) in scoreCollList" :key="keys">
+          <a-form-item>
+            <a-card
+              :title="
+                items.majorDesc +
+                `(${$t('得')}` +
+                items.subScoreCollList
+                  .map((item, index) => {
+                    return parseInt(item.subScoreItem.subScore)
+                  })
+                  .reduce((x, y) => x + y) +
+                `${$t('分')}/${$t('共')}` +
+                $t(items.majorTotalScore) +
+                `${$t('分')})`
+              "
+              size="small"
+            >
+              <a-form-item v-for="(item, index) in items.subScoreCollList" :key="index">
+                <a-col :span="14">
+                  <a-form-item :label="index + 1" :label-col="{ span: 2 }" :wrapper-col="{ span: 21 }">
+                    <a-col :span="1">
+                      <a-tooltip>
+                        <template slot="title">
+                          <div v-dompurify-html="item.scoringSubitem.detailedRemarks || ''">
+                            {{ item.scoringSubitem.detailedRemarks || '' }}
+                          </div>
+                        </template>
+                        <a-icon type="question-circle" />
+                      </a-tooltip>
+                    </a-col>
+                    <a-col :span="23">
+                      <a-input :disabled="true" :value="item.scoringSubitem.scoringItem" class="input" />
+                    </a-col>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="3">
+                  <div class="labelchange">
+                    <a-form-item :label="$t('分数')" :label-col="{ span: 8 }" :wrapper-col="{ span: 16 }">
+                      <a-select
+                        v-model.trim="item.subScoreItem.subScore"
+                        :disabled="action === 'query' || action === 'review'"
+                        :allowClear="false"
+                        show-search
+                      >
+                        <a-select-option v-for="(i, k) in item.scoringSubitem.scoreSettings" :key="k" :value="i">
+                          {{ i }}
+                        </a-select-option>
+                      </a-select>
+                    </a-form-item>
+                  </div>
+                </a-col>
+                <a-col :span="7">
+                  <a-form-item :label="$t('备注')" :label-col="{ span: 4 }" :wrapper-col="{ span: 18 }">
+                    <a-tooltip>
+                      <template slot="title">
+                        <div
+                          v-show="item.subScoreItem.detailRemarks"
+                          v-dompurify-html="item.subScoreItem.detailRemarks"
+                        >
+                          {{ item.subScoreItem.detailRemarks || '' }}
+                        </div>
+                      </template>
+                      <a-input
+                        class="input"
+                        :disabled="action === 'query' || action === 'review'"
+                        :value="item.subScoreItem.detailRemarks !== '备注' ? item.subScoreItem.detailRemarks : ''"
+                        @change="changeDetailRemarks(keys, index, $event)"
+                      />
+                    </a-tooltip>
+                  </a-form-item>
+                </a-col>
+              </a-form-item>
+            </a-card>
+          </a-form-item>
+        </div>
+        <!-- 综合评语 -->
+        <a-form-item>
+          <a-card :title="$t('综合评语')" size="small">
+            <a-row>
+              <a-col :span="5">
+                <a-form-item :label="$t('优秀案例')" :label-col="{ span: 7 }" :wrapper-col="{ span: 12 }">
+                  <a-switch
+                    v-model="typicalCase"
+                    :checked-children="$t('是')"
+                    :un-checked-children="$t('否')"
+                    :disabled="action === 'query' || action === 'review'"
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="5">
+                <a-form-item :label="$t('无效数据')" :label-col="{ span: 8 }" :wrapper-col="{ span: 12 }">
+                  <a-switch
+                    v-model="qualityStatus"
+                    :checked-children="$t('是')"
+                    :un-checked-children="$t('否')"
+                    :disabled="action === 'query' || action === 'review'"
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-form-item :label="$t('综合评语')">
+              <a-textarea
+                v-model="info.qualityComment"
+                :disabled="action === 'query' || action === 'review'"
+                :auto-size="{ minRows: 3, maxRows: 5 }"
+              ></a-textarea>
+            </a-form-item>
+          </a-card>
+        </a-form-item>
+      </div>
+      <div class="bbar">
+        <a-button v-if="action !== 'query'" type="primary" @click="submit">
+          {{ $t('提交') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  data () {
+    return {
+      form: this.$form.createForm(this),
+      config: {},
+      visible: false,
+      loading: false,
+      action: undefined,
+      info: {},
+      agent: '',
+      typicalCase: false,
+      qualityStatus: false,
+      setting: undefined,
+      isSelectedVetoOne: undefined,
+      vetoCollList: [],
+      scoreCollList: [],
+      reason: '',
+      review: '',
+      qualityId: undefined
+    }
+  },
+  watch: {
+    visible: {
+      handler (newVal) {
+        if (!newVal) {
+          this.form.resetFields()
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      const { data, action } = config
+      this.info = JSON.parse(JSON.stringify(data))
+      this.action = action
+      if (this.info.agentNumber) {
+        this.agent = `${this.info.agentNumber}(${this.info.agentRealName})`
+      }
+      // 优秀案例
+      this.typicalCase = parseInt(this.info.typicalCase) === 1
+      // 无效数据
+      this.qualityStatus = parseInt(this.info.qualityStatus) === 2
+      this.setting = JSON.parse(this.info.setting)
+      this.isSelectedVetoOne = this.setting.isSelectedVetoOne
+      this.vetoCollList = this.setting.vetoCollList
+      this.scoreCollList = this.setting.scoreCollList
+      if (this.action === 'review' || this.action === 'reconside') {
+        this.reconsideInfo()
+      }
+    },
+    reconsideInfo () {
+      this.axios({
+        url: '/quality/forReconsideration/view',
+        params: { id: this.info.id }
+      }).then(res => {
+        const { result } = res
+        this.qualityId = result[0].qualityId
+        this.reason = result[0].remark
+        this.review = result[1].remark
+      })
+    },
+    changeCheck (i, e) {
+      this.vetoCollList.forEach((item, index) => {
+        if (index === i) {
+          item.vetoScore.selected = e.target.checked ? 1 : 0
+        }
+      })
+    },
+    changeVetoRemark (i, e) {
+      this.vetoCollList.forEach((item, index) => {
+        if (index === i) {
+          item.vetoScore.vetoRemark = e.target.value
+        }
+      })
+    },
+    changeSubScore (k, i, e) {
+      this.scoreCollList.forEach((items, indexs) => {
+        if (indexs === k) {
+          items.subScoreCollList.forEach((item, index) => {
+            if (index === i) {
+              item.subScoreItem.subScore = e.target.value
+            }
+          })
+        }
+      })
+    },
+    changeDetailRemarks (k, i, e) {
+      this.scoreCollList.forEach((items, indexs) => {
+        if (indexs === k) {
+          items.subScoreCollList.forEach((item, index) => {
+            if (index === i) {
+              item.subScoreItem.detailRemarks = e.target.value
+            }
+          })
+        }
+      })
+    },
+    submit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          let url = {}
+          let data = {}
+          if (this.action !== 'query') {
+            this.$set(this.info, 'typicalCase', this.typicalCase ? 1 : 0)
+            this.$set(this.info, 'qualityStatus', this.qualityStatus ? 2 : 0)
+            const setting = Object.assign({ isSelectedVetoOne: this.isSelectedVetoOne, vetoCollList: this.vetoCollList, scoreCollList: this.scoreCollList })
+            this.info.setting = JSON.stringify(setting)
+          }
+          if (this.action === 'review') {
+            url = '/quality/pendingReview/audit'
+            data = Object.assign(this.form.getFieldsValue(), { qualityId: this.qualityId })
+          } else if (this.action === 'remark') {
+            url = '/quality/toInspected/saveScore'
+            data = Object.assign(this.info)
+          } else if (this.action === 'reconside') {
+            url = '/quality/forReconsideration/reconside'
+            const req = Object.assign(this.form.getFieldsValue(), { qualityId: this.qualityId })
+            data = Object.assign({ qualityDataEntity: this.info, req: req })
+          }
+          this.axios({
+            url: url,
+            data: data
+          }).then(res => {
+            if (res.code === 0) {
+              this.$message.success(res.message)
+              this.form.resetFields()
+              this.$emit('ok')
+              this.visible = !this.visible
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

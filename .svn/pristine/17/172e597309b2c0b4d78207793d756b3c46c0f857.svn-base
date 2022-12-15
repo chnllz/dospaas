@@ -1,0 +1,439 @@
+<template>
+  <a-drawer :title="config.title" :width="900" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('上级菜单')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-cascader
+            v-decorator="['info[parentMenuId]', { initialValue: data.parentMenuIdList }]"
+            :showSearch="true"
+            :placeholder="$t('作为一级菜单')"
+            :options="options"
+            changeOnSelect
+          />
+        </a-form-item>
+        <a-form-item :label="$t('菜单名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[menuName]',
+              { rules: [{ required: true, message: $t('请输入菜单名称') }], initialValue: data.menuName }
+            ]"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :label="$t('视图模式')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group
+            v-decorator="[
+              'info[viewMode]',
+              { rules: [{ required: true, message: $t('请选择视图模式') }], initialValue: data.viewMode }
+            ]"
+            @change="(e) => (data.viewMode = e)"
+          >
+            <a-radio :value="0">{{ $t('单页面视图') }}</a-radio>
+            <a-radio :value="1">{{ $t('组合视图') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('视图设置')">
+          <a-row v-if="form.getFieldValue('info[viewMode]') === 0 || data.viewMode === 0" :gutter="8">
+            <a-col :span="8">
+              <a-select
+                v-decorator="[
+                  'info[view][0][type]',
+                  { initialValue: data.view && data.view[0] ? data.view[0].type : 'custom' }
+                ]"
+                @change="
+                  (e) => {
+                    form.setFieldsValue({ 'info[view][0][viewPath]': undefined })
+                    data.view[0].type = e
+                  }
+                "
+              >
+                <a-select-option value="custom">{{ $t('自定义视图') }}</a-select-option>
+                <a-select-option value="dataWindow">{{ $t('数据窗口') }}</a-select-option>
+              </a-select>
+            </a-col>
+            <a-col :span="16">
+              <a-form-item>
+                <a-row v-if="data.view && data.view[0] && data.view[0].type === 'custom'" type="flex">
+                  <a-col flex="auto">
+                    <a-input
+                      v-decorator="[
+                        'info[view][0][viewPath]',
+                        { initialValue: data.view && data.view[0] ? data.view[0].viewPath : undefined }
+                      ]"
+                      :placeholder="$t('请输入视图路径')"
+                    ></a-input>
+                  </a-col>
+                  <a-col>
+                    <a-button
+                      style="margin-left: -1px"
+                      @click="form.setFieldsValue({ 'info[view][0][viewPath]': 'admin/Common/Blank' })"
+                    >
+                      {{ $t('空白页') }}
+                    </a-button>
+                  </a-col>
+                </a-row>
+                <a-cascader
+                  v-else
+                  v-decorator="[
+                    'info[view][0][viewPath]',
+                    {
+                      rules: [{ required: true, message: $t('请选择数据窗口') }],
+                      initialValue: data.view && data.view[0] ? data.view[0].viewPath : undefined
+                    }
+                  ]"
+                  :placeholder="$t('请选择数据窗口')"
+                  :show-search="true"
+                  option-filter-prop="children"
+                  :options="windowList"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <template v-else>
+            <a-row v-for="(viewItem, viewIndex) in viewData" :key="viewIndex" :gutter="8">
+              <a-col :span="4">
+                <a-input
+                  v-decorator="[
+                    'info[view][' + viewIndex + '][name]',
+                    { rules: [{ required: true, message: $t('请输入tab名称') }], initialValue: viewItem.name }
+                  ]"
+                />
+              </a-col>
+              <a-col :span="4">
+                <a-form-item>
+                  <a-select
+                    v-decorator="[
+                      'info[view][' + viewIndex + '][type]',
+                      { rules: [{ required: true, message: $t('请选择视图类型') }], initialValue: viewItem.type }
+                    ]"
+                    @change="
+                      (e) => {
+                        const obj = {}
+                        obj['info[view][' + viewIndex + '][viewPath]'] = undefined
+                        form.setFieldsValue(obj)
+                        viewItem.type = e
+                      }
+                    "
+                  >
+                    <a-select-option value="custom">{{ $t('自定义视图') }}</a-select-option>
+                    <a-select-option value="dataWindow">{{ $t('数据窗口') }}</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col :span="10">
+                <a-form-item>
+                  <a-row
+                    v-if="
+                      form.getFieldValue('info[view][' + viewIndex + '][type]') === 'custom' ||
+                      viewItem.type === 'custom'
+                    "
+                    type="flex"
+                  >
+                    <a-col flex="auto">
+                      <a-input
+                        v-decorator="[
+                          'info[view][' + viewIndex + '][viewPath]',
+                          {
+                            rules: [{ required: true, message: $t('请输入视图路径') }],
+                            initialValue: viewItem.viewPath
+                          }
+                        ]"
+                      />
+                    </a-col>
+                    <a-col>
+                      <a-button
+                        style="margin-left: -1px"
+                        @click="
+                          () => {
+                            const obj = {}
+                            obj['info[view][' + viewIndex + '][viewPath]'] = 'admin/Common/Blank'
+                            form.setFieldsValue(obj)
+                          }
+                        "
+                      >
+                        {{ $t('空白页') }}
+                      </a-button>
+                    </a-col>
+                  </a-row>
+                  <a-cascader
+                    v-else
+                    v-decorator="[
+                      'info[view][' + viewIndex + '][viewPath]',
+                      {
+                        rules: [{ required: true, message: $t('请选择数据窗口') }],
+                        initialValue: viewItem.viewPath || []
+                      }
+                    ]"
+                    :placeholder="$t('请选择数据窗口')"
+                    :show-search="true"
+                    option-filter-prop="children"
+                    :options="windowList"
+                    @change="
+                      (value, selectedOptions) => {
+                        cascaderChange(value, selectedOptions, viewIndex)
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="5">
+                <a-space>
+                  <a-button @click="handlePriv(viewItem, viewIndex)">
+                    <a-badge v-if="viewItem.priv && viewItem.priv.length" status="success" />
+                    <a-badge v-else status="default" />
+                    {{ $t('权限') }}
+                  </a-button>
+                  <div style="display: flex; align-items: center; justify-content: center">
+                    <a-icon
+                      :style="{ fontSize: '24px', color: '#52c41a' }"
+                      type="plus-square"
+                      theme="filled"
+                      @click="
+                        viewData.splice(viewIndex + 1, 0, {
+                          name: '',
+                          type: 'custom',
+                          viewPath: 'admin/Common/Blank',
+                          priv: []
+                        })
+                      "
+                    />
+                  </div>
+                  <div style="display: flex; align-items: center; justify-content: center">
+                    <a-icon
+                      :style="{ fontSize: '24px', color: viewData.length === 1 ? '#bfbfbf' : '#ff4d4f' }"
+                      type="minus-square"
+                      theme="filled"
+                      @click="viewData.length > 1 ? viewData.splice(viewIndex, 1) : ''"
+                    />
+                  </div>
+                </a-space>
+                <priv-visit-form
+                  :ref="'privVisitForm' + viewIndex"
+                  :params="{ formView: viewItem.priv }"
+                  @func="(data) => getPriv(data, viewItem)"
+                />
+              </a-col>
+            </a-row>
+          </template>
+        </a-form-item>
+        <a-form-item :label="$t('附加参数')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input v-decorator="['info[param]', { initialValue: data.param }]" />
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('菜单图标') }}
+            <a-tooltip :title="$t('仅对一级菜单生效(显示)。')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input :value="iconName" disabled>
+            <div
+              slot="addonAfter"
+              style="cursor: pointer; height: 25px; display: flex; justify-content: center; align-items: center"
+              @click="handleMenuIcon"
+            >
+              <font-awesome-icon
+                :icon="iconName ? iconName : 'fa-bell'"
+                class="font-awesome-icon"
+                style="font-size: 16px; cursor: pointer"
+              />
+            </div>
+          </a-input>
+        </a-form-item>
+        <a-form-item :label="$t('是否启用')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group
+            v-decorator="['info[enabled]', { initialValue: data.enabled + '' }]"
+            :disabled="data.view && data.view[0] && data.view[0].viewPath === 'admin/Menu/Menu'"
+          >
+            <a-radio value="1">{{ $t('是') }}</a-radio>
+            <a-radio value="0">{{ $t('否') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('是否显示')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group
+            v-decorator="['info[display]', { initialValue: data.display + '' }]"
+            :disabled="data.view && data.view[0] && data.view[0].viewPath === 'admin/Menu/Menu'"
+          >
+            <a-radio value="1">{{ $t('是') }}</a-radio>
+            <a-radio value="0">{{ $t('否') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="userInfo.superAdmin" :label="$t('访问级别')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[accessLevel]', { initialValue: data.accessLevel || 0 }]">
+            <a-radio :value="0" style="width: 100%">{{ $t('可见可编可删') }}</a-radio>
+            <a-radio :value="1" style="width: 100%">{{ $t('可见可编不可删') }}</a-radio>
+            <a-radio :value="2" style="width: 100%">{{ $t('可见不可编不可删') }}</a-radio>
+            <a-radio :value="3" style="width: 100%">{{ $t('不可见不可编不可删') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('功能权限')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea
+            v-decorator="['info[priv]', { initialValue: data.priv }]"
+            :autoSize="{ minRows: 4, maxRows: 6 }"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea
+            v-decorator="['info[remarks]', { initialValue: data.remarks }]"
+            :autoSize="{ minRows: 4, maxRows: 6 }"
+          />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <menu-icon ref="menuIcon" @ok="getIcon"></menu-icon>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    MenuIcon: () => import('@/components/SelectIcon'),
+    PrivVisitForm: () => import('@/views/admin/Table/PrivVisitForm'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 3 },
+      wrapperCol: { span: 21 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      options: [],
+      data: {},
+      iconName: '',
+      viewType: 'custom',
+      viewData: [],
+      windowList: []
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: 'admin/template/dataWindowOption'
+      }).then(res => {
+        this.windowList = res.result
+      })
+      this.data = {}
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', id: config.record ? config.record.id : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = res.result.data
+        if (this.data.view) {
+          this.data.view = JSON.parse(this.data.view)
+          this.data.view.forEach(item => {
+            if (item.type === 'dataWindow') {
+              item.viewPath = item.viewPath.split('/')
+            }
+            if (!item.priv) {
+              item.priv = []
+            }
+          })
+        } else {
+          this.data.view = [{
+            name: '',
+            type: 'custom',
+            viewPath: 'admin/Common/Blank',
+            priv: []
+          }]
+        }
+        this.viewData = this.data.view
+        this.iconName = this.data.icon
+        this.options = res.result.options
+        if (this.config.action === 'add') {
+          const parentId = []
+          config.breadcrumb.forEach(element => {
+            parentId.push(element.menuId)
+          })
+          this.data.parentMenuIdList = parentId
+          this.iconName = 'fa-arrow-circle-right'
+        }
+      })
+    },
+    // 权限设置
+    handlePriv (record, index) {
+      this.$refs['privVisitForm' + index][0].show({
+        action: 'edit',
+        title: this.$t('权限设置'),
+        record: record.priv,
+        key: 'priv',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    // 获取权限
+    getPriv (data, viewItem) {
+      if (data.priv) {
+        viewItem.priv = JSON.parse(data.priv)
+        this.$forceUpdate()
+      }
+    },
+    // 显示图标库
+    handleMenuIcon () {
+      this.$refs.menuIcon.show()
+    },
+    // 获取图标
+    getIcon (value) {
+      this.iconName = value
+    },
+    cascaderChange (value, selectedOptions, index) {
+      const obj = {}
+      obj['info[view][' + index + '][name]'] = selectedOptions[value.length - 1].label
+      this.form.setFieldsValue(obj)
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          values.info.icon = this.iconName
+          values.info.view.forEach((item, index) => {
+            if (item.type === 'dataWindow') {
+              const viewString = item.viewPath.join('/')
+              item.viewPath = viewString
+            }
+            item.priv = this.viewData[index].priv
+          })
+          values.info.view = JSON.stringify(values.info.view)
+          values.info.parentMenuId = values.info.parentMenuId.length ? values.info.parentMenuId[values.info.parentMenuId.length - 1] : null
+          this.axios({
+            url: this.config.submitUrl || this.config.url,
+            data: Object.assign(values, { action: 'submit', id: this.data.id })
+          }).then((res) => {
+            this.visible = false
+            this.loading = false
+            this.$emit('ok', values)
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$message.success(res.message)
+              this.form.resetFields()
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>

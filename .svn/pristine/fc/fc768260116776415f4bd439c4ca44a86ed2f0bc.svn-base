@@ -1,0 +1,257 @@
+<template>
+  <div class="dashboard">
+    <div style="min-height: calc(100vh - 218px)">
+      <a-row type="flex" style="align-items: center">
+        <a-col :span="18"></a-col>
+        <a-col>
+          <a-space>
+            <a-dropdown>
+              <a class="ant-dropdown-link" @click="(e) => e.preventDefault()">
+                添加组件
+                <a-icon type="down" />
+              </a>
+              <a-menu slot="overlay">
+                <a-menu-item @click="addItem">超链接</a-menu-item>
+                <a-menu-item>2nd menu item</a-menu-item>
+                <a-menu-item>3rd menu item</a-menu-item>
+              </a-menu>
+            </a-dropdown>
+            <a-button type="primary">保存</a-button>
+            <a-button>主题</a-button>
+            <a-button @click="preShow = !preShow">{{ preShow ? '取消' : '预览' }}</a-button>
+            <a-button @click="createMenu">部署</a-button>
+            <a-tooltip>
+              <a-icon type="question-circle"></a-icon>
+              <template slot="title">prompt text</template>
+            </a-tooltip>
+          </a-space>
+        </a-col>
+      </a-row>
+      <a-row v-if="!preShow">
+        <grid-layout
+          :layout.sync="layout"
+          :col-num="colNum"
+          :row-height="25"
+          :is-draggable="true"
+          :is-resizable="true"
+          :vertical-compact="true"
+          :use-css-transforms="true"
+        >
+          <grid-item
+            v-for="item in layout"
+            :key="item.i"
+            :x="item.x"
+            :y="item.y"
+            :w="item.w"
+            :h="item.h"
+            :i="item.i"
+            class="gridItem"
+          >
+            <div
+              style="display: flex; flex-direction: column; justify-content: space-between; width: 100%; height: 100%"
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center; width: 100%">
+                <h3 class="fontColor">{{ gridData[item.i].productLine }}</h3>
+                <a-space style="padding: 5px">
+                  <div @click.stop="setItem(item.i)">
+                    <font-awesome-icon icon="fa-cog" style="cursor: pointer; line-height: 16px" />
+                  </div>
+                  <font-awesome-icon
+                    icon="fa-trash-alt"
+                    style="cursor: pointer; line-height: 16px; color: red"
+                    @click.stop="removeItem(item.i)"
+                  />
+                </a-space>
+              </div>
+              <div
+                style="display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 23px"
+              >
+                <h1 class="productName fontColor">{{ gridData[item.i].productName }}</h1>
+                <div
+                  class="box"
+                  :style="{
+                    backgroundColor: hex2Rgb(gridData[item.i].iconColor)
+                  }"
+                >
+                  <font-awesome-icon
+                    v-show="gridData[item.i].icon"
+                    :icon="gridData[item.i].icon ? gridData[item.i].icon : 'fa-bell'"
+                    :style="{ color: gridData[item.i].iconColor }"
+                  ></font-awesome-icon>
+                </div>
+              </div>
+              <h3 class="fontColor">{{ gridData[item.i].productInstruction }}</h3>
+            </div>
+          </grid-item>
+        </grid-layout>
+      </a-row>
+      <a-row v-else>
+        <grid-layout
+          :layout.sync="layout"
+          :col-num="colNum"
+          :row-height="25"
+          :is-draggable="false"
+          :is-resizable="false"
+          :vertical-compact="true"
+          :use-css-transforms="true"
+        >
+          <grid-item
+            v-for="item in layout"
+            :key="item.i"
+            :static="item.static"
+            :x="item.x"
+            :y="item.y"
+            :w="item.w"
+            :h="item.h"
+            :i="item.i"
+            class="gridItem"
+          >
+            <a @click="clickRight(gridData[item.i].src)">
+              <div
+                style="display: flex; flex-direction: column; justify-content: space-between; width: 100%; height: 100%"
+              >
+                <div style="display: flex; justify-content: space-between">
+                  <h3 class="fontColor">{{ gridData[item.i].productLine }}</h3>
+                  <div
+                    class="box"
+                    :style="{
+                      backgroundColor: hex2Rgb(gridData[item.i].iconColor)
+                    }"
+                  >
+                    <font-awesome-icon
+                      v-show="gridData[item.i].icon"
+                      :icon="gridData[item.i].icon ? gridData[item.i].icon : 'fa-bell'"
+                      :style="{
+                        color: gridData[item.i].iconColor,
+                        fontSize: '23px'
+                      }"
+                    ></font-awesome-icon>
+                  </div>
+                </div>
+                <h1 class="productName fontColor">{{ gridData[item.i].productName }}</h1>
+                <h3 class="fontColor">{{ gridData[item.i].productInstruction }}</h3>
+              </div>
+            </a>
+          </grid-item>
+        </grid-layout>
+      </a-row>
+    </div>
+    <dashboard-create-menu ref="dashboardCreateMenu" @ok="handleSetOk" />
+    <table-dashboard-form ref="tableDashboardForm" @ok="handleSetOk" />
+  </div>
+</template>
+<script>
+import VueGridLayout from 'vue-grid-layout'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    GridLayout: VueGridLayout.GridLayout,
+    GridItem: VueGridLayout.GridItem,
+    DashboardCreateMenu: () => import('./DashboardCreateMenu'),
+    TableDashboardForm: () => import('./TableDashboardForm')
+
+  },
+  data () {
+    return {
+      layout: [],
+      colNum: 12,
+      gridIndex: 0,
+      gridData: [],
+      preShow: false
+    }
+  },
+  created () {
+    this.gridIndex = this.layout.length
+    this.loadData()
+  },
+  methods: {
+    loadData () {
+      this.axios({
+        url: '/dashboard/view/mockInit'
+      }).then(res => {
+        this.loading = false
+        this.layout = res.result.data.layout
+        this.gridData = res.result.data.gridData
+      })
+    },
+    hex2Rgb (hex) {
+      const str = hex.substring(1)
+      let arr
+      if (str.length === 3) arr = str.split('').map(d => parseInt(d.repeat(2), 16))
+      else arr = [parseInt(str.slice(0, 2), 16), parseInt(str.slice(2, 4), 16), parseInt(str.slice(4, 6), 16), 0.2]
+      return `rgba(${arr.join(', ')})`
+    },
+    addItem () {
+      this.layout.push({
+        x: (this.layout.length * 2) % (this.colNum || 12),
+        y: this.layout.length + (this.colNum || 12),
+        w: 2,
+        h: 5,
+        i: this.gridIndex
+      })
+      // todo 新增id的方式待修改 llz
+      this.gridData.push({ id: this.gridIndex + 1 })
+      this.gridIndex++
+    },
+    removeItem (val) {
+      const index = this.layout.map(item => item.i).indexOf(val)
+      this.layout.splice(index, 1)
+    },
+    setItem (val) {
+      this.$refs.tableDashboardForm.show({
+        ...this.gridData[val],
+        title: '仪表盘设置',
+        iconColor: this.gridData[val].iconColor ?? ''
+      })
+    },
+    handleSetOk (val) {
+      const res = val.setting
+      this.gridData = this.gridData.map(item => {
+        if (item.id === res.id) {
+          item = res
+        }
+        return item
+      })
+    },
+    createMenu () {
+      this.$refs.dashboardCreateMenu.show({
+        title: `${this.$t('创建菜单')}`,
+        url: '/admin/menu/getTreeMenu',
+        submitUrl: '/admin/menu/add',
+        record: { name: '仪表盘' }
+      })
+    },
+    clickRight (src) {
+      window.open(src, '_blank')
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.gridItem {
+  touch-action: none;
+  padding: 15px;
+  border-radius: 8px;
+  background: #fff;
+}
+.box {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.dashboard {
+  background: #f5f6fa;
+  padding: 10px;
+}
+.productName {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 0;
+}
+.fontColor {
+  color: rgba(0, 0, 0, 0.65);
+}
+</style>

@@ -1,0 +1,461 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item label="质检员">
+              <a-select v-model.trim="queryParam.quality_agent" :allowClear="true" show-search>
+                <a-select-option v-for="(item, key) in quality_agent" :key="key" :value="item.value">
+                  {{ item.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="坐席姓名">
+              <a-select v-model.trim="queryParam.agent" :allowClear="true" show-search>
+                <a-select-option v-for="(item, key) in agent" :key="key" :value="item.value">
+                  {{ item.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="主叫号码">
+              <a-input v-model.trim="queryParam.src" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="被叫号码">
+              <a-input v-model.trim="queryParam.dst" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="质检时间">
+              <a-range-picker v-model="searchDate" showTime style="width: 100%" @change="getSearchDate" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      class="table-fill"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="detailsPage(record)">复议</a>
+      </div>
+    </s-table>
+    <a-drawer :title="config.title" :width="1200" :visible="details" @close="details = !details">
+      <a-spin :spinning="loading">
+        <div>
+          <a-form-item>
+            <a-card title="基本信息" size="small">
+              <audio ref="audio" controls style="margin: 10px">
+                <source :src="recording.recordingfile" type="audio/wav" />
+              </audio>
+              <a-card size="small">
+                <a-col :span="4">
+                  <p>
+                    主叫号码：
+                    <a-input v-model="recording.src" class="input" :disabled="true" />
+                  </p>
+                </a-col>
+                <a-col :span="1"></a-col>
+                <a-col :span="4">
+                  <p>
+                    被叫号码：
+                    <a-input v-model="recording.dst" class="input" :disabled="true" />
+                  </p>
+                </a-col>
+                <a-col :span="1"></a-col>
+                <a-col :span="4">
+                  <p>
+                    呼叫时间：
+                    <a-input v-model="recording.calldate" class="input" :disabled="true" />
+                  </p>
+                </a-col>
+                <a-col :span="1"></a-col>
+                <a-col :span="4">
+                  <p>
+                    质检员：
+                    <a-input v-model="recording.quality_agent" class="input" :disabled="true" />
+                  </p>
+                </a-col>
+                <a-col :span="1"></a-col>
+                <a-col :span="4">
+                  <p>
+                    当前得分:
+                    <a-input v-model="recording.total_score" class="input" :disabled="true" />
+                  </p>
+                </a-col>
+              </a-card>
+            </a-card>
+          </a-form-item>
+          <a-space>
+            <tag-icon class="tagIcon" />
+            <h3 style="margin-top: 10px">复议信息</h3>
+          </a-space>
+          <a-card>
+            <a-form-item
+              :labelCol="{ span: 3 }"
+              :required="true"
+              :wrapperCol="{ span: 18 }"
+              label="申请复议理由"
+              style="margin-bottom: 10px"
+            >
+              <a-textarea
+                v-model="recording.reconside_reason"
+                :disabled="true"
+                :auto-size="{ minRows: 3, maxRows: 5 }"
+              />
+            </a-form-item>
+            <a-form-item
+              label="审核说明"
+              style="margin-bottom: 10px"
+              :required="true"
+              :labelCol="{ span: 3 }"
+              :wrapperCol="{ span: 18 }"
+            >
+              <a-textarea v-model="recording.reason" :disabled="true" :auto-size="{ minRows: 3, maxRows: 5 }" />
+            </a-form-item>
+            <a-form-item :labelCol="{ span: 3 }" :required="true" :wrapperCol="{ span: 18 }" label="质检复议说明">
+              <a-textarea v-model="recording.remark" :auto-size="{ minRows: 3, maxRows: 5 }" />
+            </a-form-item>
+          </a-card>
+          <div v-for="(item, string, keys) in allshowing" :key="keys">
+            <a-form-item>
+              <a-card
+                :title="keys === 0 ? '一票否决' : item.name + '(得' + listscore[keys] + '分/共' + item.score + '分)'"
+                size="small"
+              >
+                <a-form-item v-for="(items, timestamp, indexs) in item.list" :key="indexs">
+                  <a-col :span="14">
+                    <a-form-item :label="indexs + 1" :label-col="{ span: 2 }" :wrapper-col="{ span: 21 }">
+                      <a-col :span="1">
+                        <a-tooltip>
+                          <template v-if="keys === 0" slot="title">
+                            {{ items.name }}
+                          </template>
+                          <template v-else slot="title">
+                            <div v-dompurify-html="items.remark">
+                              {{ items.remark }}
+                            </div>
+                          </template>
+                          <a-icon type="question-circle" />
+                        </a-tooltip>
+                      </a-col>
+                      <a-col :span="23">
+                        <a-input class="input" :value="items.name" />
+                      </a-col>
+                    </a-form-item>
+                  </a-col>
+                  <a-col :span="3">
+                    <a-checkbox v-show="keys === 0"></a-checkbox>
+                    <div class="labelchange">
+                      <a-form-item
+                        v-show="keys !== 0"
+                        label="分数"
+                        :label-col="{ span: 8 }"
+                        :wrapper-col="{ span: 16 }"
+                      >
+                        <a-input class="input" :value="items.score" />
+                      </a-form-item>
+                    </div>
+                  </a-col>
+                  <a-col :span="7">
+                    <a-form-item label="备注" :label-col="{ span: 4 }" :wrapper-col="{ span: 18 }">
+                      <a-tooltip>
+                        <template slot="title">
+                          <div v-show="items.remarks" v-dompurify-html="items.remarks">
+                            {{ items.remarks }}
+                          </div>
+                        </template>
+                        <a-input class="input" />
+                      </a-tooltip>
+                    </a-form-item>
+                  </a-col>
+                </a-form-item>
+              </a-card>
+            </a-form-item>
+          </div>
+          <a-form-item>
+            <a-card title="综合评语" size="small">
+              <a-row>
+                <a-col :span="5">
+                  <a-form-item label="优秀案例" :label-col="{ span: 7 }" :wrapper-col="{ span: 12 }">
+                    <a-switch v-model="recording.typical_case" checked-children="是" un-checked-children="否" />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="5">
+                  <a-form-item label="无效数据" :label-col="{ span: 8 }" :wrapper-col="{ span: 12 }">
+                    <a-switch v-model="recording.invalid_phone" checked-children="是" un-checked-children="否" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <a-form-item label="综合评语:">
+                <a-textarea v-model="recording.remark" :auto-size="{ minRows: 3, maxRows: 5 }"></a-textarea>
+              </a-form-item>
+            </a-card>
+          </a-form-item>
+          <div class="bbar">
+            <a-button type="primary" @click="submit">提交</a-button>
+            <a-button @click="details = !details">关闭</a-button>
+          </div>
+        </div>
+      </a-spin>
+    </a-drawer>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+export default {
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    url: {
+      type: String,
+      default: '/quality/awfulRecord/mockInit'
+    }
+  },
+  data () {
+    return {
+      advanced: false,
+      loading: false,
+      details: false,
+      searchDate: null,
+      readonly: true,
+      recording: {},
+      listscore: [],
+      // 搜索参数
+      queryParam: {
+        quality_agent: undefined,
+        agent: undefined
+      },
+      config: {
+        data: {}
+      },
+      // 表头
+      columns: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: '质检时间',
+        dataIndex: 'quality_time',
+        width: 150,
+        sorter: true
+      }, {
+        title: '坐席姓名',
+        dataIndex: 'agent',
+        sorter: true
+      }, {
+        title: '主叫号码',
+        dataIndex: 'src',
+        sorter: true
+      }, {
+        title: '被叫号码',
+        dataIndex: 'dst',
+        sorter: true
+      }, {
+        title: '呼叫时间',
+        dataIndex: 'calldate',
+        width: 150,
+        sorter: true
+      }, {
+        title: '通话时长',
+        dataIndex: 'billsec',
+        sorter: true
+      }, {
+        title: '质检员',
+        dataIndex: 'quality_agent',
+        sorter: true
+      }, {
+        title: '质检结果',
+        dataIndex: 'result',
+        sorter: true
+      }, {
+        title: '质检得分',
+        dataIndex: 'total_score',
+        sorter: true
+      }, {
+        title: '评语',
+        dataIndex: 'remark',
+        sorter: true
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      allshowing: {},
+      colLayout: {},
+      field: [],
+      quality_agent: [],
+      agent: []
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  mounted () {
+    this.getUserName()
+  },
+  methods: {
+    // 页面数据渲染
+    loadDataTable (parameter) {
+      return this.axios({
+        url: this.url,
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        for (const i in res.result.data) {
+          if (res.result.data[i].result === '1') {
+            res.result.data[i].result = '合格'
+          } else {
+            res.result.data[i].result = '不合格'
+          }
+          if (res.result.data[i].id === this.recording.id) {
+            res.result.data.splice(i, i + 1)
+          }
+        }
+        return res.result
+      })
+    },
+    submit () {
+      this.details = false
+      this.$refs.table.refresh()
+    },
+    // 获取用户信息
+    getUserName () {
+      return this.axios({
+        url: '/quality/template/mockGetUsername'
+      }).then(res => {
+        this.quality_agent = res.result.data
+        this.agent = res.result.data
+        return res.result
+      })
+    },
+    // 录音信息搜索
+    recordSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 查看明细
+    detailsPage (record) {
+      this.details = true
+      this.config = {
+        action: 'details',
+        title: '查看明细',
+        url: '',
+        data: {}
+      }
+      this.recording = record
+      const remarks = JSON.parse(record.remarks)
+      if (this.recording.typical_case === '1') {
+        this.recording.typical_case = true
+      } else {
+        this.recording.typical_case = false
+      }
+      if (this.recording.invalid_phone === '1') {
+        this.recording.invalid_phone = true
+      } else {
+        this.recording.invalid_phone = false
+      }
+      this.allshowing = record.itemsdata.template_data
+      const reg = new RegExp(/field/)
+      const fieldtest = {}
+      this.field = []
+      for (const i in record) {
+        if (i.match(reg)) {
+          fieldtest[i] = record[i]
+        }
+      }
+      for (const i in fieldtest) {
+        this.field.push(fieldtest[i])
+      }
+      let k = 0
+      let alllength = 1
+      let v = 1
+      for (const i in this.allshowing) {
+        for (const j in this.allshowing[i].list) {
+          alllength = alllength + 1
+          if (alllength === 1) {
+            this.listscore[v] = this.field[k]
+            v = v + 1
+            if (k === 0) {
+              k = k + 1
+            } else {
+              k = k + 2
+            }
+          } else {
+            k = k + 1
+          }
+          this.allshowing[i].list[j].score = this.field[k - 1]
+          const string = 'field' + k
+          if (remarks[string]) {
+            this.allshowing[i].list[j]['remarks'] = remarks[string]
+          } else {
+            this.allshowing[i].list[j]['remarks'] = '备注'
+          }
+        }
+        alllength = 0
+      }
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict'
+      })
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    getSearchDate (date, dateString) {
+      this.queryParam.begin_time = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    }
+  }
+}
+</script>

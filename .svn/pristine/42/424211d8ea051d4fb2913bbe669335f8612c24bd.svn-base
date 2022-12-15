@@ -1,0 +1,166 @@
+<template>
+  <a-drawer :visible="visible" :destroyOnClose="true" :width="800" :title="config.title" @close="visible = !visible">
+    <a-spin :spinning="false">
+      <a-layout style="height: 100%">
+        <a-layout-sider style="width: 100px; overflow-y: scroll">
+          <a-radio-group v-model="formAwesomeCheck" style="width: 100%">
+            <div v-for="(item, index) of fontAwesomeData" :key="index" class="leftMenu">
+              <a-radio :value="item" @click="selected(item)">
+                {{ item }}
+              </a-radio>
+            </div>
+          </a-radio-group>
+        </a-layout-sider>
+        <a-layout-content style="width: 700px">
+          <a-input-search
+            v-model="fontAwesomeValue"
+            :placeholder="$t('请输入图标名称搜索')"
+            enter-button
+            @change="onSearch('fontAwesome')"
+          />
+          <div>
+            <ul>
+              <li v-for="(item, index) in fontAwesomeInitData" :key="index" @click="handleClick(item)">
+                <span>
+                  <font-awesome-icon :icon="item" />
+                </span>
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </div>
+        </a-layout-content>
+      </a-layout>
+      <div class="bbar">
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import fontAwesome from './fontAwesome.json'
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      fontAwesomeData: [],
+      fontAwesomeInitData: [],
+      fontAwesomeRealData: [],
+      formAwesomeCheck: '',
+      fontAwesomeValue: '',
+      tabKey: 'outlined',
+      config: {
+        title: this.$t('选择图标')
+      },
+      load: false
+    }
+  },
+  mounted () {
+    if (!this.load) {
+      Promise.resolve().then(() => {
+        let arr = []
+        for (const item of fontAwesome) {
+          arr = arr.concat(item.items)
+        }
+        this.fontAwesomeRealData = arr
+        this.fontAwesomeInitData = [...new Set(arr)]
+      })
+      this.fontAwesomeData = fontAwesome.map(item => {
+        return item.type
+      })
+    }
+  },
+  methods: {
+    show () {
+      this.load = true
+      this.visible = true
+    },
+    // 搜索
+    onSearch (type) {
+      const value = this.fontAwesomeValue
+      if (!value) {
+        this.fontAwesomeInitData = this.fontAwesomeRealData
+      }
+      const arr = this.fontAwesomeRealData.filter(item => {
+        return item.indexOf(value) !== -1
+      })
+      this.fontAwesomeInitData = [...new Set(arr)]
+    },
+    getValue (arr, val) {
+      return arr.filter(item => {
+        return item.indexOf(val) !== -1
+      })
+    },
+    // 获取icon的type
+    handleClick (myitem) {
+      this.visible = false
+      this.$emit('ok', { type: myitem })
+    },
+    selected (val) {
+      if (this.formAwesomeCheck === val) {
+        this.formAwesomeCheck = ''
+        this.fontAwesomeInitData = this.fontAwesomeRealData
+        return
+      }
+      this.formAwesomeCheck = val
+      this.fontAwesomeInitData = fontAwesome.filter(item => {
+        return item.type === val
+      })[0].items
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.leftMenu {
+  background-color: #fff;
+  width: 100%;
+  font-size: 20px;
+  padding: 5px;
+}
+.title {
+  font-size: 16px;
+  color: #0d1a26;
+  margin-top: 10px;
+}
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  li {
+    width: 92px;
+    height: 92px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
+    list-style: none;
+    cursor: pointer;
+    color: #555;
+    position: relative;
+    border-radius: 4px;
+    background-color: #fff;
+    overflow: hidden;
+    transition: all 0.3s;
+    span:first-child {
+      height: 50px;
+      line-height: 50px;
+      font-size: 30px;
+    }
+    span:last-child {
+      height: 40px;
+      line-height: 20px;
+    }
+  }
+  li:hover {
+    background: rgb(24, 144, 255);
+    color: #fff;
+    span:first-child {
+      font-size: 40px;
+    }
+  }
+}
+</style>

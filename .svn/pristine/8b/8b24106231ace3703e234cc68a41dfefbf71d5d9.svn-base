@@ -1,0 +1,186 @@
+<template>
+  <a-drawer :title="$t('个人信息')" :width="600" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <user-table-form-view
+        ref="userTableFormView"
+        :params="{
+          tableName,
+          template,
+          fieldRule,
+          parentParams: params,
+          templateOther: template,
+          action: 'edit',
+          page: 'over'
+        }"
+        :formThis="formThis"
+      />
+      <div v-if="bbarshow" class="bbar">
+        <component :is="item.component" v-for="(item, index) in bbar" v-show="item.display === '1'" :key="index" />
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapActions, mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    UserTableFormView: () => import('@/views/admin/UserTable/UserTableFormView')
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      tableName: '',
+      template: [],
+      fieldRule: [],
+      remarksRule: [],
+      remarksMaxRows: 4,
+      remarksMinRows: 2,
+      handleFormRules: [],
+      handleWayData: [],
+      orderType: [],
+      templateOther: [],
+      params: {
+        labelWidth: 100,
+        url: '/admin/user/edit',
+        templateId: '6885920450de450294d1a95b171bdcd7'
+      },
+      beforeSubmit: '',
+      bbar: [],
+      templateInit: [],
+      templateCom: {},
+      formThis: this,
+      bbarshow: false
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  methods: {
+    ...mapActions(['UserInfo', 'Logout']),
+    show () {
+      this.visible = true
+      this.loading = true
+      this.UserInfo().then(res => {
+        this.data = res.result
+        this.params.record = this.data
+        this.axios({
+          url: '/admin/userTable/edit',
+          data: {
+            action: 'edit',
+            id: this.data.id,
+            listTemplateId: '38d5a04eab7043cd9b4b612200e5ab8b',
+            templateId: '6885920450de450294d1a95b171bdcd7'
+          }
+        }).then(res => {
+          this.loading = false
+          this.tableName = res.result.tableName
+          this.record = res.result.data
+          this.beforeSubmit = res.result.templateScript && res.result.templateScript.beforeSubmit ? res.result.templateScript.beforeSubmit : ''
+          this.templateInit = res.result.template
+          this.templateInit.forEach(item => {
+            if (item.type === 'component') {
+              this.templateCom[item.value] = item
+            }
+          })
+          this.bbar = res.result.bbar || []
+          this.bbar.forEach(item => {
+            item.component = {
+              template: `<span>${item.attribute}</span>`,
+              data: () => {
+                return {
+                  parent: this
+                }
+              }
+            }
+          })
+          this.bbarshow = !this.bbar.every(item => item.display === '0')
+          this.template = JSON.parse(JSON.stringify(res.result.template)) || []
+          this.templateOther = JSON.parse(JSON.stringify(res.result.template)) || []
+          // 表单初始化loader
+          if (res.result.templateScript && res.result.templateScript.afterInit) {
+            var initAttribute = res.result.templateScript.afterInit
+            var initTemplate = {
+              type: 'component',
+              attribute: initAttribute
+            }
+            this.template.push(initTemplate)
+          }
+          this.fieldRule = res.result.fieldRule
+          const getComponent = (array) => {
+            array.forEach((item, index) => {
+              if (item.columns) {
+                getComponent(item.columns)
+              } else if (item.trs) {
+                getComponent(item.trs)
+              } else if (item.list) {
+                getComponent(item.list)
+              } else {
+                if (item.type === 'component') {
+                  item.component = {
+                    template: `<span>${item.attribute}</span>`,
+                    data: () => {
+                      return {
+                        parent: this
+                      }
+                    }
+                  }
+                }
+              }
+            })
+          }
+          getComponent(this.template)
+        })
+      })
+    },
+    // 上传图片限制
+    beforeUploadImage (file, fileList, item) {
+      return new Promise((resolve, reject) => {
+        const isImage = file.type
+        if (!isImage.includes('image')) {
+          this.$message.error(this.$t('上传的是非图片格式'))
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    handleImageChange ({ fileList }) {
+      this.imageFileList = fileList
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.url || file.thumbUrl
+      this.imagePreviewVisible = true
+    },
+    // 提交表单
+    handleSubmit (data) {
+      const beforeSubmit = this.beforeSubmit
+      this.loading = true
+      if (beforeSubmit) {
+        const parent = this
+        const str = 'return ' + beforeSubmit
+        // eslint-disable-next-line no-new-func
+        const func = new Function(str)
+        const flag = func()(parent)
+        if (flag) {
+          this.$refs.userTableFormView.handleSubmit(data).then(res => {
+            if (!res) {
+              this.visible = false
+            }
+          }).finally(() => {
+            this.loading = false
+          })
+        }
+      } else {
+        this.$refs.userTableFormView.handleSubmit(data).then(res => {
+          if (!res) {
+            this.visible = false
+          }
+        }).finally(() => {
+          this.loading = false
+        })
+      }
+    }
+  }
+}
+</script>

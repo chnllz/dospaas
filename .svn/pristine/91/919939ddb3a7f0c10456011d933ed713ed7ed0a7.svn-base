@@ -1,0 +1,134 @@
+<template>
+  <div
+    style="cursor: pointer"
+    @click.stop="
+      (e) => {
+        e.preventDefault()
+      }
+    "
+  >
+    <a-popover v-model="showLanguage" trigger="click" placement="bottomRight" @visibleChange="handleLangChange">
+      <template slot="content">
+        <a-form :form="langForm">
+          <div v-for="item of lang" :key="item.value">
+            <a-form-item
+              v-if="item.value !== 'zh_CN'"
+              :label="item.CNText"
+              :labelCol="labelCol"
+              :wrapperCol="wrapperCol"
+            >
+              <a-input v-model="language[`lang_${item.value.toLowerCase()}`]"></a-input>
+            </a-form-item>
+          </div>
+        </a-form>
+      </template>
+
+      <div style="width: 30px; height: 100%; display: flex; justify-content: center; align-items: center">
+        <font-awesome-icon :icon="'fa-language'" class="font-awesome-icon" style="font-size: 18px" />
+      </div>
+    </a-popover>
+  </div>
+</template>
+<script>
+import language from '@/config/defaultSettings'
+
+export default {
+  props: {
+    value: {
+      type: String,
+      default: null
+    }
+  },
+  data () {
+    return {
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      showLanguage: false,
+      langForm: this.$form.createForm(this),
+      // 引入的本地语音库
+      lang: language.language,
+      // 请求回来的语音
+      language: {},
+      // 请求回来不变的语音，用于比较是否改变
+      languageInit: {},
+      zh_CN: '',
+      system_category: ''
+    }
+  },
+  methods: {
+    handleLangChange () {
+      if (this.showLanguage) {
+        // 拿到组件外input的内容
+        this.zh_CN = this.$parent.value
+        // 上传的分类名称
+        this.system_category = this.value
+        this.axios({
+          url: '/admin/userTable/init',
+          data: {
+            associated: [],
+            commonSearch: { lang_zh_cn: this.zh_CN },
+            customColumns: [],
+            flowCondition: 'my_process',
+            multiFieldSearchList: [],
+            pageNo: 1,
+            pageSize: 20,
+            sortField: 'id',
+            sortOrder: 'descend',
+            templateSearchList: [],
+            tplviewid: 'e70b9c8ac5e54a608b1a6a12f86b9fde'
+          }
+        }).then((res) => {
+          if (res.code === 0) {
+            if (res.result.data.length === 1) {
+              // 初始数据languageInit和操作数据language
+              this.language = { ...res.result.data[0] }
+              this.languageInit = res.result.data[0]
+            } else {
+              this.language = {}
+            }
+          }
+        })
+      } else {
+        let submit = false
+        // 对比，如果数据改变了并且是处于关闭popover的状态，才提交数据
+        JSON.stringify(this.language) !== JSON.stringify(this.languageInit) && this.showLanguage === false ? submit = true : submit = false
+        if (submit) {
+          const handleData = {}
+          for (const item in this.language) {
+            if (this.language[item] && item[item.length - 1] !== '_') {
+              handleData[item] = this.language[item]
+            }
+          }
+          if (this.language.id) {
+            delete handleData.id
+            delete handleData.update_time
+            delete handleData.update_user
+            this.axios({
+              url: '/admin/userTable/edit',
+              data: {
+                action: 'submit',
+                id: this.language?.id,
+                record: handleData,
+                tplviewid: 'c7df3f428b1240b985a346f35135ae35'
+              }
+            })
+          } else {
+            handleData.lang_zh_cn = this.zh_CN
+            if (handleData.lang_zh_cn) {
+              this.axios({
+                url: '/admin/userTable/add',
+                data: {
+                  action: 'submit',
+                  id: 0,
+                  record: Object.assign(handleData, { system_category: this.system_category }),
+                  tplviewid: 'c7df3f428b1240b985a346f35135ae35'
+                }
+              })
+            }
+          }
+        }
+      }
+    }
+  }
+}
+</script>

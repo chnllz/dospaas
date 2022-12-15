@@ -1,0 +1,216 @@
+import Mock from 'mockjs2'
+import { builder, getBody } from '../util'
+// 问卷模块
+let Questionnaireresult = [{
+    id: 1,
+    nairename: '问卷' + 1,
+    topicsNumber: 1,
+    distribution_mode: '0',
+    inputTime: '2021-11-15 09:21:56',
+    inputUser: '张哥',
+    lastModify: '测试用户',
+    lastModifiedTime: '2021-11-15 09:30:56'
+}, {
+    id: 2,
+    nairename: '问卷' + 2,
+    topicsNumber: 22,
+    distribution_mode: '0',
+    inputTime: '2021-11-15 09:21:56',
+    inputUser: '王哥',
+    lastModify: '测试用户2',
+    lastModifiedTime: '2021-11-15 09:30:56'
+}]
+const questionnaireInit = (options) => {
+    const parameters = getBody(options)
+    const pageNo = parseInt(parameters.pageNo)
+    if (!parameters.nairename) {
+        return builder({
+            pageNo: pageNo,
+            totalCount: Questionnaireresult.length,
+            data: Questionnaireresult
+        })
+    } else {
+        const searchData = Questionnaireresult.filter(item => parameters.nairename === item.nairename)
+        return builder({
+            pageNo: pageNo,
+            totalCount: Questionnaireresult.length,
+            data: searchData
+        })
+    }
+}
+const questionnaireAdd = (options) => {
+    const data = JSON.parse(options.body).data
+    data.id = Questionnaireresult.length + 1
+    Questionnaireresult = Questionnaireresult.concat(data)
+    return builder({
+        totalCount: Questionnaireresult.length,
+        data: Questionnaireresult
+    })
+}
+const questionnaireEdit = (options) => {
+    const data = JSON.parse(options.body).data
+    for (const i in data) {
+        for (const j in Questionnaireresult) {
+            if (data.id === Questionnaireresult[j].id) {
+                Questionnaireresult[j][i] = data[i]
+            }
+        }
+    }
+    return builder({
+        totalCount: Questionnaireresult.length,
+        data: Questionnaireresult
+    })
+}
+const questionnaireDelete = (options) => {
+    const id = JSON.parse(options.body).id
+    Questionnaireresult = Questionnaireresult.filter((val) => {
+        if (id !== val.id) {
+            return val
+        }
+    })
+    return builder({
+        totalCount: Questionnaireresult.length,
+        data: Questionnaireresult
+    })
+}
+// 试卷模块
+let examList = [{
+    id: 1,
+    title: '试题一',
+    questionType: '单选题',
+    list: '0',
+    inputTime: '2021-11-15 09:21:56',
+    inputUser: '张哥',
+    lastModify: '测试用户',
+    lastModifiedTime: '2021-11-15 09:30:56'
+}, {
+    id: 2,
+    title: '试题二',
+    questionType: '多选题',
+    list: '0',
+    inputTime: '2021-11-15 09:21:56',
+    inputUser: '张哥',
+    lastModify: '测试用户',
+    lastModifiedTime: '2021-11-15 09:30:56'
+}]
+const questionsInit = (options) => {
+    const parameters = getBody(options)
+    const pageNo = parseInt(parameters.pageNo)
+    if (parameters.title || parameters.questionstype) {
+        let searchData = []
+        if (parameters.title) {
+            searchData = examList.filter(item => parameters.title === item.title)
+        } else if (parameters.questionstype) {
+            searchData = examList.filter(item => parameters.questionstype === item.questionType)
+        } else {
+            searchData = examList.filter(item => parameters.questionstype === item.questionType && parameters.title === item.title)
+        }
+        return builder({
+            pageNo: pageNo,
+            totalCount: examList.length,
+            data: searchData
+        })
+    } else {
+        return builder({
+            pageNo: pageNo,
+            totalCount: examList.length,
+            data: examList
+        })
+    }
+}
+const questionsSearch = (options) => {
+    return builder('操作成功')
+}
+const questionbankEdit = (options) => {
+    const data = JSON.parse(options.body).data
+    for (const i in data) {
+        for (const j in examList) {
+            if (data.id === examList[j].id) {
+                examList[j][i] = data[i]
+            }
+        }
+    }
+    return builder({
+        totalCount: examList.length,
+        data: examList
+    })
+}
+const testsAdd = (options) => {
+    const data = JSON.parse(options.body).data
+    data.id = examList.length + 1
+    examList = examList.concat(data)
+    return builder({
+        totalCount: examList.length,
+        data: examList
+    })
+}
+const testsDelete = (options) => {
+    const id = JSON.parse(options.body).id
+    examList = examList.filter((val) => {
+        if (id !== val.id) {
+            return val
+        }
+    })
+    return builder({
+        totalCount: examList.length,
+        data: examList
+    })
+}
+// 题库模块
+const questionBankList = [{
+    id: 1,
+    title: '题库一',
+    questionType: '单选题',
+    list: '0',
+    inputTime: '2021-11-15 09:21:56',
+    inputUser: '张哥',
+    lastModify: '测试用户',
+    lastModifiedTime: '2021-11-15 09:30:56'
+}, {
+    id: 2,
+    title: '题库二',
+    questionType: '多选题',
+    list: '0',
+    inputTime: '2021-11-15 09:21:56',
+    inputUser: '张哥',
+    lastModify: '测试用户',
+    lastModifiedTime: '2021-11-15 09:30:56'
+}]
+const questionbankInit = (options) => {
+    const parameters = getBody(options)
+    const pageNo = parseInt(parameters.pageNo)
+    if (parameters.title || parameters.questionstype) {
+        let searchData = []
+        if (parameters.title) {
+            searchData = questionBankList.filter(item => parameters.title === item.title)
+        } else if (parameters.questionstype) {
+            searchData = questionBankList.filter(item => parameters.questionstype === item.questionType)
+        } else {
+            searchData = questionBankList.filter(item => parameters.questionstype === item.questionType && parameters.title === item.title)
+        }
+        return builder({
+            pageNo: pageNo,
+            totalCount: questionBankList.length,
+            data: searchData
+        })
+    } else {
+        return builder({
+            pageNo: pageNo,
+            totalCount: questionBankList.length,
+            data: questionBankList
+        })
+    }
+}
+// 问卷管理
+Mock.mock(/\/visit\/questionnaire\/init/, 'post', questionnaireInit)
+Mock.mock(/\/visit\/questionnaire\/add/, 'post', questionnaireAdd)
+Mock.mock(/\/visit\/questionnaire\/edit/, 'post', questionnaireEdit)
+Mock.mock(/\/visit\/questionnaire\/delete/, 'post', questionnaireDelete)
+// 试题管理
+Mock.mock(/\/visit\/questionnaire\/details/, 'post', questionsInit)
+Mock.mock(/\/visit\/questionnaire\/testsSearch/, 'post', questionsSearch)
+Mock.mock(/\/visit\/questionbank\/edit/, 'post', questionbankEdit)
+Mock.mock(/\/visit\/questionnaire\/testsadd/, 'post', testsAdd)
+Mock.mock(/\/visit\/questionnaire\/testsdelete/, 'post', testsDelete)
+// 题库
+Mock.mock(/\/visit\/questionbank\/init/, 'post', questionbankInit)

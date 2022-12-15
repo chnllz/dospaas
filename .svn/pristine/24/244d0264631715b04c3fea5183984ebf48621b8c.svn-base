@@ -1,0 +1,1331 @@
+<template>
+  <div>
+    <a-spin :spinning="false">
+      <a-form :form="form">
+        <div style="margin-bottom: 35px">
+          <a-form-item label="条件设置" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-button type="dashed" style="width: 100%" @click="addData">添加条件</a-button>
+          </a-form-item>
+          <a-form-item
+            v-if="data.simpleCondition && data.simpleCondition.length > 0"
+            label=" "
+            :colon="false"
+            :labelCol="{ span: 2 }"
+            :wrapperCol="{ span: 22 }"
+          >
+            <a-row type="flex" align="middle">
+              <a-col :span="22">
+                <a-row
+                  v-for="(simpleItem, simpleIndex) in data.simpleCondition"
+                  :key="simpleIndex"
+                  type="flex"
+                  align="middle"
+                  :gutter="10"
+                >
+                  <a-col :span="4">
+                    <a-select
+                      v-model="simpleItem.fieldUser"
+                      size="small"
+                      @change="
+                        (value) => {
+                          simpleItem.include = undefined
+                          if (value === 'way') {
+                            $set(simpleItem, 'include', 'eq')
+                            simpleItem.customCode = {
+                              html: '',
+                              value: ''
+                            }
+                          } else if (value === 'field') {
+                            simpleItem.condition = [
+                              {
+                                include: '',
+                                value: ''
+                              }
+                            ]
+                          } else if (value === 'custom') {
+                            simpleItem.customCode = {
+                              html: '',
+                              value: ''
+                            }
+                          } else if (value === 'ruleTable') {
+                            simpleItem.condition = [
+                              {
+                                customCode: {
+                                  html: '',
+                                  value: ''
+                                }
+                              }
+                            ]
+                            simpleItem.customCode = {
+                              html: '',
+                              value: ''
+                            }
+                            getRuleTable(simpleItem)
+                          } else if (value.includes('current')) {
+                            $set(simpleItem, 'include', 'bl')
+                            simpleItem.value = undefined
+                            simpleItem.options = undefined
+                            simpleItem.optionArr = undefined
+                            simpleItem.condition = [
+                              {
+                                include: '',
+                                value: []
+                              }
+                            ]
+                          } else {
+                            simpleItem.condition = [
+                              {
+                                include: '',
+                                value: []
+                              }
+                            ]
+                          }
+                        }
+                      "
+                    >
+                      <a-select-option value="way">办理方式</a-select-option>
+                      <a-select-option value="field">字段</a-select-option>
+                      <a-select-option value="currentUser">办理用户</a-select-option>
+                      <a-select-option value="currentClass">办理用户所属部门</a-select-option>
+                      <a-select-option value="currentRole">办理用户所属角色</a-select-option>
+                      <a-select-option value="ruleTable">规则表</a-select-option>
+                      <a-select-option value="custom">自定义</a-select-option>
+                      <a-select-option value="notSet">无条件满足</a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col v-if="['ruleTable'].includes(simpleItem.fieldUser)" :span="18">
+                    <div>
+                      <a-cascader
+                        v-model="simpleItem.targetTable"
+                        size="small"
+                        style="width: 300px"
+                        :show-search="true"
+                        placeholder="请选择规则表"
+                        :options="tableFieldsList"
+                        @change="
+                          (e) => {
+                            tableFieldsChange(e, simpleItem, 'click')
+                          }
+                        "
+                      />
+                    </div>
+                    <a-divider orientation="left"><span style="font-size: 13px">查表条件</span></a-divider>
+                    <div v-for="(includeItem, includeIndex) in simpleItem.condition" :key="includeIndex">
+                      <a-row :gutter="8" type="flex" align="middle">
+                        <a-col :span="6">
+                          <a-select
+                            v-model="includeItem.ruleAlias"
+                            showSearch
+                            option-filter-prop="children"
+                            :allowClear="true"
+                            size="small"
+                            @change="
+                              (value) => {
+                                simpleItem.ruleFieldList.forEach((item1) => {
+                                  if (item1.alias === value) {
+                                    getConditionArr(item1, includeItem)
+                                  }
+                                })
+                                includeItem.include = undefined
+                                $forceUpdate()
+                              }
+                            "
+                          >
+                            <a-select-option v-for="fieldItem in simpleItem.ruleFieldList" :key="fieldItem.alias">
+                              {{ fieldItem.name }}
+                            </a-select-option>
+                          </a-select>
+                        </a-col>
+                        <a-col :span="4">
+                          <a-select
+                            v-model="includeItem.include"
+                            placeholder="请选择"
+                            size="small"
+                            @change="
+                              (value) => {
+                                choiceInclude(value, includeItem)
+                                if (value === 'em' || value === 'nem') {
+                                  simpleItem.setType = 'custom'
+                                }
+                                $forceUpdate()
+                              }
+                            "
+                          >
+                            <a-select-option
+                              v-for="(crItem, crIndex) in includeItem.conditionArr"
+                              :key="crIndex"
+                              option-filter-prop="children"
+                              :value="crItem.enName"
+                            >
+                              {{ crItem.cnName }}
+                            </a-select-option>
+                          </a-select>
+                        </a-col>
+                        <template v-if="!includeItem.type">
+                          <a-col :span="4">
+                            <a-select v-model="includeItem.setType" size="small" @change="$forceUpdate()">
+                              <a-select-option value="field">本表字段</a-select-option>
+                              <a-select-option value="custom">自定义</a-select-option>
+                            </a-select>
+                          </a-col>
+                          <a-col :span="8">
+                            <a-row v-if="includeItem.setType === 'custom'" type="flex" align="middle">
+                              <a-col :span="24">
+                                <querier-codemirror-input
+                                  ref="querierCodemirrorInput"
+                                  :params.sync="includeItem.customCode"
+                                />
+                              </a-col>
+                              <div
+                                style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+                                size="small"
+                                @click="
+                                  () => {
+                                    showKey = includeIndex
+                                    $refs['customCodemirrorsRule' + showKey][0].show(
+                                      Object.assign(
+                                        {
+                                          title: '公式编辑器',
+                                          item: includeItem,
+                                          index: includeIndex
+                                        },
+                                        { tableId: myCondition.tableId }
+                                      )
+                                    )
+                                  }
+                                "
+                              >
+                                fx
+                              </div>
+                              <custom-codemirror
+                                :ref="'customCodemirrorsRule' + includeIndex"
+                                @ok="
+                                  (val) => {
+                                    $set(includeItem, 'customCode', val)
+                                    $forceUpdate()
+                                  }
+                                "
+                              />
+                            </a-row>
+                            <a-select
+                              v-else
+                              v-model="includeItem.fieldAlias"
+                              size="small"
+                              showSearch
+                              option-filter-prop="children"
+                              :allowClear="true"
+                            >
+                              <a-select-option v-for="fieldItem in thisTableField" :key="fieldItem.alias">
+                                {{ fieldItem.name }}
+                              </a-select-option>
+                            </a-select>
+                          </a-col>
+                        </template>
+                        <template v-else>
+                          <a-col :span="12">
+                            <a-input size="small" type="text" disabled />
+                          </a-col>
+                        </template>
+                        <a-col :span="2" style="display: flex; align-items: center; justify-content: center">
+                          <a-icon
+                            :style="{ fontSize: '24px', color: '#52c41a' }"
+                            type="plus-square"
+                            theme="filled"
+                            @click="
+                              simpleItem.condition.splice(includeIndex, 0, {
+                                customCode: {
+                                  html: '',
+                                  value: ''
+                                }
+                              })
+                            "
+                          />
+                          <a-icon
+                            :style="{
+                              fontSize: '24px',
+                              color: simpleItem.condition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                              'padding-left': '5px'
+                            }"
+                            type="minus-square"
+                            theme="filled"
+                            @click="
+                              simpleItem.condition.length === 1 ? '' : simpleItem.condition.splice(includeIndex, 1)
+                            "
+                          />
+                        </a-col>
+                      </a-row>
+                    </div>
+                    <a-divider orientation="left"><span style="font-size: 13px">判断方式</span></a-divider>
+                    <a-row :gutter="8" type="flex" align="middle">
+                      <a-col :span="6">
+                        <a-select
+                          v-model="simpleItem.judgeRuleAlias"
+                          showSearch
+                          option-filter-prop="children"
+                          :allowClear="true"
+                          size="small"
+                          @change="
+                            (value) => {
+                              simpleItem.ruleFieldList.forEach((item1) => {
+                                if (item1.alias === value) {
+                                  getConditionArr(item1, simpleItem)
+                                }
+                              })
+                              simpleItem.judgeInclude = undefined
+                              $forceUpdate()
+                            }
+                          "
+                        >
+                          <a-select-option v-for="fieldItem in simpleItem.ruleFieldList" :key="fieldItem.alias">
+                            {{ fieldItem.name }}
+                          </a-select-option>
+                        </a-select>
+                      </a-col>
+                      <a-col :span="4">
+                        <a-select
+                          v-model="simpleItem.judgeInclude"
+                          placeholder="请选择"
+                          size="small"
+                          @change="
+                            (value) => {
+                              choiceInclude(value, simpleItem)
+                              if (value === 'em' || value === 'nem') {
+                                simpleItem.judgType = 'custom'
+                              }
+                              $forceUpdate()
+                            }
+                          "
+                        >
+                          <a-select-option
+                            v-for="(crItem, crIndex) in simpleItem.conditionArr"
+                            :key="crIndex"
+                            option-filter-prop="children"
+                            :value="crItem.enName"
+                          >
+                            {{ crItem.cnName }}
+                          </a-select-option>
+                        </a-select>
+                      </a-col>
+                      <template v-if="!simpleItem.type">
+                        <a-col :span="4">
+                          <a-select v-model="simpleItem.judgType" size="small" @change="$forceUpdate()">
+                            <a-select-option value="field">本表字段</a-select-option>
+                            <a-select-option value="custom">自定义</a-select-option>
+                          </a-select>
+                        </a-col>
+                        <a-col :span="10">
+                          <a-row v-if="simpleItem.judgType === 'custom'" type="flex" align="middle">
+                            <a-col :span="24">
+                              <querier-codemirror-input
+                                ref="querierCodemirrorInput"
+                                :params.sync="simpleItem.customCode"
+                              />
+                            </a-col>
+                            <div
+                              style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+                              size="small"
+                              @click="
+                                () => {
+                                  showKey = simpleIndex
+                                  $refs['customCodemirrorsJudg' + showKey][0].show(
+                                    Object.assign(
+                                      {
+                                        title: '公式编辑器',
+                                        item: simpleItem,
+                                        index: simpleIndex
+                                      },
+                                      { tableId: myCondition.tableId }
+                                    )
+                                  )
+                                }
+                              "
+                            >
+                              fx
+                            </div>
+                            <custom-codemirror
+                              :ref="'customCodemirrorsJudg' + simpleIndex"
+                              @ok="
+                                (val) => {
+                                  $set(data.simpleCondition[showKey], 'customCode', val)
+                                  $forceUpdate()
+                                }
+                              "
+                            />
+                          </a-row>
+                          <a-select
+                            v-else
+                            v-model="simpleItem.fieldAlias"
+                            size="small"
+                            showSearch
+                            option-filter-prop="children"
+                            :allowClear="true"
+                          >
+                            <a-select-option v-for="fieldItem in thisTableField" :key="fieldItem.alias">
+                              {{ fieldItem.name }}
+                            </a-select-option>
+                          </a-select>
+                        </a-col>
+                      </template>
+                      <template v-else>
+                        <a-col :span="14">
+                          <a-input size="small" type="text" disabled />
+                        </a-col>
+                      </template>
+                    </a-row>
+                  </a-col>
+                  <a-col v-else-if="['custom', 'notSet'].includes(simpleItem.fieldUser)" :span="18">
+                    <a-row v-if="['custom'].includes(simpleItem.fieldUser)" type="flex" align="middle">
+                      <a-col :span="24">
+                        <querier-codemirror-input ref="querierCodemirrorInput" :params.sync="simpleItem.customCode" />
+                      </a-col>
+                      <div
+                        style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+                        size="small"
+                        @click="handleCodemirror(simpleItem, simpleIndex)"
+                      >
+                        fx
+                      </div>
+                      <custom-codemirror
+                        :ref="'customCodemirrors' + simpleIndex"
+                        @ok="
+                          (val) => {
+                            $set(data.simpleCondition[showKey], 'customCode', val)
+                            $forceUpdate()
+                          }
+                        "
+                      />
+                    </a-row>
+                  </a-col>
+                  <template v-else>
+                    <a-col v-if="simpleItem.fieldUser === 'notSet'" flex="auto"></a-col>
+                    <a-col v-if="simpleItem.fieldUser === 'field'" :span="4">
+                      <a-select
+                        v-if="simpleItem.fieldUser === 'field'"
+                        v-model="simpleItem.field"
+                        size="small"
+                        show-search
+                        :allowClear="true"
+                        option-filter-prop="children"
+                        @change="
+                          (value) => {
+                            simpleItem.condition = [
+                              {
+                                include: '',
+                                value: ''
+                              }
+                            ]
+                            fieldArr.forEach((item1) => {
+                              if (item1.alias === value) {
+                                item1.settings = JSON.parse(item1.setting)
+                                // 判断是否有数据字典
+                                simpleItem.src = item1.settings.form.src ? item1.settings.form.src : ''
+                                simpleItem.formType = item1.formType
+                                simpleItem.fieldId = item1.fieldId
+                                simpleItem.fieldType = item1.fieldType
+                                if (simpleItem.src && item1.formType === 'treeselect') {
+                                  getTreeOption(simpleItem, item1)
+                                } else if (simpleItem.src) {
+                                  getOption(simpleItem)
+                                } else if (item1.formType === 'treeselect') {
+                                  simpleItem.dataSource = item1.settings.attribute.dataSource
+                                  getTreeOption(simpleItem, item1)
+                                } else {
+                                  simpleItem.option = []
+                                }
+                                simpleItem.form = item1.settings.form
+                                // 根据字段，给出相应条件
+                                if (['text', 'textarea', 'serialnumber'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.conditionArr = [
+                                    { enName: 'eq', cnName: '等于' },
+                                    { enName: 'ne', cnName: '不等于' },
+                                    { enName: 'cn', cnName: '包含' },
+                                    { enName: 'nc', cnName: '不包含' },
+                                    { enName: 'bw', cnName: '开始于' },
+                                    { enName: 'ew', cnName: '结束于' },
+                                    { enName: 'em', cnName: '为空' },
+                                    { enName: 'nem', cnName: '不为空' }
+                                  ]
+                                } else if (['radio', 'switch', 'checkbox', 'combobox'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.conditionArr = [
+                                    { enName: 'eq', cnName: '等于' },
+                                    { enName: 'ne', cnName: '不等于' },
+                                    { enName: 'em', cnName: '为空' },
+                                    { enName: 'nem', cnName: '不为空' }
+                                  ]
+                                } else if (['number', 'datetime'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.conditionArr = [
+                                    { enName: 'eq', cnName: '等于' },
+                                    { enName: 'ne', cnName: '不等于' },
+                                    { enName: 'gt', cnName: '大于' },
+                                    { enName: 'ge', cnName: '大于等于' },
+                                    { enName: 'lt', cnName: '小于' },
+                                    { enName: 'le', cnName: '小于等于' },
+                                    { enName: 'em', cnName: '为空' },
+                                    { enName: 'nem', cnName: '不为空' }
+                                  ]
+                                } else if (['associated'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.conditionArr = [
+                                    { enName: 'eq', cnName: '等于' },
+                                    { enName: 'ne', cnName: '不等于' },
+                                    { enName: 'cn', cnName: '包含' },
+                                    { enName: 'nc', cnName: '不包含' },
+                                    { enName: 'bw', cnName: '开始于' },
+                                    { enName: 'ew', cnName: '结束于' },
+                                    { enName: 'em', cnName: '为空' },
+                                    { enName: 'nem', cnName: '不为空' }
+                                  ]
+                                } else if (
+                                  ['address', 'treeselect', 'tag', 'organization'].indexOf(item1.formType) !== -1
+                                ) {
+                                  simpleItem.conditionArr = [
+                                    { enName: 'cn', cnName: '包含' },
+                                    { enName: 'nc', cnName: '不包含' },
+                                    { enName: 'em', cnName: '为空' },
+                                    { enName: 'nem', cnName: '不为空' }
+                                  ]
+                                } else if (['cascader'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.conditionArr = [
+                                    { enName: 'eq', cnName: '等于' },
+                                    { enName: 'ne', cnName: '不等于' },
+                                    { enName: 'cn', cnName: '包含' },
+                                    { enName: 'nc', cnName: '不包含' },
+                                    { enName: 'em', cnName: '为空' },
+                                    { enName: 'nem', cnName: '不为空' }
+                                  ]
+                                }
+                              }
+                            })
+                          }
+                        "
+                      >
+                        <a-select-option
+                          v-for="(fieldItem, fieldIndex) in fieldArr"
+                          :key="fieldIndex"
+                          :value="fieldItem.alias"
+                        >
+                          {{ fieldItem.name }}
+                        </a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col v-if="!['field', 'way'].includes(simpleItem.fieldUser)" :span="4" style="text-align: center">
+                      <a-select
+                        v-model="simpleItem.include"
+                        size="small"
+                        @change="
+                          (e) => {
+                            $forceUpdate()
+                          }
+                        "
+                      >
+                        <a-select-option value="bl">属于</a-select-option>
+                        <a-select-option value="nbl">不属于</a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col v-if="['way'].includes(simpleItem.fieldUser)" :span="4" style="text-align: center">
+                      <!-- 等于 -->
+                      <a-select
+                        v-model="simpleItem.include"
+                        size="small"
+                        @change="
+                          (e) => {
+                            $forceUpdate()
+                          }
+                        "
+                      >
+                        <a-select-option value="bl">属于</a-select-option>
+                        <a-select-option value="nbl">不属于</a-select-option>
+                      </a-select>
+                    </a-col>
+                    <template
+                      v-if="!['way', 'currentUser', 'currentClass', 'currentRole'].includes(simpleItem.fieldUser)"
+                    >
+                      <a-col :span="11" style="border: 1px solid #e8e8e8; margin-bottom: 4px">
+                        <a-row
+                          v-for="(includeItem, includeIndex) in simpleItem.condition"
+                          :key="includeIndex"
+                          type="flex"
+                          align="middle"
+                          :gutter="10"
+                        >
+                          <a-col v-if="simpleItem.fieldUser === 'field'" :span="6">
+                            <a-select
+                              v-model="includeItem.include"
+                              size="small"
+                              :dropdownMatchSelectWidth="false"
+                              @change="
+                                (value) => {
+                                  choiceInclude(value, includeItem)
+                                }
+                              "
+                            >
+                              <a-select-option
+                                v-for="(crItem, crIndex) in simpleItem.conditionArr"
+                                :key="crIndex"
+                                option-filter-prop="children"
+                                :value="crItem.enName"
+                              >
+                                {{ crItem.cnName }}
+                              </a-select-option>
+                            </a-select>
+                          </a-col>
+                          <a-col v-if="simpleItem.fieldUser === 'field'" :span="14">
+                            <template v-if="!includeItem.type">
+                              <!-- 日期 -->
+                              <a-date-picker
+                                v-if="simpleItem.formType === 'datetime' && simpleItem.fieldType === 'DATETIME'"
+                                size="small"
+                                style="width: 100%"
+                                :defaultValue="
+                                  includeItem.value ? moment(includeItem.value, 'YYYY-MM-DD HH:mm:ss') : null
+                                "
+                                format="YYYY-MM-DD HH:mm:ss"
+                                @change="
+                                  (dates, dateStrings) => {
+                                    includeItem.value = dateStrings
+                                  }
+                                "
+                              ></a-date-picker>
+                              <a-date-picker
+                                v-else-if="simpleItem.formType === 'datetime' && simpleItem.fieldType === 'DATE'"
+                                size="small"
+                                style="width: 100%"
+                                :defaultValue="includeItem.value ? moment(includeItem.value, 'YYYY-MM-DD') : null"
+                                format="YYYY-MM-DD"
+                                @change="
+                                  (dates, dateStrings) => {
+                                    includeItem.value = dateStrings
+                                  }
+                                "
+                              ></a-date-picker>
+                              <a-time-picker
+                                v-else-if="simpleItem.formType === 'datetime' && simpleItem.fieldType === 'TIME'"
+                                size="small"
+                                style="width: 100%"
+                                :defaultValue="includeItem.value ? moment(includeItem.value, 'HH:mm:ss') : null"
+                                format="HH:mm:ss"
+                                @change="
+                                  (dates, dateStrings) => {
+                                    includeItem.value = dateStrings
+                                  }
+                                "
+                              ></a-time-picker>
+                              <!-- 树选择 -->
+                              <div v-else-if="simpleItem.formType === 'treeselect'">
+                                <data-picker
+                                  ref="dataPicker"
+                                  :name="simpleItem.alias + simpleIndex"
+                                  size="small"
+                                  :parentId="
+                                    simpleItem.dataSource === 'addressBook' ? 'parentNumber' : 'parentDictDataNumber'
+                                  "
+                                  :parameter="
+                                    simpleItem.dataSource === 'addressBook'
+                                      ? {}
+                                      : { dictCategoryNumber: simpleItem.src, filterDisabled: true }
+                                  "
+                                  displayType="tree"
+                                  :url="
+                                    simpleItem.dataSource === 'addressBook'
+                                      ? '/admin/address/getAddressChildren'
+                                      : '/admin/dict/initData'
+                                  "
+                                  :searchUrl="
+                                    simpleItem.dataSource === 'addressBook'
+                                      ? '/admin/search/addressSearch'
+                                      : '/admin/search/dictSearch'
+                                  "
+                                  :scope="scope"
+                                  :value="includeItem.option"
+                                  :optionsConversion="
+                                    (list, displayType, searchType) =>
+                                      optionsConversionTreeselect(simpleItem, list, displayType, searchType)
+                                  "
+                                  @select="
+                                    (data, options) => {
+                                      includeItem.value = data
+                                      includeItem.optionCustom = options
+                                    }
+                                  "
+                                />
+                              </div>
+                              <!-- 地址 -->
+                              <div v-else-if="simpleItem.formType === 'address'">
+                                <address-select
+                                  size="small"
+                                  :defaultValue="includeItem.value"
+                                  fieldType="field"
+                                  :series="simpleItem.form.show_series"
+                                  @send="
+                                    (display, val, alias, allValue) => {
+                                      includeItem.value = val
+                                      includeItem.allValue = allValue
+                                    }
+                                  "
+                                />
+                              </div>
+                              <!-- 标签 -->
+                              <a-cascader
+                                v-else-if="simpleItem.formType === 'tag'"
+                                v-model="includeItem.value"
+                                size="small"
+                                style="width: 100%"
+                                :options="tagOption"
+                                :placeholder="$t('请选择')"
+                              />
+                              <!-- 组织结构  用户、角色、部门 -->
+                              <template v-else-if="simpleItem.formType === 'organization'">
+                                <template v-if="simpleItem.form && simpleItem.form.optionType === 'user'">
+                                  <data-picker
+                                    :placeholder="$t('请选择用户')"
+                                    :name="'user' + simpleItem.field + simpleIndex + includeIndex"
+                                    displayType="list"
+                                    size="small"
+                                    url="/admin/search/userSearch"
+                                    searchUrl="/admin/search/userSearch"
+                                    :value="includeItem.optionArr"
+                                    :scope="scope"
+                                    :parameter="{ sortField: 'username' }"
+                                    :optionsConversion="
+                                      (list, displayType, searchType) => {
+                                        return list.map((item) => {
+                                          const obj = item
+                                          obj.key = item.username
+                                          obj.label = `${item.username}(${item.realName})`
+                                          return obj
+                                        })
+                                      }
+                                    "
+                                    @select="
+                                      (data, options) => {
+                                        includeItem.value = data
+                                        $set(includeItem, 'options', options)
+                                      }
+                                    "
+                                  />
+                                </template>
+                                <template v-else-if="simpleItem.form && simpleItem.form.optionType === 'department'">
+                                  <data-picker
+                                    :placeholder="$t('请选择部门')"
+                                    :name="'department' + simpleItem.field + simpleIndex + includeIndex"
+                                    parentId="parentDepartmentId"
+                                    displayType="tree"
+                                    size="small"
+                                    url="/admin/department/init"
+                                    searchUrl="/admin/search/departmentSearch"
+                                    :value="includeItem.optionArr"
+                                    :scope="scope"
+                                    :optionsConversion="
+                                      (list, displayType, searchType) => {
+                                        if (searchType) {
+                                          return list.map((item) => {
+                                            const obj = item
+                                            obj.key = item.departmentId
+                                            obj.label = item.fullDepartmentName
+                                            return obj
+                                          })
+                                        } else {
+                                          return list.map((item) => {
+                                            const obj = item
+                                            obj.key = item.departmentId
+                                            obj.label = item.departmentName
+                                            return obj
+                                          })
+                                        }
+                                      }
+                                    "
+                                    @select="
+                                      (data, options) => {
+                                        includeItem.value = data
+                                        $set(includeItem, 'options', options)
+                                      }
+                                    "
+                                  />
+                                </template>
+                                <template v-else-if="simpleItem.form && simpleItem.form.optionType === 'role'">
+                                  <data-picker
+                                    :placeholder="$t('请选择角色')"
+                                    :name="'role' + simpleItem.field + simpleIndex + includeIndex"
+                                    displayType="list"
+                                    size="small"
+                                    url="/admin/search/roleSearch"
+                                    searchUrl="/admin/search/roleSearch"
+                                    :value="includeItem.optionArr"
+                                    :scope="scope"
+                                    :optionsConversion="
+                                      (list, displayType, searchType) => {
+                                        return list.map((item) => {
+                                          const obj = item
+                                          obj.key = item.roleId
+                                          obj.label = item.roleName
+                                          return obj
+                                        })
+                                      }
+                                    "
+                                    @select="
+                                      (data, options) => {
+                                        includeItem.value = data
+                                        $set(includeItem, 'options', options)
+                                      }
+                                    "
+                                  />
+                                </template>
+                              </template>
+                              <a-input
+                                v-else-if="!simpleItem.src"
+                                v-model="includeItem.value"
+                                size="small"
+                                :disabled="includeItem.include === 'em'"
+                              />
+                              <a-select
+                                v-else-if="
+                                  simpleItem.formType === 'combobox' && simpleItem.option && simpleItem.option.length
+                                "
+                                size="small"
+                                :placeholder="$t('请选择')"
+                                :defaultValue="includeItem.value ? includeItem.value : undefined"
+                                changeOnSelect
+                                @change="
+                                  (value) => {
+                                    includeItem.value = value
+                                  }
+                                "
+                              >
+                                <a-select-option
+                                  v-for="(fieldItem, fieldKey) in simpleItem.option"
+                                  :key="fieldKey"
+                                  :value="fieldItem.value"
+                                >
+                                  {{ fieldItem.label }}
+                                </a-select-option>
+                              </a-select>
+                              <!-- 级联选择 -->
+                              <div v-else-if="simpleItem.formType === 'cascader'">
+                                <tabs-select
+                                  :defaultValue="includeItem.value"
+                                  :valueKey="simpleItem.form.src || ''"
+                                  action="edit"
+                                  size="small"
+                                  :display="includeItem.display"
+                                  :field="includeItem"
+                                  :writeBack="simpleItem.form.writeBack"
+                                  fieldType="search"
+                                  @send="
+                                    (val, alias, display, status, allValue) => {
+                                      includeItem.value = val
+                                      includeItem.display = display
+                                      includeItem.allValue = allValue
+                                    }
+                                  "
+                                />
+                              </div>
+                              <a-select
+                                v-else
+                                placeholder="请选择"
+                                :defaultValue="includeItem.value ? includeItem.value : []"
+                                @change="
+                                  (value) => {
+                                    includeItem.value = value
+                                  }
+                                "
+                              >
+                                <a-select-option
+                                  v-for="(optItem, optIndex) in simpleItem.option"
+                                  :key="optIndex"
+                                  :value="optItem.value"
+                                >
+                                  {{ optItem.label }}
+                                </a-select-option>
+                              </a-select>
+                            </template>
+                            <template v-else>
+                              <a-input type="text" disabled size="small" />
+                            </template>
+                          </a-col>
+                          <a-col :span="4" style="padding-top: 8px">
+                            <a-icon
+                              :style="{ fontSize: '24px', color: '#52c41a' }"
+                              type="plus-square"
+                              theme="filled"
+                              @click="
+                                simpleItem.fieldUser === 'field'
+                                  ? simpleItem.condition.push({ include: '', value: '' })
+                                  : simpleItem.condition.push({ include: '', value: [] })
+                              "
+                            />
+                            <a-icon
+                              :style="{
+                                fontSize: '24px',
+                                color: simpleItem.condition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                                'padding-left': '5px'
+                              }"
+                              type="minus-square"
+                              theme="filled"
+                              @click="deleteCondition(simpleIndex, includeIndex)"
+                            />
+                          </a-col>
+                        </a-row>
+                      </a-col>
+                      <a-col :span="3">
+                        <a-select v-model="simpleItem.logic" style="width: 80px; margin-left: 15px" size="small">
+                          <a-select-option value="and">且(and)</a-select-option>
+                          <a-select-option value="or">或(or)</a-select-option>
+                        </a-select>
+                      </a-col>
+                    </template>
+                    <a-col v-else-if="['way'].includes(simpleItem.fieldUser)" :span="14">
+                      <a-select v-model="simpleItem.value" size="small" mode="multiple" @change="$forceUpdate()">
+                        <a-select-option
+                          v-for="(wayItem, wayIndex) in handleData"
+                          :key="wayIndex"
+                          :value="wayItem.alias"
+                        >
+                          {{ wayItem.way }}
+                        </a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col v-else-if="simpleItem.fieldUser === 'currentUser'" :span="14" style="padding-right: 14px">
+                      <data-picker
+                        :placeholder="$t('请选择用户')"
+                        :name="'user' + simpleIndex"
+                        displayType="list"
+                        size="small"
+                        url="/admin/search/userSearch"
+                        searchUrl="/admin/search/userSearch"
+                        :value="simpleItem.options"
+                        :scope="scope"
+                        :multiple="true"
+                        :parameter="{ sortField: 'username' }"
+                        :optionsConversion="
+                          (list, displayType, searchType) => {
+                            return list.map((item) => {
+                              const obj = item
+                              obj.key = item.username
+                              obj.label = `${item.username}(${item.realName})`
+                              return obj
+                            })
+                          }
+                        "
+                        @select="
+                          (data, options) => {
+                            simpleItem.value = data
+                            $set(simpleItem, 'options', options)
+                          }
+                        "
+                      />
+                    </a-col>
+                    <a-col v-else-if="simpleItem.fieldUser === 'currentClass'" :span="14" style="padding-right: 14px">
+                      <data-picker
+                        :placeholder="$t('请选择部门')"
+                        :name="'department' + simpleIndex"
+                        parentId="parentDepartmentId"
+                        displayType="tree"
+                        size="small"
+                        :multiple="true"
+                        url="/admin/department/init"
+                        searchUrl="/admin/search/departmentSearch"
+                        :value="simpleItem.options"
+                        :scope="scope"
+                        :optionsConversion="
+                          (list, displayType, searchType) => {
+                            if (searchType) {
+                              return list.map((item) => {
+                                const obj = item
+                                obj.key = item.departmentId
+                                obj.label = item.fullDepartmentName
+                                return obj
+                              })
+                            } else {
+                              return list.map((item) => {
+                                const obj = item
+                                obj.key = item.departmentId
+                                obj.label = item.departmentName
+                                return obj
+                              })
+                            }
+                          }
+                        "
+                        @select="
+                          (data, options) => {
+                            simpleItem.value = data
+                            $set(simpleItem, 'options', options)
+                          }
+                        "
+                      />
+                    </a-col>
+                    <a-col v-else-if="simpleItem.fieldUser === 'currentRole'" :span="14" style="padding-right: 14px">
+                      <data-picker
+                        :placeholder="$t('请选择角色')"
+                        :name="'role' + simpleIndex"
+                        displayType="list"
+                        size="small"
+                        :multiple="true"
+                        url="/admin/search/roleSearch"
+                        searchUrl="/admin/search/roleSearch"
+                        :value="simpleItem.options"
+                        :scope="scope"
+                        :optionsConversion="
+                          (list, displayType, searchType) => {
+                            return list.map((item) => {
+                              const obj = item
+                              obj.key = item.roleId
+                              obj.label = item.roleName
+                              return obj
+                            })
+                          }
+                        "
+                        @select="
+                          (data, options) => {
+                            simpleItem.value = data
+                            $set(simpleItem, 'options', options)
+                          }
+                        "
+                      />
+                    </a-col>
+                  </template>
+                  <a-col :span="2" style="display: flex; align-items: center; justify-content: center">
+                    <a-icon
+                      :style="{ fontSize: '24px', color: '#52c41a' }"
+                      type="plus-square"
+                      theme="filled"
+                      @click="
+                        data.simpleCondition.push({
+                          fieldUser: 'way',
+                          selectUser: '',
+                          src: '',
+                          condition: [
+                            {
+                              include: '',
+                              value: ''
+                            }
+                          ],
+                          logic: 'and'
+                        })
+                      "
+                    />
+                    <a-icon
+                      :style="{ fontSize: '24px', color: '#ff4d4f', 'padding-left': '5px' }"
+                      type="minus-square"
+                      theme="filled"
+                      @click="deleteSimpleCondition(simpleIndex)"
+                    />
+                  </a-col>
+                </a-row>
+              </a-col>
+              <a-col :span="2">
+                <a-select v-if="data.simpleCondition.length" v-model="data.logic" style="width: 80px" size="small">
+                  <a-select-option value="and">且(and)</a-select-option>
+                  <a-select-option value="or">或(or)</a-select-option>
+                </a-select>
+              </a-col>
+            </a-row>
+          </a-form-item>
+        </div>
+      </a-form>
+    </a-spin>
+  </div>
+</template>
+<script>
+export default {
+  components: {
+    QuerierCodemirrorInput: () => import('@/views/admin/Table/QuerierCodemirrorInput'),
+    CustomCodemirror: () => import('@/views/admin/Flow/modules/CustomCodemirror'),
+    AddressSelect: () => import('@/views/admin/Field/AddressSelect'),
+    TabsSelect: () => import('@/views/admin/Field/TabsSelect')
+  },
+  props: {
+    myCondition: {
+      type: Object,
+      default: () => { }
+    },
+    thisTableField: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      tableFieldsList: [],
+      labelCol: { span: 3 },
+      wrapperCol: { span: 4 },
+      tableId: '',
+      form: this.$form.createForm(this),
+      data: {
+        logic: 'and',
+        simpleCondition: []
+      },
+      fieldArr: [], // 所有字段的所有信息,用来获取数据字典
+      // 办理方式数据
+      handleData: [],
+      showKey: null,
+      // 模块以及对应模块下的表
+      tableFields: [],
+      scope: this
+    }
+  },
+  watch: {
+    thisTableField (val) {
+      // 字段列表的处理
+      this.fieldArr = val.filter(item => {
+        return ['text', 'textarea', 'radio', 'switch', 'checkbox', 'combobox', 'number', 'datetime', 'cascader', 'associated', 'address', 'treeselect', 'serialnumber', 'tag', 'score', 'organization'].indexOf(item.formType) !== -1
+      })
+      // 遍历规则
+      this.data.simpleCondition.forEach((simpleItem, simpleIndex) => {
+        if (!simpleItem.field && simpleItem.fieldUser !== 'ruleTable') {
+          simpleItem.conditionArr = [{ enName: 'eq', cnName: '等于' }]
+        } else {
+          this.fieldArr.forEach((fieldItem, fieldIndex) => {
+            if (simpleItem.field === fieldItem.alias) {
+              fieldItem.settings = JSON.parse(fieldItem.setting)
+              simpleItem.src = fieldItem.settings.form.src ? fieldItem.settings.form.src : ''
+              simpleItem.formType = fieldItem.formType
+              simpleItem.fieldId = fieldItem.fieldId
+              if (simpleItem.src && fieldItem.formType === 'treeselect') {
+                this.getTreeOption(simpleItem, fieldItem)
+              } else if (simpleItem.src) {
+                this.getOption(simpleItem)
+              } else if (fieldItem.formType === 'treeselect') {
+                simpleItem.dataSource = fieldItem.settings.attribute.dataSource
+                this.getTreeOption(simpleItem, fieldItem)
+              } else {
+                simpleItem.option = []
+              }
+              // 根据字段，给出相应条件
+              this.getConditionArr(fieldItem, simpleItem)
+            }
+          })
+        }
+        const setForm = this.fieldArr.filter(fieldItem => fieldItem.alias === simpleItem.field)
+        if (setForm.length > 0) {
+          simpleItem.form = setForm[0].settings.form
+        }
+      })
+    }
+  },
+  mounted () {
+    this.show()
+  },
+  methods: {
+    show () {
+      if (this.myCondition.currentSelect && this.myCondition.currentSelect.arcCondition && this.myCondition.currentSelect.arcCondition.simpleCondition) {
+        this.data = this.myCondition.currentSelect.arcCondition
+      }
+      this.tableId = this.myCondition.tableId
+      this.data.simpleCondition = this.data.simpleCondition || []
+      this.data.simpleCondition.forEach(item1 => {
+        if (item1.condition && item1.condition.length > 0) {
+          item1.condition.forEach(item2 => {
+            if (item2.options) {
+              item2.optionArr = item2.options
+            }
+          })
+        }
+        if (item1.fieldUser === 'ruleTable' && this.data.simpleCondition.indexOf(item1.fieldUser) === -1) {
+          this.axios({
+            url: '/admin/field/add',
+            data: Object.assign({ tableId: this.myCondition.tableId, parentNumber: [], fieldId: 0 })
+          }).then(res => {
+            this.tableFieldsList = res.result.tableField
+          })
+        }
+        if (item1.fieldUser === 'ruleTable') {
+          this.tableFieldsChange(item1.targetTable, item1, 'init')
+        }
+      })
+      this.getHandleData()
+    },
+    getConditionArr (fieldItem, simpleItem) {
+      if (['text', 'textarea', 'serialnumber'].indexOf(fieldItem.formType) !== -1) {
+        simpleItem.conditionArr = [
+          { enName: 'eq', cnName: '等于' },
+          { enName: 'ne', cnName: '不等于' },
+          { enName: 'cn', cnName: '包含' },
+          { enName: 'nc', cnName: '不包含' },
+          { enName: 'bw', cnName: '开始于' },
+          { enName: 'ew', cnName: '结束于' },
+          { enName: 'em', cnName: '为空' },
+          { enName: 'nem', cnName: '不为空' }]
+      } else if (['radio', 'switch', 'combobox', 'score'].indexOf(fieldItem.formType) !== -1) {
+        simpleItem.conditionArr = [
+          { enName: 'eq', cnName: '等于' },
+          { enName: 'ne', cnName: '不等于' },
+          { enName: 'em', cnName: '为空' },
+          { enName: 'nem', cnName: '不为空' }]
+      } else if (['number', 'datetime'].indexOf(fieldItem.formType) !== -1) {
+        simpleItem.conditionArr = [
+          { enName: 'eq', cnName: '等于' },
+          { enName: 'ne', cnName: '不等于' },
+          { enName: 'gt', cnName: '大于' },
+          { enName: 'ge', cnName: '大于等于' },
+          { enName: 'lt', cnName: '小于' },
+          { enName: 'le', cnName: '小于等于' },
+          { enName: 'em', cnName: '为空' },
+          { enName: 'nem', cnName: '不为空' }]
+      } else if (['address', 'treeselect', 'tag', 'organization'].indexOf(fieldItem.formType) !== -1) {
+        simpleItem.conditionArr = [
+          { enName: 'cn', cnName: '包含' },
+          { enName: 'nc', cnName: '不包含' },
+          { enName: 'em', cnName: '为空' },
+          { enName: 'nem', cnName: '不为空' }]
+      } else if (['cascader', 'checkbox'].indexOf(fieldItem.formType) !== -1) {
+        simpleItem.conditionArr = [
+          { enName: 'eq', cnName: '等于' },
+          { enName: 'ne', cnName: '不等于' },
+          { enName: 'cn', cnName: '包含' },
+          { enName: 'nc', cnName: '不包含' },
+          { enName: 'em', cnName: '为空' },
+          { enName: 'nem', cnName: '不为空' }]
+      }
+      this.$forceUpdate()
+    },
+    getRuleTable (simpleItem) {
+      if (this.tableFieldsList.length === 0) {
+        this.axios({
+          url: '/admin/field/add',
+          data: Object.assign({ tableId: this.myCondition.tableId, parentNumber: [], fieldId: 0 })
+        }).then(res => {
+          this.tableFieldsList = res.result.tableField
+        })
+      }
+    },
+    tableFieldsChange (e, item, type) {
+      const tableId = e[e.length - 1]
+      this.axios({
+        url: '/admin/field/init',
+        data: {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'ascend',
+          tableId: tableId
+        }
+      }).then(res => {
+        this.$set(item, 'ruleFieldList', res.result.data)
+        if (type === 'click') {
+          item.condition.forEach(sitem => {
+            sitem.ruleAlias = undefined
+            sitem.include = undefined
+            sitem.setType = 'field' // 本表字段、自定义
+            sitem.type = undefined // 判断比较方式显示条件
+            sitem.conditionArr = []
+          })
+          item.judgeRuleAlias = undefined
+          item.judgeInclude = undefined
+        }
+        if (type === 'init') {
+          // 显示比较方式列表
+          if (item.fieldUser === 'ruleTable') {
+            item.condition.forEach(simpleItem => {
+              item.ruleFieldList.forEach(fieldItem => {
+                if (simpleItem.ruleAlias === fieldItem.alias) {
+                  // 规则表查表条件 比较方式列表
+                  this.getConditionArr(fieldItem, simpleItem)
+                }
+                if (item.judgeRuleAlias === fieldItem.alias) {
+                  // 规则表判断方式 比较方式列表
+                  this.getConditionArr(fieldItem, item)
+                }
+              })
+            })
+          }
+        }
+        this.$forceUpdate()
+      })
+    },
+    // 获取办理方式
+    getHandleData () {
+      if (this.myCondition.flowData && this.myCondition.currentSelect && this.myCondition.currentSelect.type === 'link') {
+        const currentSelect = this.myCondition.currentSelect
+        if (currentSelect.source.type === 'user_transition') {
+          this.axios({
+            url: '/admin/workflow/getNode',
+            data: {
+              workflowId: this.myCondition.workflowId,
+              nodeId: currentSelect.source.id
+            }
+          }).then(res => {
+            if (!res.code) {
+              const setting = res.result.nodeSetting
+              this.handleData = setting.handleMethods
+            }
+          })
+        } else if (currentSelect.source.type.indexOf('gateway') > -1) {
+          for (const item of currentSelect.all) {
+            if (item.target?.id === currentSelect.source.id) {
+              this.axios({
+                url: '/admin/workflow/getNode',
+                data: {
+                  workflowId: this.myCondition.workflowId,
+                  nodeId: item.source.id
+                }
+              }).then(res => {
+                if (!res.code) {
+                  const setting = res.result.nodeSetting
+                  this.handleData = setting.handleMethods
+                }
+              })
+            }
+          }
+        }
+      }
+    },
+    // 选择关系
+    choiceInclude (value, includeItem) {
+      includeItem.value = undefined
+    },
+    deleteCondition (simpleIndex, includeIndex) {
+      if (this.data.simpleCondition[simpleIndex].condition.length === 1) {
+        return false
+      } else {
+        this.data.simpleCondition[simpleIndex].condition.splice(includeIndex, 1)
+        this.data = JSON.parse(JSON.stringify(this.data))
+      }
+    },
+    deleteSimpleCondition (simpleIndex) {
+      this.data.simpleCondition.splice(simpleIndex, 1)
+      this.data = JSON.parse(JSON.stringify(this.data))
+    },
+    getOption (item) {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: { dictCategoryNumber: item.src }
+      }).then(res => {
+        this.$set(item, 'option', res.result)
+      })
+    },
+    getTreeOption (simpleItem, item) {
+      this.axios({
+        url: '/admin/UserTable/getFieldForm',
+        data: { fieldId: item.fieldId, value: simpleItem.value }
+      }).then(res => {
+        this.$set(simpleItem, 'option', res.result.option)
+      })
+    },
+    addData () {
+      var arr = {
+        fieldUser: 'way',
+        selectUser: '',
+        src: '',
+        condition: [{
+          include: '',
+          value: ''
+        }],
+        logic: 'and'
+      }
+      this.data.simpleCondition.push(arr)
+    },
+    // 显示公式编辑器
+    handleCodemirror (item, index) {
+      this.showKey = index
+      this.$refs['customCodemirrors' + index][0].show(Object.assign({
+        title: '公式编辑器',
+        item: item,
+        index: index
+      }, this.myCondition))
+    },
+    // 关闭抽屉
+    onClose () {
+      this.visible = false
+    }
+  }
+}
+</script>

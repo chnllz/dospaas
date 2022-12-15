@@ -1,0 +1,354 @@
+<template>
+  <div class="main">
+    <a-form ref="formLogin" :form="form">
+      <a-form-item>
+        <a-input
+          v-decorator="['username', { rules: [{ required: true, message: $t('请输入账号') }] }]"
+          size="large"
+          :placeholder="$t('请输入账号')"
+        >
+          <a-icon slot="prefix" type="user" :style="{ color: 'rgba(0,0,0,.25)' }" />
+        </a-input>
+      </a-form-item>
+      <a-form-item>
+        <a-input-password
+          v-decorator="[
+            'password',
+            { rules: [{ required: true, message: $t('请输入密码') }], validateTrigger: 'blur' }
+          ]"
+          size="large"
+          autocomplete="false"
+          :placeholder="$t('请输入密码')"
+        >
+          <a-icon slot="prefix" type="lock" :style="{ color: 'rgba(0,0,0,.25)' }" />
+        </a-input-password>
+      </a-form-item>
+      <a-row v-if="setting.enableCaptcha === 'sms'" type="flex" justify="space-between">
+        <a-col :span="11">
+          <a-form-item>
+            <a-input
+              v-decorator="[
+                'code',
+                {
+                  rules: [{ required: true, message: $t('请输入验证码') }, { validator: checkCode }],
+                  validateTrigger: 'change'
+                }
+              ]"
+              size="large"
+              :placeholder="$t('请输入验证码')"
+            ></a-input>
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-button
+            size="large"
+            style="width: 100%"
+            type="primary"
+            :disabled="!!countDownTimer"
+            @click="getValidateCode"
+          >
+            {{ $t('获取手机验证码') }}
+            <span v-if="countDownTimer">({{ countDown }})</span>
+          </a-button>
+        </a-col>
+      </a-row>
+      <a-form-item v-if="setting.serviceStatusEnable">
+        <a-tree-select
+          v-if="treeShow"
+          v-decorator="[
+            'status',
+            { initialValue: 1, rules: [{ required: true, message: $t('请选择在线客服的状态') }] }
+          ]"
+          :placeholder="$t('请选择在线客服的状态')"
+          size="large"
+          :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+          :tree-data="chatFurtherStates"
+        />
+        <a-select
+          v-else
+          v-decorator="[
+            'status',
+            { initialValue: 1, rules: [{ required: true, message: $t('请选择在线客服的状态') }] }
+          ]"
+          size="large"
+          :placeholder="$t('请选择在线客服的状态')"
+        >
+          <a-select-option v-for="status in chatFurtherStates" :key="status.value">{{ status.label }}</a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item v-if="setting.enableCaptcha === 'image'">
+        <a-row type="flex">
+          <a-col flex="auto">
+            <a-input
+              v-decorator="['code', { rules: [{ required: true, message: $t('请输入验证码') }] }]"
+              size="large"
+              :placeholder="$t('请输入验证码')"
+            />
+          </a-col>
+          <a-col flex="80px" style="margin-left: 8px">
+            <img
+              :title="$t('换一张')"
+              style="width: 80px; height: auto; cursor: pointer"
+              :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/index/api/captchaImage?uuid=${uuid}&key=${nowTime}`"
+              alt=""
+              @click="getCodeImg"
+            />
+          </a-col>
+        </a-row>
+      </a-form-item>
+      <a-form-item>
+        <a-checkbox
+          v-decorator="['rememberMe', { initialValue: rememberMe, valuePropName: 'checked' }]"
+          style="color: white"
+          @change="rememberMeChange"
+        >
+          {{ $t('自动登录') }}
+        </a-checkbox>
+      </a-form-item>
+      <a-form-item style="margin-top: 24px">
+        <a-button
+          size="large"
+          :style="{ background: buttonColor, border: 'none', color: '#ffffff' }"
+          htmlType="submit"
+          class="login-button"
+          :loading="loginBtn"
+          :disabled="loginBtn"
+          @click="handleSubmit"
+        >
+          {{ $t('登录') }}
+        </a-button>
+      </a-form-item>
+      <a-form-item
+        v-if="setting.loginPlatformStatus"
+        :label="$t('其他登录方式')"
+        :labelCol="{ span: 6 }"
+        :wrapperCol="{ span: 18 }"
+        :class="setting.loginPlatformStyle"
+      >
+        <a @click="getLoginPlatform">{{ setting.loginPlatformName }}</a>
+      </a-form-item>
+    </a-form>
+  </div>
+</template>
+<script>
+import md5 from 'md5'
+import { mapActions, mapGetters } from 'vuex'
+import storage from '@/utils/storage'
+import { throttle } from 'echarts/lib/export'
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    this.getCodeImg = throttle(this.getCodeImg, 1000)
+    this.handleSubmit = throttle(this.handleSubmit, 1000)
+    return {
+      loginBtn: false,
+      form: this.$form.createForm(this),
+      buttonColor: '',
+      treeShow: false,
+      chatFurtherStates: [{
+        value: 0,
+        label: this.$t('就绪')
+      }, {
+        value: 2,
+        label: this.$t('示忙')
+      }, {
+        value: 1,
+        label: this.$t('离开')
+      }],
+      uuid: '',
+      codeImgSrc: '',
+      nowTime: '',
+      rememberMe: '',
+      countDown: 0,
+      countDownTimer: null
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  created () {
+    this.buttonColor = storage.get('DEFAULT_COLOR') || '#28beca'
+    this.rememberMe = storage.get('rememberMe')
+    this.axios({
+      url: '/admin/index/init',
+      data: {
+        language: storage.get('lang')
+      }
+    }).then(res => {
+      this.SetSetting(res.result.setting)
+      if (res.result.setting.chatFurtherStates) {
+        const list = JSON.parse(res.result.setting.chatFurtherStates)
+        this.treeShow = true
+        this.chatFurtherStates.forEach(item => {
+          if (item.value === 2) {
+            item.selectable = false
+            item.children = list.filter(filterItem => filterItem.check)
+          }
+        })
+      }
+    })
+    this.uuid = storage.get('UUID') || this.getUuid()
+    this.getCodeImg()
+  },
+  methods: {
+    ...mapActions(['Login', 'SetSetting']),
+    rememberMeChange (e) {
+      storage.set('rememberMe', e.target.checked)
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loginBtn = true
+          const loginParams = { ...values }
+          loginParams.password = md5(values.password)
+          loginParams.uuid = this.uuid
+          delete loginParams.status
+          this.Login(loginParams)
+            .then((res) => {
+              this.loginSuccess(res, values.rememberMe, values.status)
+              if (res.code) {
+                this.loginBtn = false
+                if (this.setting.enableCaptcha) {
+                  this.form.resetFields(['code'])
+                }
+                this.getCodeImg()
+              }
+            })
+            .catch(() => {
+              this.loginBtn = false
+              this.getCodeImg()
+              if (this.setting.enableCaptcha) {
+                this.form.resetFields(['code'])
+              }
+            })
+        }
+      })
+    },
+    getCodeImg () {
+      this.nowTime = new Date().valueOf()
+    },
+    // 生成唯一ID
+    getUuid (n) {
+      n = 1 // 生成一个唯一id，包含数字和字母
+      var random = function () {
+        // 生成10-12位不等的字符串
+        return Number(
+          Math.random()
+            .toString()
+            .substr(2)
+        ).toString(36) // 转换成十六进制
+      }
+      var arr = []
+      function createId () {
+        var num = random()
+        var _bool = false
+        arr.forEach(v => {
+          if (v === num) _bool = true
+        })
+        if (_bool) {
+          createId()
+        } else {
+          arr.push(num)
+        }
+      }
+      var i = 0
+      while (i < n) {
+        createId()
+        i++
+      }
+      storage.set('UUID', arr[0])
+      return arr[0] // 将生成的转为我们需要的字符串并赋值
+    },
+    loginSuccess (res, rememberMe, status) {
+      if (res.code === 0) {
+        if (status || status === 0) {
+          sessionStorage.setItem('onlineStatus', status)
+        }
+        storage.set('rememberMe', rememberMe)
+        this.$cookies.set('Login', 'true')
+        this.$router.push({ path: '/' })
+      }
+    },
+    getLoginPlatform () {
+      const { adminLoginPlatformType } = this.setting
+      this.axios({
+        url: '/admin/userBind/api/createUrl',
+        params: {
+          platform: adminLoginPlatformType,
+          redirectUri: location.origin + process.env.VUE_APP_BASE_URL
+        }
+      }).then(res => {
+        if (!res.code) {
+          location.href = res.result.result
+        } else {
+          this.$notification(res.result.message)
+        }
+      })
+    },
+    getValidateCode () {
+      this.form.validateFields(['username', 'password'], valid => {
+        if (!valid) {
+          this.countDown = 60
+          this.countDownTimer = setInterval(() => {
+            if (this.countDownTimer && this.countDown > 0) {
+              this.countDown--
+            } else {
+              clearInterval(this.countDownTimer)
+              this.countDownTimer = null
+              this.countDown = 0
+            }
+          }, 1000)
+          const data = {
+            username: this.form.getFieldValue('username'),
+            password: md5(this.form.getFieldValue('password')),
+            uuid: this.uuid
+          }
+          this.axios({
+            url: '/admin/index/api/captcha',
+            data
+          }).then(res => {
+            if (res.code) {
+              this.$message.error(res.message)
+              clearInterval(this.countDownTimer)
+              this.countDownTimer = null
+              this.countDown = 0
+            } else {
+              this.$message.info(this.$t('发送成功'))
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.main {
+  /deep/ .ant-form-explain {
+    margin-top: 0;
+  }
+  .ant-form-item {
+    margin-bottom: 24px;
+  }
+
+  label {
+    font-size: 14px;
+  }
+  button.login-button {
+    padding: 0 15px;
+    font-size: 16px;
+    height: 40px;
+    width: 100%;
+  }
+  .dark {
+    /deep/.ant-form-item-label > label {
+      color: #ffffff;
+    }
+  }
+  .light {
+    /deep/.ant-form-item-label > label {
+      color: #595959;
+    }
+  }
+}
+</style>

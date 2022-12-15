@@ -1,0 +1,316 @@
+<template>
+  <a-drawer
+    :title="$t('智能排班')"
+    :width="1200"
+    :closable="true"
+    :destroyOnClose="true"
+    :visible="visible"
+    @close="onClose"
+  >
+    <div style="padding: 10px 200px 0; height: 88px">
+      <a-steps :current="currentStep" size="small" labelPlacement="vertical">
+        <a-step :title="$t('确定话务数据')" />
+        <a-step :title="$t('确定工作日历')" />
+        <a-step :title="$t('确定排版规则')" />
+      </a-steps>
+    </div>
+    <div class="drawerWrapper">
+      <a-card v-show="currentStep === 0">
+        <a-row class="list">
+          <a-col :span="5" class="list-item">
+            {{ $t('上月日话务量(参考)') }}
+          </a-col>
+          <a-col :span="18">
+            <a-space>
+              <a-input v-model="trafficData.prevMonth" :disabled="true"></a-input>
+            </a-space>
+          </a-col>
+        </a-row>
+        <a-row class="list" style="margin-bottom: 10px">
+          <a-col :span="5" class="list-item">
+            {{ $t('手工修正') }}
+          </a-col>
+          <a-col :span="18">
+            <a-space>
+              <a-input v-model="trafficData.revise"></a-input>
+            </a-space>
+          </a-col>
+        </a-row>
+        <p class="title">
+          <tag-icon />
+          {{ $t('每天半小时话务量预测') }}
+        </p>
+        <s-table ref="table" rowKey="id" :columns="columns" :data="loadDataTable"></s-table>
+      </a-card>
+      <a-card v-show="currentStep === 1" class="calendarContent">
+        <p class="calendarTitle">{{ `${selectYear}日${selectDate}月` }}</p>
+        <a-calendar @select="selectDay">
+          <div
+            v-if="updateSchedule"
+            slot="dateCellRender"
+            slot-scope="value"
+            class="events"
+            style="list-style: none; padding: 0"
+          >
+            <a-badge :color="getListData(value).color" :text="getListData(value).description" />
+          </div>
+        </a-calendar>
+      </a-card>
+      <a-card v-show="currentStep === 2">
+        <a-row class="list">
+          <a-col :span="5" class="list-item">
+            {{ $t('客服连续工作天数不超过') }}
+          </a-col>
+          <a-col :span="18">
+            <a-space>
+              <a-input v-model="workData.workDay"></a-input>
+              {{ $t('天') }}
+            </a-space>
+          </a-col>
+        </a-row>
+        <a-row class="list">
+          <a-col :span="5" class="list-item">
+            {{ $t('客服每月最多加班') }}
+          </a-col>
+          <a-col :span="18">
+            <a-space>
+              <a-input v-model="workData.addWorkDay"></a-input>
+            </a-space>
+          </a-col>
+        </a-row>
+        <a-row class="list">
+          <a-col :span="5" class="list-item">
+            {{ $t('平均人效') }}
+          </a-col>
+          <a-col :span="18">
+            <a-space>
+              <a-input v-model="workData.avg"></a-input>
+              {{ $t('量·天') }}
+            </a-space>
+          </a-col>
+        </a-row>
+        <a-row class="list">
+          <a-col :span="5" class="list-item">
+            {{ $t('工作与休假轮替优先级') }}
+          </a-col>
+          <a-col :span="18">
+            <a-space>
+              {{ $t('工作') }}
+              <a-input v-model="workData.weekWorkDay"></a-input>
+              {{ $t('天') }}， {{ $t('休息') }}
+              <a-input v-model="workData.weekRestDay"></a-input>
+              {{ $t('天') }}
+            </a-space>
+          </a-col>
+        </a-row>
+      </a-card>
+    </div>
+    <div class="bbar">
+      <a-button v-if="currentStep != 2" type="primary" @click="currentStep++">{{ $t('下一步') }}</a-button>
+      <a-button v-if="currentStep == 2" type="primary" :loading="handleStatus" @click="handleSubmit">
+        {{ !handleStatus ? $t('完成') : $t('智能排班计算中......') }}
+      </a-button>
+      <a-button @click="onClose">{{ $t('关闭') }}</a-button>
+    </div>
+    <a-modal
+      :title="$t('设置日历')"
+      :visible="dayModelVisible"
+      @ok="setSechdule"
+      @cancel="
+        () => {
+          dayModelVisible = !dayModelVisible
+          description = null
+        }
+      "
+    >
+      <a-row class="list">
+        <a-col :span="5" class="list-item">
+          {{ $t('日期安排') }}
+        </a-col>
+        <a-col :span="18">
+          <a-space>
+            <a-select v-model="description" style="width: 120px">
+              <a-select-option :value="$t('工作日')">{{ $t('工作日') }}</a-select-option>
+              <a-select-option :value="$t('节假日')">{{ $t('节假日') }}</a-select-option>
+              <a-select-option :value="$t('周末')">{{ $t('周末') }}</a-select-option>
+              <a-select-option :value="$t('调休日')">{{ $t('调休日') }}</a-select-option>
+            </a-select>
+          </a-space>
+        </a-col>
+      </a-row>
+    </a-modal>
+  </a-drawer>
+</template>
+
+<script>
+import { calendar } from 'ant-design-vue'
+import Vue from 'vue'
+Vue.use(calendar)
+export default {
+  i18n: window.lang('crm'),
+  data () {
+    return {
+      visible: false,
+      currentStep: 0,
+      currentDate: null,
+      trafficData: {
+        prevMonth: 10023,
+        revise: null
+      },
+      workData: {
+        workDay: 6,
+        addWorkDay: 3,
+        avg: 105,
+        weekWorkDay: 5,
+        weekRestDay: 2
+      },
+      columns: [{
+        title: this.$t('时段'),
+        dataIndex: 'timePeriodOne'
+      }, {
+        title: this.$t('话务量预测'),
+        dataIndex: 'countOne'
+      }, {
+        title: this.$t('时段'),
+        dataIndex: 'timePeriodTwo'
+      }, {
+        title: this.$t('话务量预测'),
+        dataIndex: 'countTwo'
+      }, {
+        title: this.$t('时段'),
+        dataIndex: 'timePeriodThree'
+      }, {
+        title: this.$t('话务量预测'),
+        dataIndex: 'countThree'
+      }, {
+        title: this.$t('时段'),
+        dataIndex: 'timePeriodFour'
+      }, {
+        title: this.$t('话务量预测'),
+        dataIndex: 'countFour'
+      }],
+      handleStatus: false,
+      dayModelVisible: false,
+      description: null,
+      selectDate: null,
+      selectMonth: null,
+      selectYear: null,
+      dateSchedule: [],
+      updateSchedule: true
+    }
+  },
+  created () {
+    const date = new Date()
+    this.selectDate = date.getDate()
+    this.selectMonth = date.getMonth() + 1
+    this.selectYear = date.getFullYear()
+  },
+  methods: {
+    onClose () {
+      this.visible = false
+      this.currentStep = 0
+      for (const key in this.formData) {
+        this.formData[key] = null
+      }
+    },
+    loadDataTable () {
+      return this.axios({
+        url: '/crm/schedule/scheduleTable'
+      }).then(res => {
+        return res.result
+      })
+    },
+    selectDay (val) {
+      this.selectDate = val.date()
+      this.selectMonth = val.month()
+      this.selectYear = val.year()
+      this.description = this.getListData(val).description
+      this.dayModelVisible = true
+    },
+    show () {
+      this.visible = true
+    },
+    handleSubmit () {
+      this.handleStatus = true
+      setTimeout(() => {
+        this.handleStatus = false
+        this.visible = false
+        this.currentStep = 0
+        for (const key in this.formData) {
+          this.formData[key] = null
+        }
+      }, 1000)
+    },
+    setSechdule () {
+      this.dayModelVisible = false
+      if (!this.description) {
+        return
+      }
+      const key = `${this.selectYear}.${this.selectMonth}.${this.selectDate}`
+      this.dateSchedule[key] = this.description
+      this.description = null
+      this.updateSchedule = false
+      this.$nextTick(() => {
+        this.updateSchedule = true
+      })
+    },
+    getListData (val) {
+      const key = `${val.year()}.${val.month()}.${val.date()}`
+      const day = val.day()
+      let renderObj = null
+      switch (day) {
+        case 1: case 2: case 3: case 4: case 5:
+          renderObj = {
+            description: this.dateSchedule[key] || this.$t('工作日'),
+            color: '#2db7f5'
+          }
+          break
+        case 6: case 0:
+          renderObj = {
+            description: this.dateSchedule[key] || this.$t('周末'),
+            color: '#f50'
+          }
+          break
+      }
+      return renderObj
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.drawerWrapper {
+  width: 100%;
+  height: calc(100% - 140px);
+  overflow-y: auto;
+}
+
+.title {
+  font-weight: bold;
+  font-size: 15px;
+  padding-left: 20px;
+}
+
+.calendarContent {
+  position: relative;
+  .calendarTitle {
+    position: absolute;
+    font-size: 15px;
+    top: 35px;
+    left: 30px;
+    font-weight: bold;
+  }
+}
+
+.list {
+  height: 28px;
+  margin-top: 10px;
+  .list-item {
+    text-align: right;
+    margin-right: 10px;
+    height: 100%;
+    line-height: 28px;
+    overflow: hidden;
+  }
+}
+</style>

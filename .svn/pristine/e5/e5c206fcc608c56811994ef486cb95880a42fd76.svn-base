@@ -1,0 +1,441 @@
+<template>
+  <div class="knowSelectBox">
+    <a-form :form="form" style="display: flex; padding-left: 8px">
+      <a-form-item v-if="['myCreated', 'myAudited', 'dealBug'].includes(params.type)" style="padding-right: 8px">
+        <a-select
+          v-if="page === 'myKnowledge' && params.type === 'myCreated'"
+          v-model="status"
+          style="width: 120px"
+          @change="(e) => getStatus(e)"
+        >
+          <a-select-option value="5">{{ $t('全部') }}</a-select-option>
+          <a-select-option value="4">{{ $t('无需审核') }}</a-select-option>
+          <a-select-option value="1">{{ $t('待审核') }}</a-select-option>
+          <a-select-option value="3">{{ $t('审核通过') }}</a-select-option>
+          <a-select-option value="2">{{ $t('审核不通过') }}</a-select-option>
+        </a-select>
+        <a-select
+          v-else-if="params.type === 'myAudited'"
+          v-model="status"
+          style="width: 120px"
+          @change="(e) => getStatus(e)"
+        >
+          <a-select-option value="5">{{ $t('全部') }}</a-select-option>
+          <a-select-option value="4">{{ $t('无需审核') }}</a-select-option>
+          <a-select-option value="1">{{ $t('待审核') }}</a-select-option>
+          <a-select-option value="3">{{ $t('审核通过') }}</a-select-option>
+          <a-select-option value="2">{{ $t('审核不通过') }}</a-select-option>
+        </a-select>
+        <a-select
+          v-else-if="params.type === 'dealBug'"
+          v-model="status"
+          style="width: 120px"
+          @change="(e) => getStatus(e)"
+        >
+          <a-select-option value="8">{{ $t('全部') }}</a-select-option>
+          <a-select-option value="6">{{ $t('待处理') }}</a-select-option>
+          <a-select-option value="7">{{ $t('已处理') }}</a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item>
+        <a-select
+          v-if="params.type !== 'questions'"
+          default-value="1"
+          :value="theme"
+          style="width: 100px; margin-right: -1px"
+          @change="onChange"
+        >
+          <a-select-option value="1" style="width: 32px">{{ $t('全文搜索') }}</a-select-option>
+          <a-select-option value="2" style="width: 32px">{{ $t('标签搜索') }}</a-select-option>
+        </a-select>
+        <a-select
+          v-else
+          :open="false"
+          :show-arrow="false"
+          default-value="1"
+          :value="theme"
+          style="width: 100px; margin-right: -1px"
+        >
+          <a-select-option value="1" style="width: 32px">{{ $t('按标题搜索') }}</a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item v-if="theme === '1'" style="flex: 1; padding-right: 8px; margin-top: 1px">
+        <a-input
+          v-decorator="[
+            'words',
+            {
+              initialValue: words || '',
+              rules: [
+                { required: true, message: $t('请输入搜索内容') },
+                { min: 2, message: $t('请输入至少两个字') }
+              ]
+            }
+          ]"
+          allowClear
+          :placeholder="params.type !== 'questions' ? $t('请输入搜索内容，至少输入2个字') : $t('请输入标题搜索')"
+          @pressEnter="search"
+        />
+      </a-form-item>
+      <a-form-item v-else style="flex: 1; padding-right: 8px; margin-top: 1px">
+        <a-select
+          v-model="tagValue"
+          show-search
+          :placeholder="$t('请输入搜索内容')"
+          :default-active-first-option="false"
+          :show-arrow="false"
+          :filter-option="false"
+          allowClear
+          :not-found-content="null"
+          @search="handleSearch"
+          @change="handleChange"
+        >
+          <a-select-option v-for="(item, index) in data" :key="index" :value="item.label">
+            {{ item.label }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item>
+        <a-button type="primary" @click="search">{{ $t('搜索') }}</a-button>
+        <a-button style="margin: 0px 8px" @click="reset">{{ $t('重置') }}</a-button>
+        <a-dropdown style="padding-right: 8px">
+          <a-button icon="sort-ascending" type="link" style="font-size: 18px" />
+          <a-menu slot="overlay" @click="changeOrder">
+            <a-menu-item v-if="mytype !== 'Hot'" key="inputTime">
+              <a-icon v-if="sortArr[0]" type="check" style="color: #52c41a" />
+              <span :style="{ 'margin-left': sortArr[0] ? '0px' : '20px' }">{{ $t('按创建时间最新到最旧') }}</span>
+            </a-menu-item>
+            <a-menu-item v-if="mytype !== 'Hot'" key="inputtimeold">
+              <a-icon v-if="sortArr[3]" type="check" style="color: #52c41a" />
+              <span :style="{ 'margin-left': sortArr[3] ? '0px' : '20px' }">{{ $t('按创建时间最旧到最新') }}</span>
+            </a-menu-item>
+            <a-menu-item v-if="mytype !== 'myAudited'" key="commentNum">
+              <a-icon v-if="sortArr[1]" type="check" style="color: #52c41a" />
+              <span :style="{ 'margin-left': sortArr[1] ? '0px' : '20px' }">{{ $t('按评论数多到少') }}</span>
+            </a-menu-item>
+            <a-menu-item v-if="mytype !== 'myAudited'" key="browseNum">
+              <a-icon v-if="sortArr[2]" type="check" style="color: #52c41a" />
+              <span :style="{ 'margin-left': sortArr[2] ? '0px' : '20px' }">{{ $t('按浏览量多到少') }}</span>
+            </a-menu-item>
+          </a-menu>
+        </a-dropdown>
+      </a-form-item>
+    </a-form>
+    <a-row v-if="page === 'myKnowledge' && params.type === 'myCreated'" style="padding: 8px 0px 8px 8px">
+      <a-col :span="8">
+        <a-input-group>
+          <a-button icon="plus" type="primary" @click="handleAdd">{{ $t('新增知识') }}</a-button>
+          <a-button v-if="params.type === 'myCreated'" icon="upload" style="margin-left: 8px" @click="handleImport">
+            {{ $t('导入') }}
+          </a-button>
+        </a-input-group>
+      </a-col>
+    </a-row>
+    <div v-if="params.type === 'questions'" style="margin: 0 10px 10px 10px">
+      <a-space>
+        <a-radio-group
+          v-model="auditStatus"
+          default-value="5"
+          button-style="solid"
+          @change="
+            (e) => {
+              getAuditStatus(e.target.value)
+            }
+          "
+        >
+          <a-select-option value="5">{{ $t('全部') }}</a-select-option>
+          <a-select-option value="6">{{ $t('无需审核') }}</a-select-option>
+          <a-select-option value="1">{{ $t('待审核') }}</a-select-option>
+          <a-select-option value="3">{{ $t('审核通过') }}</a-select-option>
+          <a-select-option value="2">{{ $t('审核不通过') }}</a-select-option>
+        </a-radio-group>
+        <a-radio-group
+          v-model="dateStatus"
+          default-value="5"
+          button-style="solid"
+          @change="
+            (e) => {
+              getDateStatus(e.target.value)
+            }
+          "
+        >
+          <a-radio-button value="8">{{ $t('全部') }}</a-radio-button>
+          <a-radio-button value="6">{{ $t('未过期') }}</a-radio-button>
+          <a-radio-button value="7">{{ $t('已过期') }}</a-radio-button>
+        </a-radio-group>
+        <a-popconfirm
+          :title="$t('您确认要删除选中的记录吗？')"
+          :ok-text="$t('确认')"
+          :cancel-text="$t('取消')"
+          @confirm="handleDelList"
+        >
+          <a-button type="danger" :disabled="delDisabled">{{ $t('批量删除') }}</a-button>
+        </a-popconfirm>
+      </a-space>
+    </div>
+    <!-- 新增知识 -->
+    <index-my-manage-knowledge-form
+      ref="indexMyManageKnowledgeForm"
+      :key="refreshKey"
+      :treeId="treeId"
+      @ok="handleRefresh"
+    />
+    <!-- 导入 -->
+    <general-export ref="generalExport" @ok="handleOk" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('knowledge'),
+  components: {
+    IndexMyManageKnowledgeForm: () => import('./IndexMyManageKnowledgeForm.vue'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    params: {
+      type: Object,
+      default: () => { }
+    },
+    page: {
+      type: String,
+      default: ''
+    },
+    delIdArr: {
+      type: Array,
+      default: () => { }
+    },
+    treeId: {
+      type: Array,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      detaSource: [],
+      refreshKey: 0,
+      importKey: 2,
+      categoryid: 0,
+      init: true, // 是否为初始化页面
+      input: '',
+      data: [],
+      searchtype: 1,
+      theme: '1', // 全局搜索
+      tagValue: undefined,
+      sort: 'inputTime',
+      words: '', // 搜索内容
+      form: this.$form.createForm(this),
+      timeout: null,
+      status: '',
+      mytype: '',
+      auditStatus: '5',
+      dateStatus: '8',
+      delDisabled: true,
+      sortArr: [true, false, false]
+    }
+  },
+  watch: {
+    params: {
+      handler (newValue) {
+        this.categoryid = Number(newValue.categoryid) || 0
+        if (newValue.theme) {
+          this.sort = newValue.sort
+          this.words = newValue.words
+        } else {
+          this.theme = '1'
+          this.sort = 'inputTime'
+          this.words = ''
+        }
+        if (!newValue.status) {
+          if (newValue.type === 'myCreated' && !newValue.words) {
+            this.status = '5'
+            this.$emit('ok', this.sort, this.words, this.theme, this.status)
+          } else if (newValue.type === 'myAudited' && !newValue.words) {
+            this.status = '1'
+            this.$emit('ok', this.sort, this.words, this.theme, this.status)
+          } else if (newValue.type === 'dealBug' && !newValue.words) {
+            this.status = '8'
+            this.$emit('ok', this.sort, this.words, this.theme, this.status)
+          }
+        }
+        if (newValue.type) {
+          this.mytype = newValue.type
+          if (newValue.type === 'Hot' && this.init) {
+            this.sortArr = [false, false, true]
+            this.init = false
+          }
+        }
+      },
+      immediate: true
+    },
+    delIdArr (newValue) {
+      if (newValue.length !== 0) {
+        this.delDisabled = false
+      } else {
+        this.delDisabled = true
+      }
+    }
+  },
+  methods: {
+    // 获取状态
+    getStatus (status) {
+      let theme = ''
+      if (this.words.length === 0) {
+        theme = '2'
+      } else {
+        theme = this.theme
+      }
+      this.status = status
+      this.$emit('ok', this.sort, this.words, theme, status)
+    },
+    getAuditStatus (status) {
+      let theme = ''
+      if (this.words.length === 0) {
+        theme = '2'
+      } else {
+        theme = this.theme
+      }
+      this.auditStatus = status
+      this.$emit('ok', this.sort, this.words, theme, null, status, this.dateStatus)
+    },
+    getDateStatus (status) {
+      let theme = ''
+      if (this.words.length === 0) {
+        theme = '2'
+      } else {
+        theme = this.theme
+      }
+      this.dateStatus = status
+      this.$emit('ok', this.sort, this.words, theme, null, this.auditStatus, status)
+    },
+    // 获取全局搜索还是标签搜索
+    onChange (value) {
+      this.theme = value
+      this.words = ''
+    },
+    changeOrder (value) {
+      console.log(value)
+      let theme = ''
+      if (this.words.length === 0) {
+        theme = '2'
+      } else {
+        theme = this.theme
+      }
+      if (value.key === 'inputTime') {
+        this.sortArr = [true, false, false, false]
+      } else if (value.key === 'inputtimeold') {
+        this.sortArr = [false, false, false, true]
+      } else if (value.key === 'commentNum') {
+        this.sortArr = [false, true, false, false]
+      } else {
+        this.sortArr = [false, false, true, false]
+      }
+      this.sort = value.key
+      this.$emit('ok', this.sort, this.words, theme)
+    },
+    // 远程搜索标签
+    handleSearch (value) {
+      clearTimeout(this.timeout)
+      this.timeout = setTimeout(() => {
+        this.axios({
+          url: '/knowledge/index/getListLabel',
+          data: { fieldvalue: value }
+        }).then(res => {
+          this.data = res.result
+        })
+      }, 300)
+    },
+    // 选择标签
+    handleChange (value) {
+      this.words = value
+    },
+    // 搜索
+    search () {
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          this.words = this.form.getFieldsValue().words ? this.form.getFieldsValue().words : this.words
+          if (this.page === 'myKnowledge') {
+            this.$emit('ok', this.sort, this.words, this.theme, this.status)
+          } else if (this.page === 'init') {
+            this.$emit('ok', this.sort, this.words, this.theme)
+          } else if (this.page === 'manageKnowledge') {
+            if (this.params.type !== 'questions') {
+              this.$emit('ok', this.sort, this.words, this.theme, this.status)
+            } else {
+              this.$emit('ok', this.sort, this.words, this.theme, null, this.auditStatus, this.dateStatus)
+            }
+          }
+        }
+      })
+    },
+    // 重置
+    reset () {
+      this.words = ''
+      this.form.resetFields()
+      this.tagValue = undefined
+      const theme = '2'
+      if (this.page === 'myKnowledge') {
+        this.$emit('ok', this.sort, this.words, theme, this.status)
+      } else if (this.page === 'init') {
+        this.$emit('ok', this.sort, this.words, theme)
+      } else if (this.page === 'manageKnowledge') {
+        if (this.params.type !== 'questions') {
+          this.$emit('ok', this.sort, this.words, theme, this.status)
+        } else {
+          this.$emit('ok', this.sort, this.words, theme, null, this.auditStatus, this.dateStatus)
+        }
+      }
+    },
+    // 新增知识
+    handleAdd () {
+      if (this.refreshKey) {
+        this.refreshKey = 0
+      } else {
+        this.refreshKey = 1
+      }
+      this.$nextTick(() => {
+        this.$refs.indexMyManageKnowledgeForm.show({
+          title: this.$t('添加'),
+          action: 'add',
+          categoryid: this.categoryid
+        })
+      })
+    },
+    // 新增知识之后刷新列表
+    handleRefresh () {
+      this.reset()
+    },
+    //  导入
+    handleImport () {
+      if (this.importKey === 3) {
+        this.importKey = 2
+      } else {
+        this.importKey = 3
+      }
+      this.$refs.generalExport.show({
+        title: this.$t('导入'),
+        type: 'import',
+        className: 'ImportKnowledgeTask',
+        filePath: 'static/template/知识库导入模板.xlsx'
+      })
+    },
+    // 导入刷新列表
+    handleOk () {
+      this.reset()
+    },
+    // 批量删除数据
+    handleDelList () {
+      var idStr = this.delIdArr.join(',')
+      this.axios({
+        url: '/knowledge/index/deleteArticle',
+        data: { id: idStr }
+      }).then(res => {
+        if (!res.code) {
+          if (this.words.length === 0) {
+            this.theme = ''
+          }
+          this.$emit('ok', this.sort, this.words, this.theme, null, this.auditStatus, this.dateStatus)
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,180 @@
+<template>
+  <a-card>
+    <a-form class="search" layout="inline" :form="form">
+      <a-form-item>
+        <a-range-picker
+          v-decorator="[
+            'info[replyTime]',
+            {
+              initialValue: searchDate
+            }
+          ]"
+          :ranges="{
+            今天: [moment().startOf('day'), moment().endOf('day')],
+            昨天: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+            本周: [moment().startOf('week'), moment().endOf('week')],
+            本月: [moment().startOf('month'), moment().endOf('month')]
+          }"
+          :showTime="{ defaultValue: [moment('00:00:00', 'HH:mm:ss'), moment('23:59:59', 'HH:mm:ss')] }"
+          format="YYYY-MM-DD HH:mm:ss"
+          style="width: 100%"
+          @change="getSearchDate"
+        />
+      </a-form-item>
+      <a-form-item>
+        <a-select v-model="queryParam.searchField" style="width: 140px" @change="changeField">
+          <a-select-option value="username">{{ $t('坐席姓名') }}</a-select-option>
+          <a-select-option value="extension">{{ $t('分机号码') }}</a-select-option>
+          <a-select-option value="type">{{ $t('签入/签出类型') }}</a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item>
+        <a-select v-model="queryParam.searchType" style="width: 100px">
+          <a-select-option value="cn">{{ $t('包含') }}</a-select-option>
+          <a-select-option value="eq">{{ $t('等于') }}</a-select-option>
+          <a-select-option value="nc">{{ $t('不包含') }}</a-select-option>
+          <a-select-option value="ne">{{ $t('不等于') }}</a-select-option>
+          <a-select-option value="gt">{{ $t('大于') }}</a-select-option>
+          <a-select-option value="lt">{{ $t('小于') }}</a-select-option>
+          <a-select-option value="bw">{{ $t('开始于') }}</a-select-option>
+          <a-select-option value="bn">{{ $t('不开始于') }}</a-select-option>
+          <a-select-option value="ew">{{ $t('结束于') }}</a-select-option>
+          <a-select-option value="en">{{ $t('不结束于') }}</a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item v-if="queryParam.searchField == 'type'">
+        <a-select v-model="queryParam.searchString" style="width: 100px">
+          <a-select-option v-for="(item, index) in typeList" :key="index" :value="item.dictDataNumber">
+            {{ item.dictDataName }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item v-else>
+        <a-input v-model="queryParam.searchString" placeholder="" />
+      </a-form-item>
+      <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+      <a-button
+        @click="
+          () => {
+            searchDate = null
+            queryParam = { searchField: 'username', searchType: 'cn', searchString: '' }
+            $refs.table.refresh(true)
+          }
+        "
+      >
+        {{ $t('重置') }}
+      </a-button>
+      <a-button icon="download" @click="handleExport()">{{ $t('导出') }}</a-button>
+    </a-form>
+    <s-table ref="table" size="small" rowKey="id" :columns="columns" :data="loadDataTable" :sorter="sorter"></s-table>
+    <general-export ref="generalExport" />
+  </a-card>
+</template>
+<script>
+export default {
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      colLayout: {
+        xs: 24,
+        sm: 12,
+        md: 8,
+        lg: 8,
+        xl: 6,
+        xxl: 6
+      },
+      // 时间组件
+      searchDate: null,
+      form: this.$form.createForm(this),
+      // 搜索参数
+      queryParam: {
+        searchField: 'username',
+        searchType: 'cn',
+        searchString: ''
+      },
+      where: '',
+      // 表头
+      columns: [{
+        title: this.$t('坐席姓名'),
+        dataIndex: 'username'
+      }, {
+        title: this.$t('分机号码'),
+        dataIndex: 'extension'
+      }, {
+        title: this.$t('操作类型'),
+        dataIndex: 'type'
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'startTime'
+      }, {
+        title: this.$t('结束时间'),
+        dataIndex: 'endTime'
+      }, {
+        title: this.$t('操作时长'),
+        dataIndex: 'duration'
+      }],
+      sorter: { field: 'id', order: 'descend' },
+      typeList: []
+    }
+  },
+  mounted () {
+    this.setField()
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/callcenter/checkLog/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        this.where = res.result.where
+        return res.result
+      })
+    },
+    setField () {
+      // 签入签出字典值
+      this.axios({
+        url: '/admin/dict/initData',
+        data: {
+          dictCategoryNumber: 'callcenter_checkinout_status'
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.typeList = res.result
+        }
+      })
+    },
+    changeField () {
+      this.queryParam.searchString = ''
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: '导出',
+        className: 'ExportCheckLogTask',
+        parameter: {
+          condition: {
+            req: this.queryParam,
+            type: 'checkLog'
+          }
+        }
+      })
+    },
+    getSearchDate (date, dateString) {
+      this.searchDate = date
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    }
+  }
+}
+</script>
+<style scoped>
+.search {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.search button {
+  margin-right: 8px;
+}
+</style>

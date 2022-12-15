@@ -1,0 +1,1447 @@
+<template>
+  <div>
+    <a-card size="small">
+      <!-- 操作按钮 -->
+      <div class="table-operator">
+        <component :is="item.component" v-for="(item, index) in toolButtons" :key="index" />
+      </div>
+      <a-spin :spinning="loading">
+        <a-form :form="form">
+          <a-table
+            ref="table"
+            size="small"
+            rowKey="key"
+            :columns="columns"
+            :dataSource="subData"
+            :rowSelection="multiSelect ? rowSelection : null"
+            :pagination="false"
+            :autoLoad="false"
+            :scroll="scroll"
+          >
+            <template v-for="(item, alias) in fieldsConfig" v-slot:[alias]="text, record, index">
+              <div :key="alias + record.key">
+                <a-form-item v-if="!loading" v-show="rowFieldsConfig[index][alias].rule !== 'hidden'">
+                  <!-- 单行文本 -->
+                  <a-input
+                    v-if="item.formType === 'associated'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text,
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          },
+                          {
+                            validator: (rule, value, callback) => {
+                              validateText(rule, value, callback, item)
+                            }
+                          }
+                        ]
+                      }
+                    ]"
+                    size="small"
+                    :disabled="true"
+                    :placeholder="item.setting.attribute.emptyText"
+                    @change="(e) => onChange(record, alias, item.formType, e, '', index)"
+                  />
+                  <a-input
+                    v-else-if="item.formType === 'text'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text,
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          },
+                          {
+                            validator: (rule, value, callback) => {
+                              validateText(rule, value, callback, item)
+                            }
+                          }
+                        ]
+                      }
+                    ]"
+                    size="small"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :placeholder="item.setting.attribute.emptyText"
+                    @change="(e) => onChange(record, alias, item.formType, e, '', index)"
+                  />
+                  <!-- 多行文本 -->
+                  <a-textarea
+                    v-else-if="item.formType === 'textarea'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text,
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          },
+                          {
+                            validator: (rule, value, callback) => {
+                              validateText(rule, value, callback, item)
+                            }
+                          }
+                        ]
+                      }
+                    ]"
+                    size="small"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :placeholder="item.setting.attribute.emptyText"
+                    :autoSize="{
+                      minRows: item.setting.attribute.minRows || 1,
+                      maxRows: item.setting.attribute.maxRows || item.setting.attribute.minRows
+                    }"
+                    @change="(e) => onChange(record, alias, item.formType, e, '', index)"
+                  />
+                  <!-- 数字 -->
+                  <a-input-number
+                    v-else-if="item.formType === 'number'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text,
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          },
+                          {
+                            validator: (rule, value, callback) => {
+                              validateNumber(rule, value, callback, item)
+                            }
+                          }
+                        ]
+                      }
+                    ]"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :placeholder="item.setting.attribute.emptyText"
+                    :formatter="
+                      (value) => `${item.setting.form.prefixVal || ''}${value}${item.setting.form.suffixVal || ''}`
+                    "
+                    :parser="
+                      (value) => {
+                        let latter = item.setting.form.suffixVal ? item.setting.form.suffixVal.split('') : []
+                        const lastLatter = latter[latter.length - 1]
+                        latter.pop()
+                        const firstLatter = latter.join('')
+                        value = value
+                          .replace(lastLatter, '')
+                          .replace(firstLatter, '')
+                          .replace(item.setting.form.prefixVal, '')
+                        return value
+                      }
+                    "
+                    size="small"
+                    style="width: 100%"
+                    :step="item.setting.attribute.step || 1"
+                    :precision="item.fieldDecimal || 0"
+                    @change="
+                      (value) => {
+                        onChange(record, alias, item.formType, value, '', index)
+                      }
+                    "
+                  />
+                  <!-- 日期 -->
+                  <template v-else-if="item.formType === 'datetime'">
+                    <a-date-picker
+                      v-if="item.setting.attribute.format === 'Y-m-d H:i:s'"
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: text ? moment(text, 'YYYY-MM-DD HH:mm:ss') : null,
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            },
+                            {
+                              validator: (rule, value, callback) => {
+                                validateDateTime(rule, value, callback, item)
+                              }
+                            }
+                          ]
+                        }
+                      ]"
+                      :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                      format="YYYY-MM-DD HH:mm:ss"
+                      size="small"
+                      :placeholder="item.setting.attribute.emptyText"
+                      show-time
+                      style="width: 100%"
+                      @change="
+                        (value1, value2) => {
+                          onChange(record, alias, item.formType, value1, value2, index)
+                        }
+                      "
+                    />
+                    <a-date-picker
+                      v-else-if="item.setting.attribute.format === 'Y-m-d'"
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: text ? moment(text, 'YYYY-MM-DD') : null,
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            },
+                            {
+                              validator: (rule, value, callback) => {
+                                validateDateTime(rule, value, callback, item)
+                              }
+                            }
+                          ]
+                        }
+                      ]"
+                      :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                      format="YYYY-MM-DD"
+                      size="small"
+                      :placeholder="item.setting.attribute.emptyText"
+                      style="width: 100%"
+                      @change="
+                        (value1, value2) => {
+                          onChange(record, alias, item.formType, value1, value2, index)
+                        }
+                      "
+                    />
+                    <a-time-picker
+                      v-else-if="item.setting.attribute.format === 'H:i:s'"
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: text ? moment(text, 'HH:mm:ss') : null,
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            },
+                            {
+                              validator: (rule, value, callback) => {
+                                validateTime(rule, value, callback, item)
+                              }
+                            }
+                          ]
+                        }
+                      ]"
+                      :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                      size="small"
+                      format="HH:mm:ss"
+                      :placeholder="item.setting.attribute.emptyText"
+                      style="width: 100%"
+                      @change="
+                        (value1, value2) => {
+                          onChange(record, alias, item.formType, value1, value2, index)
+                        }
+                      "
+                    />
+                  </template>
+                  <!-- 下拉框 -->
+                  <a-select
+                    v-if="item.formType === 'combobox'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text || undefined,
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          }
+                        ]
+                      }
+                    ]"
+                    size="small"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :placeholder="item.setting.attribute.emptyText || $t('请选择下拉数据')"
+                    :show-arrow="item.setting.form.loadMode !== 'dynamic'"
+                    :mode="item.setting.attribute.mode"
+                    show-search
+                    option-filter-prop="children"
+                    :allowClear="true"
+                    @change="
+                      (value) => {
+                        onChange(record, alias, item.formType, value, '', index)
+                      }
+                    "
+                    @search="
+                      (value) => {
+                        getOption(value, record, alias, index)
+                      }
+                    "
+                  >
+                    <a-select-option
+                      v-for="(select, selectIndex) in rowFieldsConfig[index][alias].option"
+                      :key="selectIndex"
+                      :disabled="select.disabled"
+                      :value="select.value"
+                    >
+                      {{ select.label }}
+                    </a-select-option>
+                  </a-select>
+                  <!-- 单选框 -->
+                  <a-radio-group
+                    v-if="item.formType === 'radio'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text || undefined,
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          }
+                        ]
+                      }
+                    ]"
+                    size="small"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :placeholder="item.setting.attribute.emptyText"
+                    show-search
+                    option-filter-prop="children"
+                    :allowClear="true"
+                    @change="
+                      (value) => {
+                        onChange(record, alias, item.formType, value, '', index)
+                      }
+                    "
+                  >
+                    <a-radio
+                      v-for="(select, selectIndex) in rowFieldsConfig[index][alias].option"
+                      :key="selectIndex"
+                      :disabled="select.disabled"
+                      :value="select.value"
+                    >
+                      {{ select.label }}
+                    </a-radio>
+                  </a-radio-group>
+                  <!-- 多选框 -->
+                  <template v-else-if="item.formType === 'checkbox'">
+                    <div
+                      v-if="item.setting.attribute.checkAll === '1'"
+                      :style="{ borderBottom: '1px solid #E9E9E9', marginBottom: '2px' }"
+                    >
+                      <a-checkbox
+                        :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                        :indeterminate="
+                          rowFieldsConfig[index][alias] ? rowFieldsConfig[index][alias].indeterminate : false
+                        "
+                        :checked="rowFieldsConfig[index][alias] ? rowFieldsConfig[index][alias].checkAll : false"
+                        @change="
+                          (e) => {
+                            onCheckAll(e, item, record, alias, index)
+                          }
+                        "
+                      >
+                        {{ $t('全选') }}
+                      </a-checkbox>
+                    </div>
+                    <a-checkbox-group
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: text || undefined,
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            }
+                          ]
+                        }
+                      ]"
+                      style="width: 100%"
+                      :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                      @change="
+                        (value) => {
+                          onCheck(value, item, record, alias, index)
+                        }
+                      "
+                    >
+                      <a-checkbox
+                        v-for="(select, selectIndex) in rowFieldsConfig[index][alias].option"
+                        :key="selectIndex"
+                        :disabled="select.disabled"
+                        :value="select.value"
+                      >
+                        {{ select.label }}
+                      </a-checkbox>
+                    </a-checkbox-group>
+                  </template>
+                  <!-- 开关 -->
+                  <a-switch
+                    v-else-if="item.formType === 'switch'"
+                    v-decorator="[
+                      alias + record.key,
+                      {
+                        initialValue: text == 1,
+                        valuePropName: 'checked',
+                        rules: [
+                          {
+                            required: rowFieldsConfig[index][alias].setting.attribute.required,
+                            message: $t('{0}不能为空', { 0: item.name })
+                          }
+                        ]
+                      }
+                    ]"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :un-checked-children="item.setting.form.word.value[0]"
+                    :checked-children="item.setting.form.word.value[1]"
+                    @change="
+                      (value) => {
+                        onChange(record, alias, item.formType, value, '', index)
+                      }
+                    "
+                  />
+                  <!-- 级联选择 -->
+                  <template v-else-if="item.formType === 'cascader'">
+                    <a-input
+                      v-show="false"
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: text || '',
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            }
+                          ]
+                        }
+                      ]"
+                    />
+                    <tabs-select
+                      :ref="alias + record.key"
+                      :field="item"
+                      :valueKey="item.setting.form.src || ''"
+                      :defaultValue="text"
+                      :alias="alias + record.key"
+                      size="small"
+                      :writeBack="item.setting.form.writeBack"
+                      :fieldRule="rowFieldsConfig[index][alias].rule"
+                      action="edit"
+                      :value="rowFieldsConfig[index][alias].option"
+                      :optionalRange="rowFieldsConfig[index][alias].optionalRange"
+                      :notOptionalRange="rowFieldsConfig[index][alias].notOptionalRange"
+                      @send="
+                        (value) => {
+                          onChange(record, alias, item.formType, value, '', index)
+                        }
+                      "
+                    />
+                  </template>
+                  <!-- 图片 -->
+                  <template v-else-if="item.formType === 'image'">
+                    <a-upload
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: rowFieldsConfig[index][alias].fileList || [],
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            }
+                          ]
+                        }
+                      ]"
+                      v-viewer
+                      :class="alias + record.key"
+                      :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload&fieldId=${item.fieldId}`"
+                      :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                      name="upload"
+                      listType="picture-card"
+                      :accept="item.setting.form.format || '.png,.jpg,.jpeg,.gif,.bmp'"
+                      :disabled="item.rule === 'readonly'"
+                      :multiple="true"
+                      :before-upload="
+                        (file, fileList) => {
+                          return beforeUpload(file, fileList, item)
+                        }
+                      "
+                      @change="
+                        (e) => {
+                          onChange(record, alias, item.formType, e, '', index)
+                        }
+                      "
+                      @preview="
+                        (file) => {
+                          imagePreview(record, alias, index, file)
+                        }
+                      "
+                    >
+                      <div
+                        v-if="!record[alias] || record[alias].length < item.setting.attribute.maxFiles"
+                        style="height: 100%"
+                      >
+                        <div
+                          style="height: 50%; display: flex; align-items: center; justify-content: center"
+                          :style="{ height: item.rule === 'readonly' ? '100%' : '50%' }"
+                        >
+                          <a-icon type="plus" style="font-size: 18px" />
+                        </div>
+                        <a-input
+                          v-if="rowFieldsConfig[index][alias].rule !== 'readonly'"
+                          placeholder="粘贴"
+                          :readOnly="true"
+                          style="border: none; border-top: 1px dashed #d9d9d9; text-align: center"
+                          @click.stop=""
+                          @paste="handlefilePaste($event, record, item, `${item.alias}${record.key}`)"
+                        />
+                      </div>
+                    </a-upload>
+                  </template>
+                  <!-- 附件 -->
+                  <template v-else-if="item.formType === 'file'">
+                    <a-upload
+                      v-decorator="[
+                        alias + record.key,
+                        {
+                          initialValue: rowFieldsConfig[index][alias].fileList || [],
+                          rules: [
+                            {
+                              required: rowFieldsConfig[index][alias].setting.attribute.required,
+                              message: $t('{0}不能为空', { 0: item.name })
+                            }
+                          ]
+                        }
+                      ]"
+                      :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload&fieldId=${item.fieldId}`"
+                      :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                      name="upload"
+                      listType="text"
+                      :accept="item.setting.form.format || '.png,.jpg,.jpeg,.gif,.bmp'"
+                      :disabled="item.rule === 'readonly'"
+                      :multiple="true"
+                      :before-upload="
+                        (file, fileList) => {
+                          return beforeUpload(file, fileList, item)
+                        }
+                      "
+                      @change="
+                        (e) => {
+                          onChange(record, alias, item.formType, e, '', index)
+                        }
+                      "
+                    >
+                      <div v-if="!record[alias] || record[alias].length < item.setting.attribute.maxFiles">
+                        <a-button :disabled="rowFieldsConfig[index][alias].rule === 'readonly'">
+                          <a-icon type="upload" />
+                          {{ $t('上传') }}
+                        </a-button>
+                      </div>
+                    </a-upload>
+                  </template>
+                </a-form-item>
+                <!-- 树选择 -->
+                <template v-if="item.formType === 'treeselect'">
+                  <data-picker
+                    ref="treeControl"
+                    :placeholder="item.setting.attribute.emptyText || $t('请选择')"
+                    :name="alias + record.key"
+                    :parentId="
+                      item.setting.attribute.dataSource === 'addressBook' ? 'parentNumber' : 'parentDictDataNumber'
+                    "
+                    :parameter="
+                      item.setting.attribute.dataSource === 'addressBook'
+                        ? {}
+                        : { dictCategoryNumber: item.setting.form.src, filterDisabled: true }
+                    "
+                    displayType="tree"
+                    :url="
+                      item.setting.attribute.dataSource === 'addressBook'
+                        ? '/admin/address/getAddressChildren'
+                        : '/admin/dict/initData'
+                    "
+                    :searchUrl="
+                      item.setting.attribute.dataSource === 'addressBook'
+                        ? '/admin/search/addressSearch'
+                        : '/admin/search/dictSearch'
+                    "
+                    :required="item.rule !== 'hidden' && rowFieldsConfig[index][alias].setting.attribute.required"
+                    :multiple="item.setting.attribute.multiple === '1'"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :value="rowFieldsConfig[index][alias].option"
+                    :selectModel="item.setting.attribute.selectModel === 'end'"
+                    :message="`${$t('{0}不能为空', { 0: item.name })}`"
+                    :optionalRange="rowFieldsConfig[index][alias].optionalRange"
+                    :notOptionalRange="rowFieldsConfig[index][alias].notOptionalRange"
+                    :optionsConversion="
+                      (list, displayType, searchType) => {
+                        return optionsConversionTreeselect(list, displayType, searchType, item)
+                      }
+                    "
+                    :scope="scope"
+                    @select="
+                      (value) => {
+                        onChange(record, alias, item.formType, value, '', index)
+                      }
+                    "
+                  />
+                </template>
+                <!-- 组织结构 -->
+                <template v-else-if="item.formType === 'organization' && item.rule !== 'disabled'">
+                  <data-picker
+                    ref="treeControl"
+                    :placeholder="
+                      $t(
+                        `请选择${
+                          item.setting.form.optionType === 'department'
+                            ? '部门'
+                            : item.setting.form.optionType === 'role'
+                            ? '角色'
+                            : '用户'
+                        }`
+                      )
+                    "
+                    :scope="scope"
+                    :disabled="rowFieldsConfig[index][alias].rule === 'readonly'"
+                    :name="alias + record.key"
+                    :parameter="
+                      item.setting.form.optionType === 'user'
+                        ? { sortField: 'username', fieldId: item.fieldId }
+                        : { fieldId: item.fieldId }
+                    "
+                    parentId="parentDepartmentId"
+                    :displayType="item.setting.form.optionType === 'department' ? 'tree' : 'list'"
+                    :url="
+                      item.dataSourceUrl
+                        ? item.dataSourceUrl
+                        : item.setting.form.optionType === 'department'
+                        ? '/admin/department/init'
+                        : item.setting.form.optionType === 'role'
+                        ? '/admin/search/roleSearch'
+                        : '/admin/search/userSearch'
+                    "
+                    :searchUrl="
+                      item.dataSourceUrl
+                        ? item.dataSourceUrl
+                        : item.setting.form.optionType === 'department'
+                        ? '/admin/search/departmentSearch'
+                        : item.setting.form.optionType === 'role'
+                        ? '/admin/search/roleSearch'
+                        : '/admin/search/userSearch'
+                    "
+                    :message="`${$t('{0}不能为空', { 0: item.name })}`"
+                    :required="
+                      rowFieldsConfig[index][alias].rule !== 'hidden' &&
+                      rowFieldsConfig[index][alias].setting.attribute.required
+                    "
+                    :multiple="item.setting.attribute.mode === 'multiple'"
+                    :value="item.option"
+                    :optionsConversion="
+                      (list, displayType, searchType) => {
+                        return optionsConversion(list, displayType, searchType, item)
+                      }
+                    "
+                    @select="
+                      (value) => {
+                        onChange(record, alias, item.formType, value, '', index)
+                      }
+                    "
+                  />
+                </template>
+              </div>
+            </template>
+          </a-table>
+        </a-form>
+      </a-spin>
+    </a-card>
+    <!-- 开窗选择 -->
+    <user-table-win-list ref="userTableWinList" :key="userKey" :viewThis="viewThis" @ok="getOpenWindowData" />
+  </div>
+</template>
+<script>
+import { TreeSelect } from 'ant-design-vue'
+import debounce from 'lodash/debounce'
+import { FormRule } from './formRule'
+export default {
+  i18n: window.lang('admin'),
+  name: 'SubTable',
+  components: {
+    // UserTableImport: () => import('./UserTableImport'),
+    UserTableWinList: () => import('./UserTableWinList'),
+    UserTableForm: () => import('./UserTableForm'),
+    AddressSelect: () => import('../Field/AddressSelect'),
+    TabsSelect: () => import('../Field/TabsSelect')
+  },
+  props: {
+    currentRecord: {
+      type: Object,
+      default: () => { }
+    },
+    formThis: {
+      type: Object,
+      default: () => { }
+    },
+    viewThis: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    this.debounceToast = debounce(this.debounceToast, 800)
+    return {
+      loading: false,
+      userKey: 'userKey',
+      customData: {},
+      subData: [], // 子表数据
+      initSubData: [], // 初始化的数据，提交给后台做判断
+      rowData: {}, // 单行数据初始化
+      fieldInfos: [], // 所有字段配置，数组形式
+      fieldsConfig: {}, // 所有字段配置，对象形式
+      rowFieldsConfig: [], // 行字段配置，每行数据中都有对应的key
+      toolButtons: [], // 工具栏按钮
+      columns: [],
+      columnsAll: [],
+      selectedRowKeys: [],
+      selectedRows: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+          this.selectedRows = selectedRows
+        }
+      },
+      scroll: { x: true },
+      form: this.$form.createForm(this),
+      SHOW_PARENT: TreeSelect.SHOW_PARENT,
+      SHOW_CHILD: TreeSelect.SHOW_CHILD,
+      templateId: '',
+      fieldRule: [],
+      formRules: [],
+      importTemplate: {},
+      scope: this,
+      changeType: '',
+      multiSelect: false
+    }
+  },
+  watch: {
+    subData: {
+      handler (newVal) {
+        this.$emit('change', newVal, this, this.changeType)
+      },
+      deep: true
+    }
+  },
+  mounted () {
+    // 挂载子表vue实例this
+    if (this.viewThis.templateMapping && this.viewThis.templateMapping[this.currentRecord.key]) {
+      this.viewThis.templateMapping[this.currentRecord.key].subTableThis = this
+    }
+
+    const relationTable = this.currentRecord.relationTable || {}
+    const { relation, templateId } = relationTable
+    this.templateId = templateId
+    this.loading = true
+    this.axios({
+      url: '/admin/general/getSubform',
+      data: { templateId, relation }
+    }).then(res => {
+      const result = res.result || {}
+      let { columns, toolButtons } = result
+      columns = columns || []
+      toolButtons = toolButtons || []
+      this.toolButtons = toolButtons.map(item => {
+        const funcStr = `return (_this, item) => {  return ${item.attribute} }`
+        // eslint-disable-next-line no-new-func
+        const func = new Function(funcStr)
+        const obj = func()(this, item)
+        if (obj.template) {
+          obj.template = obj.template.replace(/[\r\n]/g, '')
+        }
+        item.component = obj
+        return item
+      })
+
+      // 所有的列属性，包括隐藏的列
+      this.columnsAll = columns
+
+      // 显示在视图中的列，不包括隐藏的列
+      this.columns = columns.filter(item => {
+        item.scopedSlots = { customRender: item.dataIndex }
+        item.title = item.customTitle || item.title
+        return item.rule !== 'hidden'
+      })
+      this.columns = this.columns.map(item => {
+        const { dataIndex, scopedSlots, align, width, title } = item
+        return {
+          dataIndex, scopedSlots, align, width, title
+        }
+      })
+      this.loading = false
+      this.initSubData = JSON.parse(JSON.stringify(result.data))
+      this.fieldRule = result.fieldRule
+      this.multiSelect = result.multiSelect
+      this.init()
+    })
+  },
+  methods: {
+    init () {
+      this.columnsAll.forEach(item => {
+        const { setting, title, fieldId } = item
+        const { alias, formType, fieldDecimal } = item.field
+        let { option, rule } = item
+        option = option || []
+        rule = rule || 'allow'
+        // 字段配置（对象）初始化
+        this.fieldsConfig[alias] = { alias, formType, option, setting, rule, name: title, fieldDecimal, fieldId }
+      })
+
+      // 表格数据初始化
+      this.subData = this.initSubData.map((item, index) => {
+        let dataItem = JSON.parse(JSON.stringify(item))
+        dataItem.key = Date.now() + index
+
+        // 针对每行的options做处理（后续如还有不同行的数据不一样，也可以放这里配置）
+        let rowFieldConfig = {}
+        for (const alias in item) {
+          if (this.fieldsConfig[alias]) {
+            rowFieldConfig[alias] = JSON.parse(JSON.stringify(this.fieldsConfig[alias]))
+            if (rowFieldConfig[alias].formType === 'checkbox') {
+              if (item[alias] && rowFieldConfig[alias].option && item[alias].length === rowFieldConfig[alias].option.length) {
+                rowFieldConfig[alias].checkAll = true
+              } else {
+                rowFieldConfig[alias].indeterminate = !!item[alias]
+              }
+            } else if (rowFieldConfig[alias].formType === 'cascader' || rowFieldConfig[alias].formType === 'treeselect') {
+              rowFieldConfig[alias].optionalRange = []
+              rowFieldConfig[alias].notOptionalRange = []
+              if (rowFieldConfig[alias].option && rowFieldConfig[alias].option.length > 0) {
+                rowFieldConfig[alias].option = rowFieldConfig[alias].option.filter(im => {
+                  if (Object.prototype.toString.call(item[alias]) === '[object Array]') {
+                    return item[alias].indexOf(im.dictDataNumber) !== -1 || item[alias].indexOf(im.number) !== -1
+                  }
+                  return im.dictDataNumber === item[alias] || im.number === item[alias]
+                })
+              }
+            }
+          }
+        }
+        rowFieldConfig.key = dataItem.key
+        this.rowFieldsConfig.push(rowFieldConfig)
+
+        // 初始化表单规则
+        if (this.fieldRule && this.fieldRule.length > 0) {
+          const formRule = new FormRule(this.fieldRule, rowFieldConfig, dataItem)
+          this.formRules.push(formRule)
+          formRule.runRule(dataItem)
+          rowFieldConfig = JSON.parse(JSON.stringify(formRule.config))
+          this.rowFieldsConfig.splice(index, 1, rowFieldConfig)
+          dataItem = Object.assign(dataItem, formRule.data)
+          for (const alias in formRule.changeValueField) {
+            const obj = {}
+            const name = `${alias}${dataItem.key}`
+            obj[name] = formRule.changeValueField[alias]
+            this.form.setFieldsValue(obj)
+          }
+          formRule.changeValueField = {}
+        }
+        return dataItem
+      })
+
+      // 每行数据初始化数据处理，后续处理
+      this.columnsAll.forEach(item => {
+        this.rowData[item.dataIndex] = null
+      })
+    },
+    // 添加数据
+    addData (data, fieldColumnsObj) {
+      let rowData = data ? JSON.parse(JSON.stringify(data)) : JSON.parse(JSON.stringify(this.rowData))
+      rowData.key = Date.now() + this.subData.length
+      this.changeType = 'allRow'
+      this.subData.push(rowData)
+
+      let rowFieldConfig = {}
+      for (const alias in this.rowData) {
+        rowFieldConfig[alias] = JSON.parse(JSON.stringify(this.fieldsConfig[alias]))
+        if (rowFieldConfig[alias].formType === 'checkbox') {
+          rowFieldConfig[alias].indeterminate = false
+          rowFieldConfig[alias].checkAll = false
+        } else if (rowFieldConfig[alias].formType === 'cascader' || rowFieldConfig[alias].formType === 'treeselect') {
+          rowFieldConfig[alias].optionalRange = []
+          rowFieldConfig[alias].notOptionalRange = []
+          rowFieldConfig[alias].option = []
+          if (fieldColumnsObj && fieldColumnsObj[alias] && fieldColumnsObj[alias].option && fieldColumnsObj[alias].option.length > 0) {
+            const option = fieldColumnsObj[alias].option.find(im => im.dictDataNumber === rowData[alias])
+            rowFieldConfig[alias].option = [option]
+          }
+        }
+      }
+      rowFieldConfig.key = rowData.key
+      this.rowFieldsConfig.push(rowFieldConfig)
+
+      // 表单规则
+      if (this.fieldRule && this.fieldRule.length > 0) {
+        const formRule = new FormRule(this.fieldRule, rowFieldConfig, rowData)
+        this.formRules.push(formRule)
+        formRule.runRule(rowData)
+        rowFieldConfig = JSON.parse(JSON.stringify(formRule.config))
+        this.rowFieldsConfig.splice(this.rowFieldsConfig.length - 1, 1, rowFieldConfig)
+        rowData = Object.assign(rowData, formRule.data)
+        for (const alias in formRule.changeValueField) {
+          const obj = {}
+          const name = `${alias}${rowData.key}`
+          obj[name] = formRule.changeValueField[alias]
+          this.form.setFieldsValue(obj)
+        }
+      }
+    },
+    // 批量删除数据
+    onDelete () {
+      this.selectedRowKeys.forEach(key => {
+        const index = this.subData.findIndex(item => item.key === key)
+        if (index !== -1) {
+          this.subData.splice(index, 1)
+          this.formRules.splice(index, 1)
+          this.rowFieldsConfig.splice(index, 1)
+        }
+      })
+      this.selectedRowKeys = []
+    },
+    /**
+     * @params record行数据，index当前行的下标，alias字段系统名，formType字段类型， options1 antd表单框的值1，options2 antd表单框的值2（参考antd表单框）
+     */
+    onChange (record, alias, formType, option1, option2, index) {
+      this.changeType = 'single'
+      const valueMap = new Map([[
+        'text', (e) => e.target.value
+      ], [
+        'textarea', (e) => e.target.value
+      ], [
+        'datetime', (time, timeString) => timeString
+      ], [
+        'radio', (e) => e.target.value
+      ], [
+        'switch', (value) => value ? '1' : '0'
+      ], [
+        'image', this.fileChange
+      ], [
+        'file', this.fileChange
+      ]])
+      const otherGetValueFunc = (value) => value
+      const getValue = valueMap.get(formType) || otherGetValueFunc
+      const value = getValue(option1, option2, record, alias, index)
+      // 获取各个UI组件的值
+      record[alias] = value
+
+      // 表单规则执行
+      if (this.formRules && this.formRules.length > 0) {
+        const formRule = this.formRules[index]
+        formRule.runRule(record, alias)
+        this.rowFieldsConfig.splice(index, 1, formRule.config)
+        record = Object.assign(record, formRule.data)
+        for (const alias in formRule.changeValueField) {
+          const obj = {}
+          const name = `${alias}${record.key}`
+          obj[name] = formRule.changeValueField[alias]
+          this.form.setFieldsValue(obj)
+        }
+        formRule.changeValueField = {}
+      }
+    },
+    // 获取option
+    getOption (value, record, alias, index) {
+      const aliasItem = this.rowFieldsConfig[index][alias]
+      if (aliasItem.setting.form.loadMode !== 'dynamic') {
+        return false
+      }
+      clearTimeout(this.selectTimeout)
+      this.selectTimeout = setTimeout(() => {
+        const src = aliasItem.setting.form.src
+        if (value) {
+          this.axios({
+            url: '/admin/search/dictSearch',
+            data: {
+              dictCategoryNumber: src,
+              searchName: value
+            }
+          }).then(res => {
+            aliasItem.option = res.result
+            this.rowFieldsConfig.splice(index, 1, this.rowFieldsConfig[index])
+          })
+        } else {
+          aliasItem.option = []
+          this.rowFieldsConfig.splice(index, 1, this.rowFieldsConfig[index])
+        }
+      }, 300)
+    },
+    // 单行文本表单验证
+    validateText (rule, value, callback, item) {
+      const info = item.setting
+      if (!value) {
+        callback()
+        return
+      }
+      if (
+        info.attribute.maxLength &&
+        info.attribute.minLength &&
+        (value.length > info.attribute.maxLength || value.length < info.attribute.minLength)
+      ) {
+        callback(
+          this.$t('{0}允许长度：{1}~{2}', {
+            0: item.title,
+            1: info.attribute.minLength,
+            2: info.attribute.maxLength
+          })
+        )
+      }
+      if (
+        info.attribute.minLength &&
+        !info.attribute.maxLength &&
+        value.length < info.attribute.minLength
+      ) {
+        callback(
+          this.$t('{0}最小长度为{1}', {
+            0: item.title,
+            1: info.attribute.minLength
+          })
+        )
+      }
+      if (
+        info.attribute.maxLength &&
+        !info.attribute.minLength &&
+        value.length > info.attribute.maxLength
+      ) {
+        callback(
+          this.$t('{0}最大长度为{1}', {
+            0: item.title,
+            1: info.attribute.maxLength
+          })
+        )
+      }
+      if (info.attribute.regex) {
+        const regex = info.attribute.regex.slice(1, info.attribute.regex.length - 1)
+        const reg = new RegExp(regex)
+        if (!reg.test(value)) {
+          callback(this.$t('请按照正确的格式输入'))
+        }
+      }
+      callback()
+    },
+    // 数字表单验证
+    validateNumber (rule, value, callback, item) {
+      const minValue = item.setting.attribute.minValue
+      const maxValue = item.setting.attribute.maxValue
+      if (typeof minValue === 'number' && value < Number(minValue)) {
+        const str = this.$t('{0}不能小于{1}', {
+          0: item.title,
+          1: minValue
+        })
+        callback(str)
+      } else if (typeof maxValue === 'number' && value > Number(maxValue)) {
+        const str = this.$t('{0}不能大于{1}', {
+          0: item.title,
+          1: maxValue
+        })
+        callback(str)
+      } else {
+        callback()
+      }
+    },
+    // 日期时间
+    validateDateTime (rule, value, callback, item) {
+      const info = item.setting
+      if (!value) {
+        callback()
+        return
+      }
+      const format = item.setting.attribute.format === 'Y-m-d H:i:s' ? 'YYYY-MM-DD HH:mm:ss' : 'YYYY-MM-DD'
+      let minValue = info.form.minValue
+      let maxValue = info.form.maxValue
+      if (info.form.minType === 'now') {
+        const now = Date.now()
+        minValue = this.moment(now).format(format)
+      }
+      if (info.form.maxType === 'now') {
+        const now = Date.now()
+        maxValue = this.moment(now).format(format)
+      }
+      if (this.moment(value).isBefore(minValue) && minValue) {
+        callback(
+          this.$t('{0}最小日期时间值为{1}', {
+            0: item.title,
+            1: minValue
+          })
+        )
+      } else if (this.moment(maxValue).isBefore(value) && maxValue) {
+        callback(
+          this.$t('{0}最大日期时间值为{1}', {
+            0: item.title,
+            1: maxValue
+          })
+        )
+      } else {
+        callback()
+      }
+    },
+    // 时间验证
+    validateTime (rule, value, callback, item) {
+      const val = this.moment(value).format('LTS')
+      if (!value) {
+        callback()
+        return
+      }
+      const info = item.setting
+      let minValue = info.form.minValue
+      let maxValue = info.form.maxValue
+      if (info.form.minType === 'now') {
+        const now = Date.now()
+        minValue = this.moment(now).format('LTS')
+      }
+      if (info.form.maxType === 'now') {
+        const now = Date.now()
+        maxValue = this.moment(now).format('LTS')
+      }
+      if (handleCompare(val, minValue) === -1 && minValue) {
+        callback(
+          this.$t('{0}最小时间值为{1}', {
+            0: item.title,
+            1: minValue
+          })
+        )
+      } else if (handleCompare(val, maxValue) === 1 && maxValue) {
+        callback(
+          this.$t('{0}最大时间值为{1}', {
+            0: item.title,
+            1: maxValue
+          })
+        )
+      } else {
+        callback()
+      }
+      function handleCompare (time, timeTarget) {
+        const arr = time.split(':')
+        const arrT = timeTarget.split(':')
+        const h = arr[0]
+        const m = arr[1]
+        const s = arr[2]
+        const ht = arrT[0]
+        const mt = arrT[1]
+        const st = arrT[2]
+        if (h < ht) {
+          return -1
+        } else if (h === ht) {
+          if (m < mt) {
+            return -1
+          } else if (m === mt) {
+            if (s < st) {
+              return -1
+            } else if (s === st) {
+              return 0
+            } else {
+              return 1
+            }
+          } else {
+            return 1
+          }
+        } else {
+          return 1
+        }
+      }
+    },
+    // 多选框选择全部
+    onCheckAll (e, item, record, alias, index) {
+      const aliasItem = this.rowFieldsConfig[index][alias]
+      aliasItem.checkAll = e.target.checked
+      aliasItem.indeterminate = false
+      const checkedList = e.target.checked ? item.option : []
+      const value = checkedList.map(im => im.value)
+      const obj = {}
+      obj[alias + record.key] = value
+      const { setFieldsValue } = this.form
+      setFieldsValue(obj)
+      this.subData[index][alias] = value
+      this.onChange(record, alias, item.formType, value, '', index)
+    },
+    // 多选框选择单个
+    onCheck (value, item, record, alias, index) {
+      const aliasItem = this.rowFieldsConfig[index][alias]
+      aliasItem.indeterminate = !!value.length && value.length < item.option.length
+      aliasItem.checkAll = value.length === item.option.length
+      this.subData[index][alias] = value
+      this.onChange(record, alias, item.formType, value, '', index)
+    },
+    // 数据选择options转换
+    optionsConversionTreeselect (list, displayType, searchType, aliasItem) {
+      if (aliasItem.setting.attribute.dataSource === 'addressBook') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.name
+            return obj
+          })
+        }
+      } else {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.dictDataName
+            return obj
+          })
+        }
+      }
+    },
+    // 组织结构options转换
+    optionsConversion (list, displayType, searchType, aliasItem) {
+      if (aliasItem.setting.form.optionType === 'department') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.departmentId
+            obj.label = item.fullDepartmentName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.departmentId
+            obj.label = item.departmentName
+            return obj
+          })
+        }
+      } else if (aliasItem.setting.form.optionType === 'role') {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.roleId
+          obj.label = item.roleName
+          return obj
+        })
+      } else {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.username
+          obj.label = `${item.username}(${item.realName})`
+          return obj
+        })
+      }
+    },
+    // 把 onChange 的参数（如 event）转化为控件的值，详情查看https://1x.antdv.com/components/form-cn/ option.getValueFromEvent
+    getValueFromEvent (e) {
+      if (Array.isArray(e)) {
+        return e
+      }
+      if (e.fileList.length > 0 && e.fileList.every(item => item.response)) {
+        e.fileList = e.fileList.filter(item => item.response && item.response.code === 0)
+      }
+      return e && e.fileList
+    },
+    // 图片，附件上传验证
+    validateFile (rule, value, callback, item) {
+      if (!value) {
+        callback()
+        return
+      }
+      const length = value.length
+      const minLength = item.setting.attribute.minFiles
+      const maxLength = item.setting.attribute.maxFiles
+      if (item.setting.attribute.required === 'true' && length !== 0) {
+        if (length < minLength || length > maxLength) {
+          callback(
+            this.$t('{0}允许文件上传数量：{1}~{2}', {
+              0: item.title,
+              1: minLength,
+              2: maxLength
+            })
+          )
+        }
+        callback()
+      } else {
+        if (length > 0 && (length < minLength || length > maxLength)) {
+          callback(
+            this.$t('{0}允许文件上传数量：{1}~{2}', {
+              0: item.title,
+              1: minLength,
+              2: maxLength
+            })
+          )
+        }
+        callback()
+      }
+      item.setting.length = length
+      item.value.length = length
+    },
+    // 附件/图片上传前事件
+    beforeUpload (file, fileList, item) {
+      return new Promise((resolve, reject) => {
+        const fileType = item.setting.form.format || (item.formtype === 'image' ? '.png,.jpg,.jpeg,.gif,.bmp' : '.png,.jpg,.jpeg,.gif,.bmp,.flv,.swf,.mkv,.avi,.rm,.rmvb,.mpeg,.mpg,.ogg,.ogv,.mov,.wmv,.mp4,.webm,.mp3,.wav,.mid,.rar,.zip,.tar,.gz,.7z,.bz2,.cab,.iso,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.xml')
+        let suffix = file.name.substring(file.name.lastIndexOf('.'), file.name.length)
+        suffix = suffix.toLowerCase(suffix)
+        if (!fileType.includes(suffix)) {
+          this.$message.error('上传文件格式错误')
+          return reject(file)
+        }
+        let isLt2M = true
+        if (item.setting.form && item.setting.form.size) {
+          isLt2M = file.size / 1024 / 1024 < item.setting.form.size
+        }
+        if (!isLt2M) {
+          this.$message.error(`上传文件大小超过${item.setting.form.size}`)
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    // 上传文件失败提示
+    debounceToast (item) {
+      this.$message.error(item.response.message)
+    },
+    // 附件/图片 change事件
+    fileChange (e, options2, record, alias, index) {
+      let fileList = []
+      if (e && e.fileList) {
+        fileList = e.fileList.map(item => {
+          if (item.response && item.response.code !== 0) {
+            this.debounceToast(item)
+          }
+          const obj = {
+            name: item.name,
+            response: item.response,
+            status: item.status,
+            uid: item.uid,
+            url: item.response && item.response.result ? (this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + item.response.result.filePath) : ''
+          }
+          return obj
+        })
+      }
+      if (e.file.status === 'done' || e.file.status === 'removed') {
+        this.rowFieldsConfig[index][alias].fileList = fileList
+        const value = fileList.map(item => item.response?.result)
+        return value
+      }
+    },
+    // 图片预览
+    imagePreview (record, alias, index, file) {
+      let fileList = []
+      let idx = 0
+      fileList = this.rowFieldsConfig[index][alias].fileList
+      fileList.forEach((item, index) => {
+        if (item.uid === file.uid) {
+          idx = index
+        }
+      })
+      const name = `.${alias}${record.key}`
+      const viewer = this.$el.querySelector(name).$viewer
+      viewer.view(idx)
+    },
+    // 打开开窗选择的数据窗口
+    onOpen (toolButton) {
+      let importTemplate = {}
+      if (toolButton.importTemplate) {
+        importTemplate = JSON.parse(toolButton.importTemplate)
+        this.importTemplate = importTemplate
+        const parentField = importTemplate.parentField ? importTemplate.parentField.slice(-1)[0] : []
+        let searchValue
+        if (parentField) {
+          const { getFieldValue } = this.viewThis.form
+          searchValue = getFieldValue('record' + '[' + parentField + ']')
+        } else {
+          searchValue = ''
+        }
+        this.userKey = this.userKey === 'userKey' ? 'userKey' : 'userKey_1'
+        this.$nextTick(() => {
+          this.$refs.userTableWinList.show({
+            title: this.$t('开窗选择'),
+            barData: toolButton,
+            selectAction: true,
+            searchValue: searchValue,
+            type: 'webSubformDataWindow',
+            action: 'web_sub_data_window'
+          })
+        })
+      }
+    },
+    // 开窗选择获取数据
+    getOpenWindowData (val, fieldColumns) {
+      const fieldList = this.importTemplate.fieldList
+      const fieldColumnsObj = {}
+      fieldColumns.forEach(item => {
+        fieldList.forEach(im => {
+          if (im.winField === item.field.alias) {
+            fieldColumnsObj[im.currentField] = item
+          }
+        })
+      })
+      if (val && val.length > 0) {
+        val.forEach(item => {
+          // 先使用id，后面增加字段配置
+          if (this.subData.findIndex(im => im.windowDataId === item.id) === -1) {
+            const obj = JSON.parse(JSON.stringify(this.rowData))
+            obj.windowDataId = item.id
+            fieldList.forEach(im => {
+              obj[im.currentField] = item[im.winField]
+            })
+
+            this.addData(obj, fieldColumnsObj)
+          }
+        })
+      }
+    },
+    // 提供提交函数，使用位置UserTableFormView组件的getValueData函数中
+    handleSubmit () {
+      let flag = ''
+      this.form.validateFields((errors, values) => {
+        flag = !errors
+      })
+      if (flag) {
+        const freshRecords = this.subData.map(item => {
+          const obj = {}
+          for (const k in item) {
+            if (k !== 'key' && k !== 'windowDataId') {
+              obj[k] = item[k]
+            }
+          }
+          return obj
+        })
+        const { relationSetting } = this.currentRecord
+        let thisField, subField
+        if (relationSetting) {
+          thisField = relationSetting.thisField
+          subField = relationSetting.subField
+        }
+        return {
+          templateId: this.templateId,
+          freshRecords,
+          protoRecords: this.initSubData,
+          relationSetting,
+          thisField,
+          subField
+        }
+      } else {
+        return false
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.ant-form-item {
+  margin: 0;
+}
+.ant-table td {
+  white-space: nowrap;
+}
+.form-table-heard:before {
+  content: '*';
+  color: red;
+}
+</style>

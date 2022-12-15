@@ -1,0 +1,310 @@
+<template>
+  <div class="page">
+    <a-form class="search" :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }">
+      <a-row class="form normal">
+        <a-col :span="4">
+          <a-form-item :label="$t('账号')">
+            <a-input v-model="queryParam.userName" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="4">
+          <a-form-item :label="$t('客服昵称')">
+            <a-input v-model="queryParam.nickName" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="4">
+          <a-form-item :label="$t('状态')">
+            <a-tree-select
+              v-if="settingControl.busyEnable"
+              v-model="queryParam.status"
+              multiple
+              :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+              :tree-data="busyList"
+              allow-clear
+              placeholder=""
+            />
+            <a-select v-else v-model="queryParam.status" :allowClear="true" mode="multiple">
+              <a-select-option v-for="busyItem in busyList" :key="busyItem.value">{{ busyItem.label }}</a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="4">
+          <a-form-item :label="$t('技能组')">
+            <a-select v-model="queryParam.groupId" :allowClear="true" showSearch option-filter-prop="children">
+              <a-select-option v-for="item in groupList" :key="item.id" :value="item.id">
+                {{ item.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-space style="margin-left: 8px; margin-top: -2px">
+          <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button icon="plus" type="primary" @click="handleAdd">{{ $t('添加') }}</a-button>
+          <a-button @click="handleImport">{{ $t('导入') }}</a-button>
+          <a-button @click="handleExport">{{ $t('导出') }}</a-button>
+        </a-space>
+      </a-row>
+    </a-form>
+    <s-table
+      ref="table"
+      size="small"
+      class="table-fill"
+      :scroll="{ y: true }"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <span slot="status" slot-scope="text">
+        <span v-if="text == 0">
+          <a-icon type="check-circle" theme="twoTone" two-tone-color="#2FC25B" />
+          {{ $t('就绪') }}
+        </span>
+        <span v-else-if="text == 1">
+          <a-icon type="close-circle" theme="twoTone" two-tone-color="#F04864" />
+          {{ $t('离开') }}
+        </span>
+        <span v-else-if="text == 2">
+          <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+          {{ $t('示忙') }}
+        </span>
+        <span v-else-if="text == 3">
+          <a-icon type="logout" style="color: #8c8c8c" />
+          {{ $t('登出') }}
+        </span>
+        <span v-else>
+          <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+          {{
+            busyList.find((item) => item.value == 2) &&
+            busyList.find((item) => item.value == 2).children &&
+            busyList.find((item) => item.value == 2).children.find((item) => item.value == text)
+              ? busyList.find((item) => item.value == 2).children.find((item) => item.value == text).label
+              : $t('示忙')
+          }}
+        </span>
+      </span>
+      <div slot="action" slot-scope="text, record">
+        <a @click="handleEdit(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a @click="handleDelete(record)">{{ $t('删除') }}</a>
+      </div>
+    </s-table>
+    <user-form ref="userForm" @ok="handleOk" />
+    <general-export ref="generalExport">
+      <a-alert
+        :message="
+          $t('导入时，若客服中已经存在导入的客服（按{账号}），则按导入的内容编辑已存在的客服。如果不存在，则新增客服。')
+        "
+        type="info"
+        show-icon
+      />
+      <a-form-item :label="$t('模板下载')">
+        <a-button icon="download" @click="temDownload">{{ $t('模板下载') }}</a-button>
+      </a-form-item>
+    </general-export>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    userForm: () => import('./UserForm'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 150,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 80,
+        sorter: true
+      }, {
+        title: this.$t('账号'),
+        dataIndex: 'serviceId',
+        customRender: (text, record) => {
+          return text + '/' + record.realName
+        },
+        width: 240
+      }, {
+        title: this.$t('客服昵称'),
+        dataIndex: 'nickName',
+        width: 150
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'status',
+        width: 80,
+        align: 'center',
+        sorter: true,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('所属技能组'),
+        dataIndex: 'groupId',
+        customRender: (text, record) => {
+          const group = record.groupId.split(',')
+          const list = []
+          group.forEach(item => {
+            const obj = this.groupList.find(findItem => findItem.id === item)
+            obj && list.push(obj.name)
+          })
+          return list.join(',')
+        },
+        ellipsis: false,
+        width: 200
+      }, {
+        title: this.$t('接入上限'),
+        dataIndex: 'connectLimit',
+        align: 'center',
+        width: 80,
+        sorter: true
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser',
+        width: 150
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        sorter: true
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 150
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        sorter: true
+      }],
+      groupList: [],
+      settingControl: {},
+      busyList: [{
+        value: 0,
+        label: this.$t('就绪')
+      }, {
+        value: 2,
+        label: this.$t('示忙')
+      }, {
+        value: 1,
+        label: this.$t('离开')
+      }, {
+        value: 3,
+        label: this.$t('登出')
+      }]
+    }
+  },
+  mounted () {
+    this.axios({
+      url: '/chat/setting/base',
+      data: { action: 'get' }
+    }).then(res => {
+      this.settingControl = res.result.info
+      this.groupList = res.result.groupList
+      if (this.settingControl.busyEnable) {
+        this.busyList.forEach(item => {
+          if (item.value === 2) {
+            item.selectable = false
+            const arr = JSON.parse(this.settingControl.furtherStates)
+            item.children = arr.filter(item => item.check)
+          }
+        })
+      }
+    })
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/chat/user/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleAdd () {
+      this.$nextTick(() => {
+        this.$refs.userForm.show({
+          action: 'add',
+          title: this.$t('添加'),
+          url: '/chat/user/add'
+        })
+      })
+    },
+    handleEdit (record) {
+      this.$nextTick(() => {
+        this.$refs.userForm.show({
+          action: 'edit',
+          title: `${this.$t('编辑')}：${record.serviceId}`,
+          url: '/chat/user/edit',
+          record: record
+        })
+      })
+    },
+    handleImport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导入'),
+        type: 'import',
+        slotScoped: true,
+        className: 'ImportServiceTask'
+      })
+    },
+    // 模板下载
+    temDownload () {
+      const filePath = encodeURIComponent('static/template/chat/客服导入模板.xlsx')
+      window.open(`${process.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}`)
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        number: 'SysUserInfo',
+        className: 'ExportChatStatsTask',
+        parameter: {
+          condition: {
+            req: this.queryParam,
+            type: 'userInfo'
+          }
+        }
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    handleDelete (record) {
+      const that = this
+      const table = this.$refs.table
+      const id = record && record.id
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/chat/user/delete',
+            data: { id: id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+            } else {
+              that.$message.error(res.message)
+            }
+            table.refresh()
+          })
+        }
+      })
+    }
+  }
+}
+</script>

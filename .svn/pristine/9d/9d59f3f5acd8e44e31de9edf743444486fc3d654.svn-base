@@ -1,0 +1,513 @@
+/* stylelint-disable font-family-no-missing-generic-family-keyword */
+@import "./font.css";
+
+.color-fff {
+  color: #fff;
+}
+
+.color-2e6 {
+  color: #2e64fb;
+}
+
+.color-ff6 {
+  color: #ff606b;
+}
+
+.color-4cb {
+  color: #4cbc9a;
+}
+
+.color-ffc {
+  color: #ffc621;
+}
+
+.font-12 {
+  font-size: 0.04rem;
+}
+
+.font-14 {
+  font-size: 0.07rem;
+}
+
+.font-18 {
+  font-size: 0.09rem;
+}
+
+.font-21 {
+  font-size: 0.11rem;
+}
+
+.font-32 {
+  font-size: 0.16rem;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.flex-3 {
+  flex: 3;
+}
+
+.flex-4 {
+  flex: 4;
+}
+
+.font-600 {
+  font-weight: 600;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.global-flex-jus {
+  display: flex;
+  justify-content: space-around;
+}
+
+.glo-flex-bet {
+  display: flex;
+  justify-content: space-between;
+}
+
+.glo-flex {
+  display: flex;
+}
+
+.glo-flex-end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.glo-wrap {
+  flex-wrap: wrap;
+}
+
+.glo-col {
+  flex-direction: column;
+}
+
+.fullClass {
+  width: 100%;
+  height: 100%;
+}
+
+.fullHeight {
+  height: 100%;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.box {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 4.9rem;
+}
+
+/* 时间计时器样式 */
+.gloTime {
+  position: absolute;
+  top: 0.035rem;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 0.16rem;
+}
+
+/* 说明样式 */
+.gloExplainClass {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.16rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.explainImage {
+  width: 0.065rem;
+  height: 0.08rem;
+  margin-right: 0.04rem;
+}
+
+/* 头部 */
+.topLogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 0.48rem;
+  margin-top: -0.02rem;
+}
+
+.topLogoImg {
+  background-image: url("../image/headerBackImg.png");
+  background-position: center center;
+  background-size: 100.5% 100%;
+}
+
+.topLogo img {
+  height: 60%;
+}
+
+.box .content {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 100%;
+  padding-bottom: 12px;
+  background-image: url("../image/background.png");
+  background-position: center center;
+  background-size: 100% 100%;
+}
+
+.globalClass {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 0.04rem;
+}
+
+.centerTitleHeight {
+  width: 1.2rem;
+  height: 0.18rem;
+  line-height: 0.18rem;
+  text-align: center;
+}
+
+.centerTitleImg {
+  margin: 0.02rem 0;
+  background-image: url("../image/titleBackImg.png");
+}
+
+.centerTitle {
+  font-size: 0.09rem;
+  font-weight: bold;
+  color: #fff;
+}
+
+/* 内容区域 */
+.tableBox {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 85%;
+  padding: 0 0.1rem 0.12rem;
+}
+
+/* 子表格样式 */
+.subtableBox {
+  position: relative;
+  background-color: #070547;
+  border: 1px solid #1b29ae;
+}
+
+.MarkBox {
+  position: absolute;
+  width: 0.08rem;
+  height: 0.08rem;
+}
+
+.leftMark {
+  border-left: 1px solid #107dbe;
+}
+
+.topMark {
+  border-top: 1px solid #107dbe;
+}
+
+.rightMark {
+  border-right: 1px solid #107dbe;
+}
+
+.bottomMark {
+  border-bottom: 1px solid #107dbe;
+}
+
+/* 上半部分 */
+.topClass {
+  display: flex;
+  flex: 3;
+}
+
+/* 第一个表格 */
+.tFirBoxBody {
+  padding: 0.13rem 3% 0.25rem;
+}
+
+/* 数字格子样式 */
+.viewBoxClass {
+  justify-content: center;
+  margin: 0.15rem 0 0.3rem;
+}
+
+.firBox {
+  display: flex;
+  font-size: 0.2rem;
+  color: #fff;
+}
+
+.firBoxItem {
+  padding: 0.02rem 0.03rem;
+  margin-right: 0.01rem;
+  margin-bottom: 0.05rem;
+  background-color: #2028b1;
+  border-radius: 0.02rem;
+}
+
+.firBoxText {
+  margin: 0.23rem 0 0 0.02rem;
+  font-size: 0.08rem;
+}
+
+/* 时间样式 */
+.firTime {
+  text-align: center;
+}
+
+.firTimeTitle {
+  font-size: 0.085rem;
+}
+
+.firTimeText {
+  font-size: 0.12rem;
+}
+
+/* 第二个表格 */
+.secClass {
+  padding: 0.14rem 0.16rem;
+}
+
+.topSecClass {
+  flex: 4;
+  min-width: 3rem;
+  margin: 0 0.13rem;
+}
+
+/* 数字格子样式 */
+.secBox {
+  padding: 0.1rem 0.08rem;
+  border: 1px solid #0d5da2;
+}
+
+.secText {
+  font-weight: bold;
+}
+
+.secCenterBox {
+  display: flex;
+  margin: 0.12rem 0 0.2rem;
+}
+
+.phoneBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 线条样式 */
+.secLineLeft {
+  height: 0.05rem;
+  margin-top: 0.03rem;
+  border-bottom: 1px solid #0d5da2;
+  border-left: 1px solid #0d5da2;
+}
+
+.secLineRight {
+  height: 0.05rem;
+  margin-top: 0.03rem;
+  border-right: 1px solid #0d5da2;
+  border-bottom: 1px solid #0d5da2;
+}
+
+.phoneClass {
+  width: 0.1rem;
+  height: 0.1rem;
+  margin-right: 0.04rem;
+}
+
+/* 下部分 */
+.bottomClass {
+  flex: 7;
+  padding-top: 0.1rem;
+}
+
+/* 第一个表格 */
+.bottomFirBox {
+  flex: 6;
+  margin-right: 0.13rem;
+}
+
+.bFirBoxBody {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bFirText {
+  position: absolute;
+  top: 0.14rem;
+  left: 0.14rem;
+}
+
+.bChartFirst {
+  padding: 0 0.1rem;
+}
+
+.bChart {
+  width: 100%;
+  height: 90%;
+}
+
+/* 第二个表格 */
+.bSecBoxBody {
+  padding: 0.13rem 3% 0.25rem;
+}
+
+.bChartTop {
+  margin-top: 0.05rem;
+}
+
+/* 今日客服活动 */
+.activeBox {
+  height: 86vh;
+}
+
+.tableBoxBody::-webkit-scrollbar {
+  display: none;
+}
+
+.tableBoxBody {
+  height: 80vh;
+  margin: 0.13rem 0.1rem;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.ant-table-column-title,
+.ant-table-tbody {
+  font-size: 0.05rem;
+}
+
+/* 排名标签样式 */
+.firstNum {
+  width: 0.12rem;
+  height: 0.13rem;
+  line-height: 0.1rem;
+  background-image: url("../image/firstNum.png");
+  background-size: 100% 100%;
+}
+
+.secondNum {
+  width: 0.12rem;
+  height: 0.13rem;
+  line-height: 0.1rem;
+  background-image: url("../image/secondNum.png");
+  background-size: 100% 100%;
+}
+
+.thirdNum {
+  width: 0.12rem;
+  height: 0.13rem;
+  line-height: 0.1rem;
+  background-image: url("../image/thirdNum.png");
+  background-size: 100% 100%;
+}
+
+.otherNum {
+  width: 0.12rem;
+  height: 0.12rem;
+  line-height: 0.12rem;
+  background-color: #0d44b5;
+  border-radius: 50%;
+}
+
+/* 会话总数量数字样式 */
+.dialogNumBox {
+  position: relative;
+  width: 0.21rem;
+  margin-right: 0.026rem;
+  text-align: center;
+}
+
+.dialogNumBox:last-child {
+  margin-right: 0;
+}
+
+.dialogNumItem {
+  height: 0.15rem;
+  background-color: #182e83;
+}
+
+.dialogNumFirst {
+  margin-bottom: 0.01rem;
+  border-top-left-radius: 0.02rem;
+  border-top-right-radius: 0.02rem;
+}
+
+.dialogNumSecond {
+  border-bottom-right-radius: 0.02rem;
+  border-bottom-left-radius: 0.02rem;
+}
+
+.dialogNumText {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0.35rem;
+  font-family: fontIcon;
+  font-size: 0.28rem;
+  line-height: 0.32rem;
+}
+
+.box .ant-table-small {
+  border: 0;
+}
+
+.box .ant-table {
+  line-height: 2;
+}
+
+.box .ant-table-tbody > tr > td {
+  border-bottom: 0;
+}
+
+.box .ant-table-thead > tr,
+.box .ant-table-tbody > tr {
+  color: #fff;
+  background-color: #070547;
+}
+
+.box .ant-table-tbody > tr:hover > td {
+  color: #3754a0;
+}
+
+.box .ant-table-tbody > tr:nth-child(even) {
+  background-color: #080b52;
+}
+
+.box .ant-table-small > .ant-table-content > .ant-table-body > table > .ant-table-thead > tr > th {
+  color: aliceblue;
+  background-color: #0d44b5;
+  border-bottom: 0;
+}
+
+.box .tablebox {
+  position: absolute;
+  top: 126px;
+  right: 30px;
+  bottom: 43px;
+  left: 30px;
+  display: flex;
+}

@@ -1,0 +1,65 @@
+<template>
+  <a-card size="small">
+    <a-spin :spinning="loading">
+      <a-tabs>
+        <a-tab-pane key="8" :tab="$t('会话平台')" class="tabPaneStyle">
+          <setting-session-platform :baseAll="baseAll" :groupList="groupList" />
+        </a-tab-pane>
+        <a-tab-pane key="9" :tab="$t('会话设置')" class="tabPaneStyle">
+          <setting-session :baseAll="baseAll" :groupList="groupList" />
+        </a-tab-pane>
+        <a-tab-pane key="10" :tab="$t('留言设置')" class="tabPaneStyle">
+          <setting-message :baseAll="baseAll" :groupList="groupList" />
+        </a-tab-pane>
+        <a-tab-pane key="11" :tab="$t('统计设置')" class="tabPaneStyle">
+          <setting-statistics :parent="baseAll" />
+        </a-tab-pane>
+        <a-tab-pane key="12" :tab="$t('系统设置')" class="tabPaneStyle">
+          <setting-system :baseAll="baseAll" />
+        </a-tab-pane>
+      </a-tabs>
+    </a-spin>
+  </a-card>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    SettingSessionPlatform: () => import('./SettingSessionPlatform'),
+    SettingSession: () => import('./SettingSession'),
+    SettingMessage: () => import('./SettingMessage'),
+    SettingStatistics: () => import('./SettingStatistics'),
+    SettingSystem: () => import('./SettingSystem')
+  },
+  data () {
+    return {
+      baseAll: {},
+      groupList: [],
+      loading: false
+    }
+  },
+  mounted () {
+    this.baseSetting()
+  },
+  methods: {
+    baseSetting () {
+      this.loading = true
+      this.axios({
+        url: '/chat/setting/base',
+        data: Object.assign({ action: 'get' })
+      }).then(res => {
+        this.loading = false
+        this.baseAll = res.result.info
+        this.groupList = res.result.groupList
+      })
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.tabPaneStyle {
+  height: calc(100vh - 200px);
+  overflow: auto;
+}
+</style>

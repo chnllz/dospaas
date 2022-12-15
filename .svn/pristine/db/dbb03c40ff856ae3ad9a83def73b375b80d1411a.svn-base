@@ -1,0 +1,142 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <span style="font-size: 16px; font-family: SimHei">{{ $t('如果:') }}</span>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('办理方式为')">
+          <a-input disabled :value="$t('当前办理方式')"></a-input>
+        </a-form-item>
+        <span style="font-size: 16px; font-family: SimHei">{{ $t('那么:') }}</span>
+        <a-form-item
+          v-for="(eventItem, index) in event"
+          :key="index"
+          :labelCol="labelCol"
+          :wrapperCol="{ span: 20 }"
+          :label="$t('字段')"
+        >
+          <div>
+            <a-select v-model="eventItem.field" style="width: 200px" show-search option-filter-prop="children">
+              <a-select-option v-for="(value, key) in fieldData" :key="key" :value="value.alias" :record="value">
+                {{ value.name }}
+              </a-select-option>
+            </a-select>
+            <!-- 字段选择 -->
+            <a-select
+              style="width: 120px; marginleft: 10px"
+              :defaultValue="eventItem.mandatory ? eventItem.status + '_' + eventItem.mandatory : eventItem.status"
+              @change="
+                (e) => {
+                  eventItem.status = e.split('_')[0]
+                  eventItem.mandatory = e.split('_')[1]
+                }
+              "
+            >
+              <a-select-option value="">{{ $t('请选择') }}</a-select-option>
+              <a-select-option value="show_true">{{ $t('允许必填') }}</a-select-option>
+              <a-select-option value="show_false">{{ $t('允许不必填') }}</a-select-option>
+              <a-select-option value="readonly_true">{{ $t('只读必填') }}</a-select-option>
+              <a-select-option value="readonly_false">{{ $t('只读不必填') }}</a-select-option>
+              <a-select-option value="hidden">{{ $t('隐藏') }}</a-select-option>
+            </a-select>
+            <a-button
+              shape="circle"
+              icon="plus"
+              size="small"
+              style="marginleft: 5px"
+              @click="event.push({ field: '', status: '', mandatory: '' })"
+            ></a-button>
+            <a-button
+              shape="circle"
+              icon="minus"
+              size="small"
+              style="marginleft: 5px"
+              :disabled="event.length === 1"
+              @click="deleteEvent(index)"
+            ></a-button>
+          </div>
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      config: {},
+      way: '',
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      handleWayRuleData: [],
+      flowData: {},
+      fieldData: [],
+      event: [{
+        field: '',
+        status: '',
+        mandatory: ''
+      }]
+    }
+  },
+  methods: {
+    show (config, data) {
+      this.visible = true
+      this.config = config
+      this.data = JSON.parse(JSON.stringify(config.record))
+      if (config.record.way) {
+        this.way = config.record.way
+      }
+      this.recordIndex = config.index
+      this.form.resetFields()
+      if (this.data.rule) {
+        if (this.data.rule.length !== 0) {
+          if (typeof this.data.rule === 'string') {
+            this.event = [{ field: '', status: '', mandatory: '' }]
+          } else {
+            this.event = JSON.parse(JSON.stringify(this.data.rule))
+          }
+        }
+      } else {
+        this.event = [{ field: '', status: '', mandatory: '' }]
+      }
+      this.flowData = config.flowData
+      this.axios({
+        url: `/admin/field/getAliasFieldMapping?tableId=${config.flowData.params.tableId}`
+      }).then((res) => {
+        this.loading = false
+        var arr = []
+        for (var k in res.result) {
+          arr.push(res.result[k])
+        }
+        this.fieldData = arr
+      })
+    },
+    handleSubmit () {
+      this.data.rule = this.event
+      this.visible = false
+      this.$message.success(this.$t('操作成功'))
+      this.$emit('ok', { index: this.recordIndex, data: this.data })
+    },
+    // 删除规则
+    deleteEvent (index) {
+      this.event.splice(index, 1)
+    }
+  }
+}
+</script>

@@ -1,0 +1,160 @@
+<template>
+  <a-popover v-model="selectshow" trigger="click" placement="bottomLeft">
+    <a-form-item>
+      <a-input
+        v-model="address"
+        :disabled="fieldRule === 'readonly'"
+        :placeholder="fieldRule === 'readonly' ? '' : $t('请选择地址')"
+        :style="fieldRule ? {} : { cursor: 'pointer' }"
+        @click.stop="showAddressSearch"
+      />
+    </a-form-item>
+    <div slot="content" style="width: 440px; display: flex">
+      <AddressSelect
+        ref="addressSelect"
+        series="2"
+        :showInput="false"
+        :cityNameInit="cityName"
+        @send="getAddress"
+      ></AddressSelect>
+      <a-select
+        showSearch
+        :value="undefined"
+        style="flex: 1"
+        :placeholder="$t('请输入地址关键字进行搜索')"
+        allowClear
+        :filter-option="false"
+        :not-found-content="fetching ? undefined : null"
+        @search="searchAddress"
+        @change="
+          (e) => {
+            if (!e) {
+              searchdata = []
+            }
+          }
+        "
+      >
+        <a-spin v-if="fetching" slot="notFoundContent" size="small" />
+        <a-select-option
+          v-for="(item, index) in searchdata"
+          :key="index"
+          :value="item.coordinate"
+          @click="selectAddress(item)"
+        >
+          {{ item.address }}
+        </a-select-option>
+      </a-select>
+    </div>
+  </a-popover>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    AddressSelect: () => import('../Field/AddressSelect')
+  },
+  props: {
+    fieldRule: {
+      type: String,
+      default: ''
+    },
+    alias: {
+      type: String,
+      default: ''
+    },
+    option: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    this.searchAddress = debounce(this.searchAddress, 800)
+    return {
+      selectshow: false,
+      page: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      fetching: false,
+      searchdata: [],
+      address: '',
+      cityName: ''
+    }
+  },
+  watch: {
+    option: {
+      handler (newVal) {
+        const address = newVal[0] || {}
+        this.address = address.fullName
+        const addressArray = this.address.split('/')
+        const province = addressArray[0]
+        this.cityName = addressArray[1]
+        if (['北京市', '上海市', '天津市', '重庆市'].includes(province)) {
+          this.cityName = province
+        }
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  methods: {
+    // 显示地址搜索器
+    showAddressSearch () {
+      this.selectshow = !this.selectshow
+    },
+    // 获取省市
+    getAddress (label) {
+      if (label) {
+        const addressArray = label.split('/')
+        const province = addressArray[0]
+        this.cityName = addressArray[1]
+        if (['北京市', '上海市', '天津市', '重庆市'].includes(province)) {
+          this.cityName = province
+        }
+      }
+    },
+    searchAddress (val) {
+      if (val && !this.cityName) {
+        this.$message.info('请选择到二级地址，如广东省深圳市')
+      }
+      if (val && this.cityName) {
+        this.fetching = true
+        this.axios({
+          url: '/admin/map/keywordSearch',
+          data: { query: val, region: this.cityName }
+        }).then(res => {
+          this.searchdata = res.result || []
+          this.searchdata = this.searchdata.map(item => {
+            item.coordinate = `${item.lng}, ${item.lat}`
+            return item
+          })
+          this.fetching = false
+        })
+      } else {
+        this.searchdata = []
+      }
+    },
+    // 选择地址
+    selectAddress (item) {
+      const { province, city, district, address } = item
+      this.axios({
+        url: '/admin/map/getAddressOption',
+        data: {
+          province,
+          city,
+          area: district
+        }
+      }).then(res => {
+        const result = res.result || {}
+        const { fullName, fullNumber, number } = result
+        this.address = fullName
+        this.$emit('send', fullName, number, this.alias, fullNumber, address)
+        this.selectshow = false
+      })
+    }
+  }
+}
+</script>

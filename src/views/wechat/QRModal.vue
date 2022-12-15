@@ -1,0 +1,78 @@
+<template>
+  <div>
+    <a-modal
+      :title="config.title"
+      :visible="visible"
+      :confirm-loading="loading"
+      :destroyOnClose="true"
+      :footer="false"
+      :bodyStyle="{
+        height: '600px'
+      }"
+      @cancel="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <div style="display: flex; justify-content: center">
+          <iframe style="height: 500px" :src="src" frameborder="0"></iframe>
+        </div>
+      </a-spin>
+    </a-modal>
+  </div>
+</template>
+<script>
+export default {
+  data () {
+    return {
+      src: '',
+      visible: false,
+      loading: false,
+      config: {},
+      iframeWin: null
+    }
+  },
+  mounted () {
+    window.addEventListener('message', (eve) => {
+      if (eve.data && eve.data.cmd === 'getCode') {
+        const search = eve.data.params.url.split('?')
+        const getQueryVariable = (variable) => {
+          const query = search[1]
+          const vars = query.split('&')
+          const arr = []
+          for (let i = 0; i < vars.length; i++) {
+            const pair = vars[i].split('=')
+            if (pair[0] === variable) {
+              return pair[1]
+            } else if (!variable && pair[0] !== 'sid' && pair[0] !== 'login') {
+              arr.push(vars[i])
+            }
+          }
+          return arr.length ? arr.join('&') : ''
+        }
+        const code = getQueryVariable('code')
+        if (code) {
+          this.axios({
+            url: '/wechat/enterpriseWeChat/bindUser',
+            params: {
+              code: code
+            }
+          }).then(res => {
+            if (!res.code) {
+              this.visible = false
+              document.removeEventListener('message', '', true)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      }
+    })
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.src = `${window.location.href.split('/m')[0]}/CustomPage/?view=wechat/QRCodeCreate`
+    }
+  }
+}
+</script>

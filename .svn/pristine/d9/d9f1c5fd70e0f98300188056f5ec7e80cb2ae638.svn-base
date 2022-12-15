@@ -1,0 +1,408 @@
+<template>
+  <!-- 表单组件 -->
+  <a-drawer
+    :destroyOnClose="true"
+    :width="params.width"
+    :visible="visible"
+    :class="relationTable.length > 0 ? 'noPaddingTop' : ''"
+    :afterVisibleChange="afterVisibleChange"
+    @close="visible = !visible"
+  >
+    <template slot="title">
+      <a-row>
+        <a-col :span="20">{{ $t(params.title) }}</a-col>
+        <a-col v-if="helpText" :span="4" style="text-align: right">
+          <a-popover v-model="helpVisible" trigger="click" :arrowPointAtCenter="true" placement="bottomRight">
+            <template slot="content">
+              <div style="width: 350px" class="helpText">
+                <div v-dompurify-html="helpNotes" v-viewer></div>
+              </div>
+            </template>
+            <a-icon
+              type="question-circle"
+              style="font-size: 16px; margin-right: 40px; color: rgba(0, 0, 0, 0.65)"
+              @click="getHelp"
+            ></a-icon>
+          </a-popover>
+        </a-col>
+      </a-row>
+    </template>
+    <a-spin v-if="code === 0" :spinning="pageLoading">
+      <user-table-form-view
+        ref="userTableFormView"
+        :params="{ tableName, template, fieldRule, parentParams: params, templateOther, action, page: 'user' }"
+        :formThis="data_"
+        @start="handleStart"
+        @ok="getVisible"
+      />
+      <div v-if="bbarshow" class="bbar">
+        <component :is="item.component" v-for="(item, index) in bbar" v-show="item.display === '1'" :key="index" />
+      </div>
+    </a-spin>
+    <span v-else>{{ message }}</span>
+    <a-modal :visible="imagePreviewVisible" :footer="null" @cancel="imagePreviewVisible = !imagePreviewVisible">
+      <img style="width: 100%" :src="imagePreviewUrl" />
+    </a-modal>
+    <user-table-components ref="userTableComponents" @ok="getVal" />
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import UserTableComponents from './UserTableComponents'
+export default {
+  components: {
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    UserTableComponents,
+    UserTableFormView: () => import('./UserTableFormView'),
+    UserTableList: () => import('./UserTableList')
+  },
+  data () {
+    return {
+      data_: this,
+      activeKey: 0,
+      params: {},
+      action: '', // 添加还是编辑
+      visible: false,
+      pageLoading: false, // 本页面加载
+      loading: false, // 保存、办理按钮加载
+      parentPage: '',
+      record: {},
+      // 图片预览
+      imagePreviewVisible: false,
+      imagePreviewUrl: '',
+      beforeSubmit: '', // 表单提交前的验证脚本
+      template: [],
+      templateInit: [],
+      templateCom: {}, // 自定义组件json
+      templateOther: [],
+      fieldRule: [],
+      // 用于定制开发作数据交换时使用，自定义组件时使用parent.$set(parent.data, 'mydata', 'hello')
+      data: {},
+      bbar: {},
+      tableName: '',
+      bbarshow: false,
+      relationTable: [],
+      code: 0,
+      message: '',
+      saveStatus: false, // 提交接口是否请求成功
+      returnData: {}, // 提交接口返回数据
+      listThis: null,
+      helpNotes: '',
+      helpVisible: false,
+      helpText: false,
+      actions: new Map([[
+        '', function (value, inputValue) {
+          return true
+        }], [
+        'contain', function (value, inputValue) {
+          if (inputValue.indexOf(value) === -1) {
+            return false
+          } else {
+            return true
+          }
+        }], [
+        'equal', function (value, inputValue) {
+          if (inputValue === value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'great', function (value, inputValue) {
+          if (inputValue > value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'nc', function (value, inputValue) {
+          if (inputValue.indexOf(value) === -1) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'ne', function (value, inputValue) {
+          if (inputValue !== value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'lt', function (value, inputValue) {
+          if (inputValue < value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'ge', function (value, inputValue) {
+          if (inputValue > value || inputValue === value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'le', function (value, inputValue) {
+          if (inputValue < value || inputValue === value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'bw', function (value, inputValue) {
+          if (inputValue.indexOf(value) === 0) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'ew', function (value, inputValue) {
+          const len = value.length
+          if (inputValue.slice(-len) === value) {
+            return true
+          } else {
+            return false
+          }
+        }]])
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  methods: {
+    show (parameter, page) {
+      this.parentPage = page
+      if (parameter.listThis) {
+        this.listThis = parameter.listThis
+        delete parameter.listThis
+      }
+      this.params = JSON.parse(JSON.stringify(parameter))
+      let url = parameter.url
+      url = url.split('/')
+      this.action = url[url.length - 1]
+      this.params.action = this.action
+      this.saveStatus = false
+      let templateId = ''
+      if (!parameter.record) {
+        parameter.record = {}
+        parameter.record.id = 0
+      }
+      this.$setLoading(true)
+      this.axios({
+        url: '/admin/userTable/getFormView',
+        data: { id: parameter.record.id, dataWindowId: parameter.tpl || this.$parent.params.templateId }
+      }).then(res => {
+        templateId = res.code === 0 ? res.result : null
+        this.params.templateId = this.params.tplviewidtpl ? this.params.tplviewidtpl : templateId
+        if (this.params.templateId) {
+          this.$setLoading(false)
+          this.visible = true
+          this.pageLoading = true
+        } else {
+          this.$setLoading(false)
+          this.$message.warning(this.$t('您没有权限查看视图，请联系管理员'))
+        }
+      })
+    },
+    // 请求视图列表数据
+    requestData () {
+      const nowParams = JSON.parse(JSON.stringify(this.params))
+      nowParams.record = undefined
+      this.axios({
+        url: this.params.url,
+        data: Object.assign(nowParams, { listTemplateId: this.params.tpl || this.$parent.params.templateId, id: this.params.record ? this.params.record.id : 0 })
+      }).then(res => {
+        this.viewMessage = res.result.message
+        this.code = res.result.code || 0
+        this.message = res.result.message
+        this.tableName = res.result.tableName
+        this.interactiveField = res.result.interactiveField
+        this.helpText = res.result.helpText
+        this.bbar = res.result.bbar || []
+        this.beforeSubmit = res.result.templateScript && res.result.templateScript.beforeSubmit ? res.result.templateScript.beforeSubmit : ''
+        this.bbar.forEach(item => {
+          item.component = {
+            template: `<span>${item.attribute}</span>`,
+            data: () => {
+              return {
+                parent: this
+              }
+            }
+          }
+        })
+        this.bbarshow = !this.bbar.every(item => item.display === '0')
+        this.relationTable = res.result.relationTable || []
+        this.pageLoading = false
+        this.templateInit = res.result.template || []
+        this.templateInit.forEach(item => {
+          if (item.type === 'component') {
+            this.templateCom[item.value] = item
+          }
+        })
+        this.template = JSON.parse(JSON.stringify(res.result.template)) || []
+        this.templateOther = JSON.parse(JSON.stringify(res.result.template)) || []
+        // 表单初始化loader
+        if (res.result.templateScript && res.result.templateScript.afterInit) {
+          var initAttribute = res.result.templateScript.afterInit
+          var initTemplate = {
+            type: 'component',
+            attribute: initAttribute
+          }
+          this.template.push(initTemplate)
+        }
+        this.fieldRule = res.result.fieldRule
+        const getComponent = (array) => {
+          array.forEach((item, index) => {
+            if (item.columns) {
+              getComponent(item.columns)
+            } else if (item.trs) {
+              getComponent(item.trs)
+            } else if (item.list) {
+              getComponent(item.list)
+            } else {
+              if (item.type === 'component') {
+                item.component = {
+                  template: `<span>${item.attribute}</span>`,
+                  data: () => {
+                    return {
+                      parent: this
+                    }
+                  }
+                }
+              }
+            }
+          })
+        }
+        getComponent(this.template)
+      })
+    },
+    getHelp () {
+      this.helpVisible = false
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: this.params.templateId
+        }
+      }).then(res => {
+        if (!res.code) {
+          const obj = res.result
+          if (obj.displayMode === 'drawer') {
+            this.helpVisible = false
+            this.$showDocument({ visible: true, content: obj.content })
+          } else {
+            this.helpVisible = true
+            this.helpNotes = obj.content
+          }
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    afterVisibleChange (e) {
+      if (e) this.requestData()
+    },
+    handlePlayback () {
+      if (this.record.uniqueid) {
+        this.axios({
+          url: '/admin/api/getRecordFile',
+          data: { uniqueid: this.record.uniqueid }
+        }).then(res => {
+          if (res.code === 0) {
+            this.modal2Visible = true
+            this.sourceUrl = this.setting.interfaceurl + 'sdk/index/record/?type=download&file=' + res.result.file
+          } else {
+            this.$message.warning(res.message)
+          }
+        })
+      } else {
+        this.$message.error(this.$t('未配置uniqueid'))
+      }
+    },
+    handleDownload () {
+      if (this.record.uniqueid) {
+        this.axios({
+          url: '/admin/api/getRecordFile',
+          data: { uniqueid: this.record.uniqueid }
+        }).then(res => {
+          if (res.code === 0) {
+            window.open(this.setting.interfaceurl + 'sdk/index/record/?type=download&file=' + res.result.file)
+          } else {
+            this.$message.warning(res.message)
+          }
+        })
+      } else {
+        this.$message.error(this.$t('未配置uniqueid'))
+      }
+    },
+    // 判断当前用户，用户所在部门，所属于角色
+    handleUserSimple (current, conditionValue) {
+      if (conditionValue.indexOf(current) !== -1) {
+        return true
+      } else {
+        return false
+      }
+    },
+    // 规则函数
+    handleSimple (include, value, inputValue) {
+      const action = this.actions.get(`${include}`)
+      return action(value, inputValue)
+    },
+    // 提交表单
+    handleSubmit (data) {
+      const beforeSubmit = this.beforeSubmit
+      if (beforeSubmit) {
+        const parent = this
+        const str = 'return ' + beforeSubmit
+        // eslint-disable-next-line no-new-func
+        const func = new Function(str)
+        const flag = func()(parent)
+        if (flag) {
+          this.$refs.userTableFormView.handleSubmit(data, this.parentPage, this.params.jointable)
+        }
+      } else {
+        this.$refs.userTableFormView.handleSubmit(data, this.parentPage, this.params.jointable)
+      }
+    },
+    getVisible (values, tableName, message, data) {
+      if (message !== 'error') {
+        this.visible = false
+        this.saveStatus = true
+        this.returnData = data
+        this.$emit('ok', values, tableName)
+      } else {
+        this.pageLoading = false
+      }
+    },
+    handleStart () {
+      this.pageLoading = true
+    },
+    // 取消
+    handleCancel () {
+      this.visible = !this.visible
+    },
+    // 自定义组件赋值
+    getVal (val) {
+      const getComponent = (array) => {
+        array.forEach((item, index) => {
+          if (item.columns) {
+            getComponent(item.columns)
+          } else if (item.trs) {
+            getComponent(item.trs)
+          } else if (item.list) {
+            getComponent(item.list)
+          } else {
+            if (item.field && item.field.alias === val.alias) {
+              item.field.value = JSON.stringify(val.data)
+              const name = `${this.tableName}[${item.field.alias}]`
+              this.$refs.userTableFormView.form.setFieldsValue({ [name]: item.field.value })
+            }
+          }
+        })
+      }
+      getComponent(this.template)
+    }
+  }
+}
+</script>

@@ -1,0 +1,684 @@
+<template>
+  <a-drawer :title="config.title" :width="1200" :visible="visible" @close="visible = !visible">
+    <!-- 搜索区域 -->
+    <a-spin :spinning="false">
+      <div>
+        <a-card size="small" class="table-search">
+          <a-form
+            :form="formSearch"
+            :layout="advancedSearch ? 'vertical' : 'inline'"
+            :class="advancedSearch ? 'advanced' : 'normal'"
+          >
+            <div class="head">
+              <div class="title">{{ $t('过滤') }}</div>
+              <a-space style="margin-left: 8px">
+                <a-button htmlType="submit" type="primary" @click="handleSearch({ tag: true })">
+                  {{ $t('搜索') }}
+                </a-button>
+                <a-button
+                  @click="
+                    () => {
+                      queryParam = {}
+                      handleSearch({ tag: false })
+                    }
+                  "
+                >
+                  {{ $t('重置') }}
+                </a-button>
+                <a @click="changeAdvancedSearch">
+                  {{ advancedSearch ? '收起' : '展开' }}
+                  <a-icon :type="advancedSearch ? 'up' : 'down'" />
+                </a>
+              </a-space>
+            </div>
+            <a-row :gutter="16">
+              <a-col v-if="advancedSearch" span="24">
+                <div class="divider"></div>
+              </a-col>
+              <!-- 下面是动态生成区域，要根据不同的组件进行相应展示 -->
+              <a-col
+                v-for="(item, index) in template"
+                v-show="item.fieldRule !== 'hidden'"
+                :key="index"
+                v-bind="{ span: item.column }"
+              >
+                <a-form-item
+                  v-if="item.field"
+                  :label="item.changeTitle ? item.changeTitle : item.name"
+                  :validate-status="item.formType === 'number' ? 'success' : ''"
+                >
+                  <!-- 单行文本 多行文本 -->
+                  <a-input
+                    v-if="
+                      item.formType === 'text' ||
+                      item.formType === 'textarea' ||
+                      item.formType === 'associated' ||
+                      item.formType === 'serialnumber'
+                    "
+                    v-decorator="[
+                      item.field.alias,
+                      {
+                        rules: [
+                          {
+                            required: item.field.setting.attribute.required,
+                            message: item.name + $t('不能为空')
+                          }
+                        ]
+                      }
+                    ]"
+                    :disabled="item.fieldRule !== 'allow'"
+                    :placeholder="item.searchPattern === 'fuzzy' ? $t('模糊搜索') : $t('精确搜索')"
+                  />
+                  <!-- 日期 -->
+                  <a-range-picker
+                    v-else-if="item.formType === 'datetime' && item.field.fieldType === 'DATETIME'"
+                    v-decorator="[
+                      item.field.alias,
+                      {
+                        rules: [
+                          {
+                            required: item.field.setting.attribute.required,
+                            message: item.name + $t('不能为空')
+                          }
+                        ]
+                      }
+                    ]"
+                    :disabled="item.fieldRule !== 'allow'"
+                    :showTime="{ defaultValue: [moment('00:00:00', 'HH:mm:ss'), moment('23:59:59', 'HH:mm:ss')] }"
+                    style="width: 100%"
+                    format="YYYY-MM-DD HH:mm:ss"
+                  ></a-range-picker>
+                  <a-range-picker
+                    v-else-if="item.formType === 'datetime' && item.field.fieldType === 'DATE'"
+                    v-decorator="[
+                      item.field.alias,
+                      {
+                        rules: [
+                          {
+                            required: item.field.setting.attribute.required,
+                            message: item.name + $t('不能为空')
+                          }
+                        ]
+                      }
+                    ]"
+                    :disabled="item.fieldRule !== 'allow'"
+                    style="width: 100%"
+                    format="YYYY-MM-DD"
+                  ></a-range-picker>
+                  <!-- 地址组件 -->
+                  <div v-else-if="item.formType === 'address'">
+                    <a-input
+                      v-show="false"
+                      v-decorator="[
+                        item.field.alias,
+                        {
+                          rules: [
+                            {
+                              required: item.field.setting.attribute.required,
+                              message: item.field.name + $t('不能为空')
+                            }
+                          ]
+                        }
+                      ]"
+                    />
+                    <address-select
+                      :ref="item.field.alias"
+                      :series="item.field.setting.form.showSeries"
+                      :field="item.field"
+                      :alias="item.field.alias"
+                      @send="getAddress"
+                    />
+                  </div>
+                  <div
+                    v-else-if="item.formType === 'datetime' && item.field.fieldType == 'TIME'"
+                    style="display: flex; align-items: center"
+                  >
+                    <a-time-picker
+                      showTime
+                      :disabled="item.fieldRule !== 'allow'"
+                      format="HH:mm:ss"
+                      style="flex: 1"
+                      @change="
+                        (time, timeString) => {
+                          item.timeStart = timeString
+                          timeObj[item.field.alias] = [item.timeStart, item.timeEnd]
+                        }
+                      "
+                    ></a-time-picker>
+                    ~
+                    <a-time-picker
+                      showTime
+                      :disabled="item.fieldRule !== 'allow'"
+                      format="HH:mm:ss"
+                      style="flex: 1"
+                      @change="
+                        (time, timeString) => {
+                          item.timeEnd = timeString
+                          timeObj[item.field.alias] = [item.timeStart, item.timeEnd]
+                        }
+                      "
+                    ></a-time-picker>
+                  </div>
+                  <!-- 下拉框、单选框、复选框 -->
+                  <a-select
+                    v-else-if="item.field.formType === 'combobox'"
+                    v-decorator="[
+                      item.field.alias,
+                      {
+                        rules: [
+                          {
+                            required: item.field.setting.attribute.required,
+                            message: item.name + $t('不能为空')
+                          }
+                        ]
+                      }
+                    ]"
+                    :disabled="item.fieldRule !== 'allow'"
+                    mode="multiple"
+                    :placeholder="$t('请选择')"
+                    :allowClear="true"
+                    show-search
+                    option-filter-prop="children"
+                  >
+                    <a-select-option
+                      v-for="(myitem, myindex) in item.field.option"
+                      :key="myindex"
+                      :value="myitem.value"
+                    >
+                      {{ myitem.label }}
+                    </a-select-option>
+                  </a-select>
+                  <!-- 数字 -->
+                  <a-input-group v-else-if="item.formType === 'number'" compact style="margin-bottom: 0px">
+                    <a-input-number
+                      v-decorator="[item.field.alias + '.left']"
+                      style="width: calc(50% - 15px)"
+                      :disabled="item.fieldRule !== 'allow'"
+                    />
+                    <a-input
+                      placeholder="~"
+                      disabled
+                      style="width: 32px; pointer-events: none; backgroundcolor: #fff"
+                    />
+                    <a-input-number
+                      v-decorator="[item.field.alias + '.right']"
+                      style="width: calc(50% - 15px)"
+                      :disabled="item.fieldRule !== 'allow'"
+                    />
+                  </a-input-group>
+                  <!-- 级联选择 -->
+                  <div v-else-if="item.formType === 'cascader'">
+                    <a-input
+                      v-show="false"
+                      v-decorator="[
+                        item.field.alias,
+                        {
+                          rules: [
+                            {
+                              required: item.field.setting.attribute.required,
+                              message: item.name + $t('不能为空')
+                            }
+                          ]
+                        }
+                      ]"
+                    />
+                    <tabs-select
+                      :ref="item.field.alias"
+                      :field="item.field"
+                      :valueKey="item.field.setting.form.src || ''"
+                      :defaultValue="
+                        item.field.value.value ? item.field.value.value : item.field.setting.form.defaultValue
+                      "
+                      :alias="item.field.alias"
+                      :writeBack="item.field.setting.form.writeBack"
+                      :fieldRule="item.fieldRule"
+                      @send="getcascaderValue"
+                    />
+                  </div>
+                  <!-- 标签 -->
+                  <a-cascader
+                    v-else-if="item.field.formType === 'tag'"
+                    v-decorator="[item.field.alias]"
+                    style="width: 100%"
+                    :options="tagOption"
+                    :placeholder="$t('请选择')"
+                  />
+                  <!-- 开关 -->
+                  <a-select
+                    v-else-if="item.field.formType === 'switch'"
+                    v-decorator="[item.field.alias]"
+                    :placeholder="$t('请选择')"
+                    :allowClear="true"
+                  >
+                    <a-select-option :value="1">
+                      {{ item.field.setting.form.word.value[1] }}
+                    </a-select-option>
+                    <a-select-option :value="0">
+                      {{ item.field.setting.form.word.value[0] }}
+                    </a-select-option>
+                  </a-select>
+                  <!-- 树选择 -->
+                  <div v-else-if="item.field.formType === 'treeselect'">
+                    <a-tree-select
+                      v-if="item.field.setting.attribute.dataSource === 'addressBook'"
+                      v-decorator="[item.field.alias]"
+                      :allowClear="true"
+                      :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                      :tree-data="item.field.option"
+                      :load-data="
+                        (data) => {
+                          return onLoadData(data, item)
+                        }
+                      "
+                      :placeholder="$t('请选择')"
+                    ></a-tree-select>
+                    <a-tree-select
+                      v-else
+                      v-decorator="[item.field.alias]"
+                      :allowClear="true"
+                      :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                      :tree-data="item.field.option"
+                      :placeholder="$t('请选择')"
+                    ></a-tree-select>
+                  </div>
+                  <!-- 组织结构 -->
+                  <div
+                    v-else-if="item.field.formType === 'organization'"
+                    style="display: flex; justify-content: center; align-items: center; margin-top: 2px"
+                  >
+                    <a-select
+                      v-if="item.field.setting.form.optionType === 'user'"
+                      v-decorator="[
+                        item.field.alias,
+                        {
+                          rules: [
+                            {
+                              required: item.fieldRule !== 'hidden' && item.field.setting.attribute.required,
+                              message: item.name + $t('不能为空')
+                            }
+                          ]
+                        }
+                      ]"
+                      show-search
+                      allowClear
+                      :default-active-first-option="false"
+                      :not-found-content="null"
+                      option-filter-prop="children"
+                      :show-arrow="false"
+                      :filter-option="false"
+                      style="width: 100%"
+                      mode="multiple"
+                      @change="
+                        (val) => {
+                          item.field.value = val
+                        }
+                      "
+                      @search="
+                        (val) => {
+                          organizationSearch(item, index, val)
+                        }
+                      "
+                      @blur="
+                        () => {
+                          item.field.selectList = []
+                        }
+                      "
+                    >
+                      <a-select-option
+                        v-for="(item1, index1) in item.field.selectList"
+                        :key="index1"
+                        :value="item1.username"
+                      >
+                        {{ item1.text }}
+                      </a-select-option>
+                    </a-select>
+                    <a-select
+                      v-else
+                      v-decorator="[
+                        item.field.alias,
+                        {
+                          rules: [
+                            {
+                              required: item.fieldRule !== 'hidden' && item.field.setting.attribute.required,
+                              message: item.name + $t('不能为空')
+                            }
+                          ]
+                        }
+                      ]"
+                      show-search
+                      allowClear
+                      option-filter-prop="children"
+                      :show-arrow="false"
+                      style="width: 100%"
+                      mode="multiple"
+                      @change="
+                        (val) => {
+                          item.field.value = val
+                        }
+                      "
+                    >
+                      <template v-if="item.field.setting.form.optionType === 'department'">
+                        <a-select-option
+                          v-for="(item1, index1) in item.field.setting.form.optionCustom"
+                          :key="index1"
+                          :value="item1.departmentId"
+                        >
+                          {{ item1.name }}
+                        </a-select-option>
+                      </template>
+                      <template v-else>
+                        <a-select-option
+                          v-for="(item1, index1) in item.field.setting.form.optionCustom"
+                          :key="index1"
+                          :value="item1.roleId"
+                        >
+                          {{ item1.roleName }}
+                        </a-select-option>
+                      </template>
+                    </a-select>
+                    <a-button
+                      v-if="item.field.setting.form.optionType === 'user'"
+                      icon="user"
+                      style="margin-left: -1px"
+                      @click="handleSelectUserForm(item, index)"
+                    ></a-button>
+                    <a-button
+                      v-else-if="item.field.setting.form.optionType === 'department'"
+                      icon="apartment"
+                      style="margin-left: -1px"
+                      @click="handleSelect(item, index)"
+                    ></a-button>
+                    <a-button
+                      v-else
+                      icon="user"
+                      style="margin-left: -1px"
+                      @click="handleSelect(item, index)"
+                    ></a-button>
+                  </div>
+                </a-form-item>
+                <a-divider v-else-if="item.type === 'divider'" :orientation="item.dividerDirection">
+                  {{ item.dividerText }}
+                </a-divider>
+                <a-input v-else-if="item.type === 'place'" style="opacity: 0"></a-input>
+                <component :is="item.component" v-else-if="item.type === 'component'" />
+              </a-col>
+            </a-row>
+          </a-form>
+        </a-card>
+        <a-card size="small">
+          <!-- 操作按钮 -->
+          <div class="table-operator">
+            <!-- 下面是动态生成区域 -->
+            <component :is="item.component" v-for="(item, index) in toolButtons" :key="index" />
+          </div>
+          <!-- 数据列表 -->
+          <s-table
+            ref="table"
+            size="small"
+            rowKey="id"
+            :columns="columns"
+            :data="loadDataTable"
+            :rowSelection="rowSelection"
+            :autoLoad="false"
+            :scroll="scroll"
+          ></s-table>
+        </a-card>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    AddressSelect: () => import('@/views/admin/Field/AddressSelect'),
+    TabsSelect: () => import('@/views/admin/Field/TabsSelect')
+  },
+  props: {
+    config: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      // 搜索表单
+      formSearch: this.$form.createForm(this),
+      // 表头
+      columns: [],
+      rowSelection: null,
+      // 高级搜索展开/折叠标识
+      advancedSearch: true,
+      // 搜索表单
+      template: [],
+      scroll: { x: 0 },
+      goodsList: [],
+      // 搜索参数
+      queryParam: {},
+      colLayout: {},
+      params: {},
+      // 工具栏菜单
+      toolButtons: [],
+      selectedRowKeys: [],
+      selectedRows: [],
+      dataSource: '',
+      defaultSearch: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  created () {
+    this.changeAdvancedSearch()
+    this.axios({
+      url: '/admin/general/init',
+      params: { templateId: this.config.templateId }
+    }).then(res => {
+      this.columns = res.result.columns
+      this.sorter = res.result.sorter
+      this.template = res.result.search.template
+      this.dataSource = res.result.dataSource
+      this.defaultSearch = this.config.parent.defaultSearch || {}
+      this.template.forEach(item => {
+        if (item.type === 'component') {
+          item.component = {
+            template: `<span>${item.attribute}</span>`,
+            data: () => {
+              return {
+                top: this.config.parent,
+                parent: this
+              }
+            }
+          }
+        }
+      })
+      this.toolButtons = res.result.toolButtons
+      this.toolButtons.forEach(item => {
+        item.component = {
+          template: `<span>${item.attribute}</span>`,
+          data: () => {
+            return {
+              top: this.config.parent,
+              parent: this
+            }
+          }
+        }
+      })
+      // 表格是否出现行选择功能
+      this.rowSelection = res.result.multiSelect ? {
+        selectedRowKeys: this.selectedRowKeys,
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+          this.selectedRows = selectedRows
+        }
+      } : null
+      // 循环处理表格的列
+      this.columns.map((item) => {
+        // item.align = 'left'
+        item.ellipsis = true
+        if (item.width === 0) {
+          delete item.width
+          this.scroll.x = null
+        } else {
+          if (this.scroll.x !== null) {
+            this.scroll.x += item.width
+          }
+        }
+        if (item.type === 'action') {
+          item.customRender = (text, record, index) => {
+            return (
+              <div>
+                {item.inlineButtons.map((val, index) => {
+                  const Menu = {
+                    template: `<span>${val.attribute}</span>`,
+                    data: () => {
+                      return {
+                        top: this.config.parent,
+                        parent: this,
+                        record: record
+                      }
+                    }
+                  }
+                  if (index === item.inlineButtons.length - 1) {
+                    return (
+                      <span>
+                        <Menu />
+                      </span>
+                    )
+                  } else {
+                    return (
+                      <span>
+                        <Menu />
+                        <a-divider type="vertical" />
+                      </span>
+                    )
+                  }
+                })}
+              </div>
+            )
+          }
+        } else if (item.type === 'datetime') {
+          // 日期时间
+          item.customRender = (text, record, index) => {
+            return (
+              (text === null || text === '') ? '--' : text
+            )
+          }
+        } else if (item.type === 'image') {
+          // 图片
+          item.customRender = (text, record, index) => {
+            if (text && text.length > 0) {
+              return (
+                <div>
+                  {text.map((val) => {
+                    return (
+                      <a href={this.setting.rootUrl + val.filePath} target="_blank" style="border: 1px dashed #d9d9d9; border-radius: 5px; margin-right: 8px; padding: 5px; display: inline-block;">
+                        <img src={this.setting.rootUrl + val.filePath} style="width: 64px; height: 64px;" />
+                      </a>
+                    )
+                  })}
+                </div>
+              )
+            } else {
+              return '--'
+            }
+          }
+        } else if (item.type === 'file') {
+          // 附件
+          item.customRender = (text, record, index) => {
+            if (text && text.length > 0) {
+              return (
+                <div>
+                  {text.map((val) => {
+                    return (
+                      <a href={this.setting.rootUrl + val.filePath} target="_blank" style="display: block;">{val.fileName + 'aa'}</a>
+                    )
+                  })}
+                </div>
+              )
+            } else {
+              return '--'
+            }
+          }
+        } else {
+          item.customRender = (text, record, index) => {
+            return (
+              text === '' ? '--' : text
+            )
+          }
+        }
+      })
+      this.refresh()
+    })
+    this.show()
+  },
+  methods: {
+    show () {
+      this.visible = true
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: this.dataSource || '/admin/general/list',
+        data: Object.assign(this.queryParam, this.sorter, parameter, { templateId: this.config.templateId }, { defaultSearch: this.defaultSearch })
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 获取搜索栏级联选择数据
+    getcascaderValue (val, alias) {
+      const obj = {}
+      obj[alias] = val
+      this.formSearch.setFieldsValue(obj)
+    },
+    // 刷新表格
+    refresh () {
+      this.$refs.table.refresh()
+    },
+    changeAdvancedSearch () {
+      this.advancedSearch = !this.advancedSearch
+      if (this.params.width) {
+        if (this.advancedSearch) {
+          if (this.params.width >= 1200) {
+            this.colLayout = { span: 6 }
+          } else if (this.params.width >= 900) {
+            this.colLayout = { span: 8 }
+          } else if (this.params.width >= 600) {
+            this.colLayout = { span: 12 }
+          } else {
+            this.colLayout = { span: 24 }
+          }
+        } else {
+          if (this.params.width >= 1200) {
+            this.colLayout = { span: 8 }
+          } else if (this.params.width >= 900) {
+            this.colLayout = { span: 12 }
+          } else {
+            this.colLayout = { span: 24 }
+          }
+        }
+      } else {
+        if (this.advancedSearch) {
+          this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+        } else {
+          this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+        }
+      }
+    },
+    handleSearch (parameter) {
+      const { formSearch } = this
+      if (parameter.tag) {
+        this.queryParam = {
+          searchString: formSearch.getFieldsValue()
+        }
+      } else {
+        this.queryParam = {}
+      }
+      this.refresh()
+    }
+  }
+}
+</script>

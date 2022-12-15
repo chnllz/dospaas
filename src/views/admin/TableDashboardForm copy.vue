@@ -1,0 +1,150 @@
+<template>
+  <a-drawer :title="config.title" :width="900" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form" @submit="handleSubmit">
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" label="产品线">
+          <a-input
+            v-decorator="[
+              'setting[productLine]',
+              { initialValue: config.productLine, rules: [{ required: true, message: $t('请输入产品线') }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" label="产品名称">
+          <a-input
+            v-decorator="[
+              'setting[productName]',
+              { initialValue: config.productName, rules: [{ required: true, message: $t('请输入产品名称') }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" label="产品说明">
+          <a-input
+            v-decorator="[
+              'setting[productInstruction]',
+              { initialValue: config.productInstruction, rules: [{ required: true, message: $t('请输入产品说明') }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" label="超链接">
+          <a-input-group compact>
+            <a-select v-model="beforeSrc" style="width: 20%" wrapperCol="wrapperCol" default-value="https://">
+              <a-select-option value="https://">https</a-select-option>
+              <a-select-option value="http://">http</a-select-option>
+            </a-select>
+            <a-input
+              v-decorator="[
+                'setting[src]',
+                { initialValue: config.src, rules: [{ required: true, message: $t('请输入超链接') }] }
+              ]"
+              style="width: 80%"
+            />
+          </a-input-group>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" label="图标" :required="true" :wrapperCol="wrapperCol">
+          <a-input :value="config.icon" disabled>
+            <font-awesome-icon
+              slot="addonAfter"
+              :icon="config.icon ? config.icon : 'fa-cat'"
+              style="font-size: 16px; cursor: pointer"
+              @click="handleMenuIcon"
+            />
+          </a-input>
+        </a-form-item>
+        <a-form-item :required="true" label="图标颜色" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-space>
+            <a-checkable-tag
+              v-for="item of iconColor"
+              :key="item.color"
+              :checked="config.iconColor == item.color"
+              :style="{
+                color: config.iconColor == item.color ? '#fff' : item.color,
+                borderColor: item.color,
+                borderRadius: '5px',
+                backgroundColor: config.iconColor == item.color ? item.color : ''
+              }"
+              style="text-align: center; border-radius: 2px; cursor: pointer; width: 100%"
+              @change="(checked) => selected(item, checked)"
+            >
+              {{ item.name }}
+            </a-checkable-tag>
+          </a-space>
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" html-type="submit" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <menu-icon ref="menuIcon" @ok="getIcon"></menu-icon>
+  </a-drawer>
+</template>
+<script>
+export default {
+  components: {
+    MenuIcon: () => import('@/components/SelectIcon')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      form: this.$form.createForm(this),
+      loading: false,
+      labelCol: { span: 3 },
+      wrapperCol: { span: 18 },
+      iconColor: [
+        { name: 'pink', color: '#ffadd2' },
+        { name: 'red', color: '#f5222d' },
+        { name: 'orange', color: '#fa8c16' },
+        { name: 'green', color: '#a0d911' },
+        { name: 'cyan', color: '#13c2c2' },
+        { name: 'blue', color: '#69c0ff' },
+        { name: 'purple', color: '#b37feb' }
+      ],
+      refreshKey: true,
+      beforeSrc: 'https://'
+
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      if (config.src.indexOf('https://') !== -1) {
+        config.src = config.src.slice(8)
+      } else if (config.src.indexOf('http://') !== -1) {
+        config.src = config.src.slice(7)
+        this.beforeSrc = 'http://'
+      }
+      this.config = config
+    },
+    handleSubmit (e) {
+      e.preventDefault()
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          values.setting.icon = this.config.icon
+          values.setting.iconColor = this.config.iconColor
+          values.setting.src = this.beforeSrc + values.setting.src
+          values.setting.id = this.config.id
+          this.$emit('ok', values)
+          this.config = {}
+          this.visible = false
+        } else {
+          this.$message.warning(err)
+        }
+      })
+      this.form.resetFields()
+    },
+    selected (item, checked) {
+      checked ? this.config.iconColor = item.color : this.config.iconColor = ''
+    },
+    handleMenuIcon () {
+      this.$refs.menuIcon.show()
+    },
+    getIcon (value) {
+      this.config.icon = value
+    }
+  }
+}
+</script>

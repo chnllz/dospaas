@@ -1,0 +1,182 @@
+<template>
+  <div class="box">
+    <a-form :form="passwordForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
+      <a-form-item :label="$t('原始密码')">
+        <a-input-password
+          v-decorator="[
+            'oldPassword',
+            {
+              initialValue: '',
+              rules: [{ required: true, min: 6, message: $t('请输入至少6个字符') }, { validator: checkPasswordOld }]
+            }
+          ]"
+        />
+      </a-form-item>
+      <a-form-item :label="$t('新密码')">
+        <a-input-password
+          v-decorator="[
+            'newPassword',
+            {
+              initialValue: '',
+              rules: [{ required: true, min: 6, message: $t('请输入至少6个字符') }, { validator: checkPasswordNew }]
+            }
+          ]"
+        />
+      </a-form-item>
+      <a-form-item :label="$t('确认新密码')">
+        <a-input-password
+          v-decorator="[
+            'checkPassword',
+            {
+              initialValue: '',
+              rules: [{ required: true, min: 6, message: $t('请输入至少6个字符') }, { validator: checkPasswordCheck }]
+            }
+          ]"
+        />
+      </a-form-item>
+    </a-form>
+    <div class="footer">
+      <a-button type="primary" style="color: #fff" @click="passwordSubmit">{{ $t('确认') }}</a-button>
+    </div>
+  </div>
+</template>
+<script>
+import { mapActions, mapGetters } from 'vuex'
+export default {
+  data () {
+    return {
+      passwordForm: this.$form.createForm(this),
+      passwordLoading: false
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  methods: {
+    checkPasswordOld (rule, value, callback) {
+      const string = this.$t('密码不能包含空格，请重新输入')
+      if (value.indexOf(' ') !== -1) {
+        callback(string)
+      } else {
+        callback()
+      }
+    },
+    checkPasswordNew (rule, value, callback) {
+      const valueString = this.$t('密码不能包含空格，请重新输入')
+      const checkWord = this.passwordForm.getFieldValue('checkPassword')
+      const checkString = this.$t('新密码与确认新密码不一致，请重新输入')
+      const passwordRule = this.setting.passwordRule || ['number']
+      const passwordLength = this.setting.passwordLength || [6, 12]
+      const capitalLetterEnable = this.setting.capitalLetterEnable
+      // eslint-disable-next-line no-useless-escape
+      let chat = `!"#$%&'\\(\\)\\*+\\,-\\./:;<=>\\?@\\[\\]\\^_\\{\\|\\}~`
+      chat = chat + '`'
+      let string = this.$t(`密码长度为{0}-{1}位字符，且必须包含数字`, { 0: passwordLength[0], 1: passwordLength[1] })
+      let passwordReg = ''
+      if (passwordRule.includes('number')) {
+        passwordReg = passwordReg + '(?=.*[0-9])'
+      }
+      if (passwordRule.includes('letter')) {
+        passwordReg = passwordReg + capitalLetterEnable ? '(?=.*[a-z])(?=.*[A-Z])' : '(?=.*[a-z])'
+        string = string + `、${capitalLetterEnable ? this.$t('大小写字母') : this.$t('字母')}`
+      }
+      if (passwordRule.includes('special')) {
+        passwordReg = passwordReg + `(?=.*[${chat}])`
+        string = string + `、${this.$t('特殊字符')}`
+      }
+      const regString = `^${passwordReg}.{${passwordLength[0]},${passwordLength[1]}}$`
+      const reg = new RegExp(regString, capitalLetterEnable ? '' : 'i')
+      if (value.indexOf(' ') !== -1) {
+        callback(valueString)
+      } else if (value && !reg.test(value)) {
+        callback(string)
+      } else if (checkWord && checkWord !== value) {
+        callback(checkString)
+      } else {
+        callback()
+      }
+    },
+    checkPasswordCheck (rule, value, callback) {
+      const valueString = this.$t('密码不能包含空格，请重新输入')
+      const newWord = this.passwordForm.getFieldValue('newPassword')
+      const newString = this.$t('新密码与确认新密码不一致，请重新输入')
+      const passwordRule = this.setting.passwordRule || ['number']
+      const passwordLength = this.setting.passwordLength || [6, 12]
+      const capitalLetterEnable = this.setting.capitalLetterEnable
+      // eslint-disable-next-line no-useless-escape
+      let chat = `!"#$%&'\\(\\)\\*+\\,-\\./:;<=>\\?@\\[\\]\\^_\\{\\|\\}~`
+      chat = chat + '`'
+      let string = this.$t(`密码长度为{0}-{1}位字符，且必须包含数字`, { 0: passwordLength[0], 1: passwordLength[1] })
+      let passwordReg = ''
+      if (passwordRule.includes('number')) {
+        passwordReg = passwordReg + '(?=.*[0-9])'
+      }
+      if (passwordRule.includes('letter')) {
+        passwordReg = passwordReg + capitalLetterEnable ? '(?=.*[a-z])(?=.*[A-Z])' : '(?=.*[a-z])'
+        string = string + `、${capitalLetterEnable ? this.$t('大小写字母') : this.$t('字母')}`
+      }
+      if (passwordRule.includes('special')) {
+        passwordReg = passwordReg + `(?=.*[${chat}])`
+        string = string + `、${this.$t('特殊字符')}`
+      }
+      const regString = `^${passwordReg}.{${passwordLength[0]},${passwordLength[1]}}$`
+      const reg = new RegExp(regString, capitalLetterEnable ? '' : 'i')
+      if (value.indexOf(' ') !== -1) {
+        callback(valueString)
+      } else if (value && !reg.test(value)) {
+        callback(string)
+      } else if (newWord && newWord !== value) {
+        callback(newString)
+      } else {
+        callback()
+      }
+    },
+    // 修改密码提交
+    passwordSubmit () {
+      this.passwordForm.validateFields((error, values) => {
+        if (!error) {
+          this.passwordLoading = true
+          values.username = this.userInfo.username
+          values.modifyType = 'personal'
+          values.newPassword = Buffer.from(String(values.newPassword), 'utf-8').toString('base64')
+          values.oldPassword = Buffer.from(String(values.oldPassword), 'utf-8').toString('base64')
+          values.checkPassword = Buffer.from(String(values.checkPassword), 'utf-8').toString('base64')
+          this.axios({
+            url: '/admin/user/modifyPassword',
+            data: values
+          }).then(res => {
+            this.passwordLoading = false
+            if (!res.code) {
+              this.$setLoading(true)
+              this.$message.success(this.$t('密码修改成功，请重新登录'))
+              this.Logout({}).then(() => {
+                setTimeout(() => {
+                  window.location.reload()
+                }, 3000)
+              }).catch(err => {
+                this.$message.error({
+                  title: this.$t('错误'),
+                  description: err.message
+                })
+              })
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    },
+    ...mapActions(['Logout'])
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.box {
+  width: 400px;
+  min-height: 300px;
+}
+.footer {
+  margin-top: 12px;
+}
+</style>

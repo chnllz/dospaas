@@ -1,0 +1,29 @@
+{
+  "editor.codeActionsOnSave": {
+    // ctrl+s保存数据时使用eslint进行格式化
+    "source.fixAll.eslint": true,
+    // ctrl+s保存.less文件时使用stylelint进行格式化
+    "source.fixAll.stylelint": true
+  },
+  // ctrl+s保存数据时执行alt+shift+f格式化代码
+  "editor.formatOnSave": true,
+  // vue文件默认格式化方式vetur
+  "[vue]": {
+    "editor.defaultFormatter": "octref.vetur"
+  },
+  // 让vue中的js按编辑器自带的ts格式进行格式化
+  "vetur.format.defaultFormatter.js": "vscode-typescript",
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  // 在函数和括号之间增加空格
+  "javascript.format.insertSpaceBeforeFunctionParenthesis": true,
+  // json文件使用prettier格式化代码
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  // html文件使用prettier格式化代码
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}

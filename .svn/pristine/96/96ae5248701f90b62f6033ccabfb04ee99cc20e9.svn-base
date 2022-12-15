@@ -1,0 +1,335 @@
+<template>
+  <div style="display: flex; flex-direction: column; overflow-x: hidden">
+    <a-spin :spinning="loading">
+      <a-form :labelCol="labelCol" :wrapperCol="wrapperCol" :form="form">
+        <a-collapse v-model="activeKey">
+          <a-collapse-panel v-if="emailFormData && emailFormData.content" key="1" header="History">
+            <div ref="iframewrapper" style="height: 400px"></div>
+          </a-collapse-panel>
+          <a-collapse-panel key="2" :header="infoData.action === 'create' ? 'new' : 'Reply'">
+            <a-form-item label="From">
+              <a-select
+                v-decorator="[
+                  'account',
+                  {
+                    initialValue: emailFormData.sender || undefined,
+                    rules: [{ required: true, message: $t('请选择邮箱地址') }]
+                  }
+                ]"
+                :disabled="infoData.action === 'reply'"
+                showSearch
+                option-filter-prop="children"
+              >
+                <a-select-option v-for="item in receiverList" :key="item.label" :value="item.label">
+                  {{ item.label }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="To">
+              <a-input
+                v-decorator="[
+                  'tos',
+                  {
+                    initialValue: emailFormData.senderTo,
+                    rules: [{ required: true, message: $t('请输入邮箱地址') }, { validator: checkEmail }]
+                  }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item>
+              <span slot="label" @click="showCC = !showCC">
+                <a-icon :type="showCC ? 'caret-down' : 'caret-right'" />
+                Cc
+              </span>
+              <a-input
+                v-decorator="['ccs', { initialValue: emailFormData.senderCc, rules: [{ validator: checkEmail }] }]"
+              />
+            </a-form-item>
+            <a-form-item v-if="showCC" label="Bcc">
+              <a-input
+                v-decorator="['bccs', { initialValue: emailFormData.senderBcc, rules: [{ validator: checkEmail }] }]"
+              />
+            </a-form-item>
+            <a-form-item label="Subject">
+              <a-input
+                v-decorator="[
+                  'title',
+                  { initialValue: emailFormData.title, rules: [{ required: true, message: $t('请输入Subject') }] }
+                ]"
+              />
+            </a-form-item>
+            <a-form-item label="File">
+              <a-upload
+                :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+                :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                name="upload"
+                listType="text"
+                :fileList="imageFileList"
+                :beforeUpload="
+                  (file, fileList) => {
+                    return beforeUpload(file, fileList)
+                  }
+                "
+                @preview="handleImagePreview"
+                @change="handleImageChange"
+              >
+                <div v-if="imageFileList.length < 10">
+                  <a-button>
+                    <a-icon type="upload" />
+                    Upload/Drop
+                  </a-button>
+                </div>
+              </a-upload>
+            </a-form-item>
+            <a-row align="middle" type="flex" style="margin-bottom: 4px">
+              <a-col :span="12">
+                <a-form-item :colon="false" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                  <a slot="label" @click="showTemplate">
+                    {{ infoData.mailShowType == 'workbench' ? $t('邮件模板') : $t('模板引用') }}
+                  </a>
+                  <a-dropdown-button v-if="infoData.mailShowType == 'workbench'" @click="handleContactus($event, 1)">
+                    Contact us
+                    <a-menu slot="overlay" @click="handleContactus($event, 2)">
+                      <a-menu-item v-for="item in languageData" :key="item.value">{{ item.label }}</a-menu-item>
+                    </a-menu>
+                    <a-icon slot="icon" type="down" />
+                  </a-dropdown-button>
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <tiny-mce
+              v-if="tinyVisible"
+              ref="tinyMce"
+              v-model="textContent"
+              :newOptions="{ height: '500px' }"
+              @change="
+                (e) => {
+                  textContent = e
+                }
+              "
+            />
+          </a-collapse-panel>
+        </a-collapse>
+      </a-form>
+    </a-spin>
+    <mail-template ref="MailTemplate" @ok="getContent" />
+  </div>
+</template>
+<script>
+export default {
+  components: {
+    MailTemplate: () => import('./MailTemplate'),
+    TinyMce: () => import('@/components/Editor/TinyMce')
+  },
+  props: {
+    infoData: {
+      type: Object,
+      default: () => { }
+    },
+    imageFileList: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      activeKey: ['1', '2'],
+      showCC: false,
+      textContent: '',
+      InitContent: '',
+      receiverList: [],
+      form: this.$form.createForm(this),
+      imagePreviewVisible: false,
+      imagePreviewUrl: '',
+      tinyVisible: false,
+      config: {},
+      visible: false,
+      labelCol: { span: 2 },
+      wrapperCol: { span: 22 },
+      mailForm: {
+        orderStatus: this.infoData.orderData ? this.infoData.orderData.ddzt : '',
+        language: this.infoData.orderData ? this.infoData.orderData.yy : '',
+        ddh: this.infoData.orderData ? this.infoData.orderData.ddh : ''
+      },
+      loading: false,
+      loadingIndex: false,
+      scroll: {},
+      emailFormData: {},
+      languageData: []
+    }
+  },
+  watch: {
+    infoData: {
+      handler (newVal) {
+        this.emailFormData = newVal.data
+      }
+    }
+  },
+  mounted () {
+    this.getreceiverList()
+    this.emailFormData = this.infoData.data
+    this.getCascaderData('language', 'languageData')
+    this.$nextTick(() => {
+      this.tinyVisible = true
+      if (this.infoData.action === 'reply') {
+        setTimeout(() => {
+          this.InitContent = this.infoData.data.content.replace(/<link.*\.js.*>/g, '').replace(/<iframe.*<\/iframe>/g, '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+          this.getIframe()
+          if (this.$refs.tinyMce && this.$refs.tinyMce.$refs.tm && this.$refs.tinyMce.$refs.tm.editor) {
+            this.$refs.tinyMce.$refs.tm.editor.focus()
+          }
+        }, 300)
+      }
+    })
+  },
+  methods: {
+    getIframe () {
+      if (this.$refs.iframewrapper) {
+        const ifr = document.createElement('iframe')
+        ifr.setAttribute('frameborder', '0')
+        ifr.setAttribute('id', 'iframeResult')
+        ifr.setAttribute('width', '100%')
+        ifr.setAttribute('height', '100%')
+        this.$refs.iframewrapper.innerHTML = ''
+        this.$refs.iframewrapper.appendChild(ifr)
+        const ifrw = (ifr.contentWindow) ? ifr.contentWindow : (ifr.contentDocument.document) ? ifr.contentDocument.document : ifr.contentDocument
+        ifrw.document.open()
+        ifrw.document.write(this.InitContent)
+        ifrw.document.close()
+      }
+    },
+    getCascaderData (key, arr) {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: { dictCategoryNumber: key }
+      }).then(res => {
+        this[arr] = res.result
+      })
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.response.result.filePath
+      this.imagePreviewVisible = true
+      const fileName = encodeURIComponent(file.response.result.fileName)
+      const filePath = encodeURIComponent(this.imagePreviewUrl)
+      window.open(this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + filePath + '&fileName=' + fileName)
+    },
+    showTemplate () {
+      let formData = Object.assign(this.mailForm, this.infoData)
+      if (this.infoData.isOnlyMail) {
+        formData = Object.assign(formData, { isOnlyMail: true })
+      } else {
+        formData = Object.assign(formData, { isOnlyMail: false })
+      }
+      this.$refs.MailTemplate.show({ formData: formData })
+    },
+    getContent (e) {
+      this.textContent = e.yjnrmb
+      this.form.setFieldsValue({ 'title': e.yjbtmb })
+    },
+    handleImageChange ({ fileList }) {
+      this.$emit('handleImageChange', fileList)
+    },
+    checkEmail (rule, value, callback) {
+      const data = value ? value.split(';').filter(item => item) : []
+      const string = this.$t('邮箱格式不正确')
+      const reg = /^([A-Za-z0-9\S])+@([A-Za-z0-9_\-.])+\.([A-Za-z]{2,})$/
+      if (data.length && data.some(item => !reg.test(item))) {
+        callback(string)
+      } else {
+        callback()
+      }
+    },
+    // 附件限制条件
+    beforeUpload (file) {
+      return new Promise((resolve, reject) => {
+        const fileType = '.png,.jpg,.jpeg,.gif,.bmp,.flv,.swf,.mkv,.avi,.rm,.rmvb,.mpeg,.mpg,.ogg,.ogv,.mov,.wmv,.mp4,.webm,.mp3,.wav,.mid,.rar,.zip,.tar,.gz,.7z,.bz2,.cab,.iso,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.xml'
+        const suffix = file.name.substring(file.name.lastIndexOf('.'), file.name.length)
+        if (!fileType.includes(suffix)) {
+          this.$message.error(this.$t('上传文件格式错误'))
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    selectTemplate (record) {
+      this.textContent = record.yjnrmb || ''
+    },
+    getreceiverList () {
+      this.axios({
+        url: '/mail/account/getAccount'
+      }).then(res => {
+        this.receiverList = res.result
+      })
+    },
+    preview (record) {
+      const formData = Object.assign(this.mailForm, this.infoData)
+      this.loading = true
+      this.axios({
+        url: '/mail/data/previewTemplate',
+        data: {
+          orderNo: formData.ddh || formData.formData.ddh,
+          templateId: record.mbid,
+          templateContent: record.yjnrmb,
+          templateTitle: record.yjbtmb || ''
+        }
+      }).then(res => {
+        if (res) {
+          this.loading = false
+        }
+        if (res.code !== 0) {
+          this.$message.error(res.message)
+        } else {
+          this.textContent = res.result.content || ''
+          // 回复操作时 不用填充替换原邮件标题
+          if (this.infoData.action !== 'reply') {
+            this.form.setFieldsValue({ 'title': res.result.title || '' })
+          }
+        }
+      })
+    },
+    handleContactus (e, type) {
+      let language = e.key
+      if (type === 1) {
+        language = this.infoData.orderData.yy || ''
+      }
+      this.axios({
+        url: '/mail/template/selectTemplate',
+        data: {
+          workOrderNumber: this.infoData.orderData.caseNumber || '',
+          language: language || '',
+          sid: this.$store.getters.userInfo.sid
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          // 解析模板
+          this.preview(res.result.data)
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+::-webkit-scrollbar {
+  /*滚动条整体样式*/
+  width: 8px;
+  /*高宽分别对应横竖滚动条的尺寸*/
+  height: 6px;
+  scrollbar-arrow-color: red;
+}
+::-webkit-scrollbar-thumb {
+  /*滚动条里面小方块*/
+  border-radius: 5px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.06);
+  scrollbar-arrow-color: red;
+}
+::-webkit-scrollbar-track {
+  /*滚动条里面轨道*/
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.06);
+}
+</style>

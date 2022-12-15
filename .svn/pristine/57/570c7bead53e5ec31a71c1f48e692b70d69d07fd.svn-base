@@ -1,0 +1,134 @@
+<template>
+  <a-modal :visible="visible" :title="$t('底部导航设置')" :width="700" @cancel="visible = !visible">
+    <a-form>
+      <a-form-item :label="$t('底部导航栏')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 14 }">
+        <a-switch
+          v-model="showTabbar"
+          @change="
+            (val) => {
+              tabbarList = []
+              if (val) {
+                const tarbarItem1 = JSON.parse(JSON.stringify(tarbarConfig))
+                const tarbarItem2 = JSON.parse(JSON.stringify(tarbarConfig))
+                tabbarList.push(tarbarItem1, tarbarItem2)
+              }
+            }
+          "
+        ></a-switch>
+      </a-form-item>
+      <div v-if="showTabbar" style="position: relative">
+        <a-button type="link" style="position: absolute; left: 100px; top: 3px; z-index: 2" @click="addTabbar">
+          {{ $t('添加') }}
+        </a-button>
+        <a-form-item :label="$t('导航栏')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 14 }"></a-form-item>
+
+        <draggable
+          v-model="tabbarList"
+          animation="200"
+          handle=".handle"
+          :style="{
+            'flex-grow': 1,
+            overflow: 'auto',
+            display: 'flex',
+            'flex-flow': 'column wrap',
+            'align-content': 'flex-start'
+          }"
+        >
+          <a-row v-for="(tarbarItem, index) in tabbarList" :key="index" class="handle tabbar-item">
+            <a-col span="1">
+              <a-icon type="drag" class="handle" style="cursor: pointer" />
+            </a-col>
+            <a-col span="10">
+              <a-input v-model="tarbarItem.name" :placeholder="$t('导航名称')"></a-input>
+            </a-col>
+            <a-col span="2">
+              <div style="height: 30px; padding-top: 5px">
+                <set-icon
+                  :currentIconProp="tarbarItem.icon"
+                  @setUViewIcon="
+                    (val) => {
+                      tarbarItem.icon = val
+                    }
+                  "
+                />
+              </div>
+            </a-col>
+            <a-col span="10">
+              <a-select :placeholder="$t('请选择页面')">
+                <a-select-option key="1" value="1">1</a-select-option>
+              </a-select>
+            </a-col>
+            <a-col span="1">
+              <a-icon
+                v-show="tabbarList.length > 2"
+                type="delete"
+                class="handle"
+                style="cursor: pointer; color: red; margin-left: 4px"
+                @click="
+                  () => {
+                    if (tabbarList.length > 2) {
+                      tabbarList.splice(index, 1)
+                    }
+                  }
+                "
+              />
+            </a-col>
+          </a-row>
+        </draggable>
+      </div>
+    </a-form>
+    <template slot="footer">
+      <a-button type="primary" @click="saveTababr">{{ $t('保存') }}</a-button>
+      <a-button @click="visible = false">{{ $t('关闭') }}</a-button>
+    </template>
+  </a-modal>
+</template>
+
+<script>
+export default {
+  components: {
+    draggable: () => import('vuedraggable'),
+    setIcon: () => import('./setIcon')
+  },
+  data () {
+    return {
+      visible: false,
+      showTabbar: false,
+      tarbarConfig: {
+        name: '',
+        icon: '',
+        page: ''
+      },
+      tabbarList: []
+    }
+  },
+  methods: {
+    show () {
+      this.visible = true
+    },
+    addTabbar () {
+      if (this.tabbarList.length < 5) {
+        const tarbarItem = JSON.parse(JSON.stringify(this.tarbarConfig))
+        this.tabbarList.push(tarbarItem)
+      } else {
+        this.$message.warning('最多配置5个导航')
+      }
+    },
+    saveTababr () { }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.tabbar-card {
+  width: 100%;
+}
+.tabbar-item {
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  line-height: 38px;
+}
+</style>

@@ -1,0 +1,139 @@
+<template>
+  <a-drawer :title="title" :width="600" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('角色名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'roleName',
+              {
+                initialValue: data.roleName,
+                rules: [
+                  { required: true, pattern: new RegExp(/^(\s*\S+\s*)+$/), message: $t('请输入角色名称') },
+                  { max: 16, message: $t('角色名称不得大于16个字符') }
+                ]
+              }
+            ]"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :label="$t('状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select v-decorator="['status', { initialValue: data.status }]">
+            <a-select-option :value="1">{{ $t('启用') }}</a-select-option>
+            <a-select-option :value="0">{{ $t('禁用') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="userInfo.superAdmin" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('访问级别') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>
+                  {{
+                    $t(
+                      '请慎重修改。访问级别是为了保护系统重要配置项而设计的，防止因修改系统必须的某些配置内容，而导致系统错误。'
+                    )
+                  }}
+                </span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select v-decorator="['accessLevel', { initialValue: data.accessLevel || 0 }]">
+            <a-select-option :key="0" :value="0">{{ $t('可见可编可删') }}</a-select-option>
+            <a-select-option :key="1" :value="1">{{ $t('可见可编不可删') }}</a-select-option>
+            <a-select-option :key="2" :value="2">{{ $t('可见不可编不可删') }}</a-select-option>
+            <a-select-option :key="3" :value="3">{{ $t('不可见不可编不可删') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea v-decorator="['remarks', { initialValue: data.remarks }]" :autoSize="{ minRows: 6 }" />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">
+          {{ $t('关闭') }}
+        </a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  components: {
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    return {
+      url: '',
+      title: '',
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      visible: false,
+      loading: false,
+      // 表单界面上下文传递参数
+      context: {
+        roleId: 0
+      },
+      data: {
+        status: 1
+      },
+      intialData: {},
+      form: this.$form.createForm(this)
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    showAdd () {
+      this.url = '/admin/role/add'
+      this.title = this.$t('添加')
+      this.visible = true
+    },
+    showEdit (context) {
+      this.url = '/admin/role/edit'
+      this.title = this.$t('编辑')
+      this.visible = true
+      this.loading = true
+      this.context = Object.assign(this.context, context)
+      // 获取单条用户信息
+      this.axios({
+        url: '/admin/role/get',
+        params: { roleId: context.roleId }
+      }).then((res) => {
+        this.loading = false
+        this.data = res.result
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (errors) {
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+          return
+        }
+        this.loading = true
+        this.axios({
+          url: this.url,
+          data: Object.assign(values, { roleId: this.data.roleId })
+        }).then((res) => {
+          this.loading = false
+          this.$emit('ok', values)
+          if (res.code) {
+            this.$message.warning(res.message)
+          } else {
+            this.visible = false
+            this.$message.success(res.message)
+          }
+        })
+      })
+    }
+  }
+}
+</script>

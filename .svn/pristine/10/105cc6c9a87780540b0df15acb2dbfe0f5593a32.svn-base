@@ -1,0 +1,2714 @@
+<template>
+  <div style="height: 100%">
+    <a-layout style="height: 100%">
+      <a-layout-sider
+        v-if="interactiveType === 'tree'"
+        v-model="collapsed"
+        width="208px"
+        :collapsedWidth="22"
+        :collapsible="true"
+        :trigger="null"
+        :style="{ background: 'white', borderRight: !collapsed ? '1px solid #e5e5e5' : 'none' }"
+      >
+        <a-card size="small" :bordered="false">
+          <div style="display: flex; align-items: center">
+            <a-select
+              v-show="!collapsed"
+              slot="title"
+              showSearch
+              :value="undefined"
+              mode="multiple"
+              style="width: 100%; margin-right: 8px"
+              placeholder="请输入关键字进行搜索"
+              :filter-option="false"
+              :dropdownMatchSelectWidth="false"
+              :showArrow="false"
+              :not-found-content="fetching ? undefined : null"
+              @search="searchTabs"
+              @popupScroll="popupScroll"
+              @change="
+                (e) => {
+                  if (!e) {
+                    interactiveSearchData = []
+                  }
+                }
+              "
+            >
+              <a-spin v-if="fetching" slot="notFoundContent" size="small" />
+              <a-select-option
+                v-for="search in interactiveSearchData"
+                :key="search.id"
+                @click="interactiveSelect([search.dictDataNumber])"
+              >
+                {{ search.fullDictDataName }}
+              </a-select-option>
+            </a-select>
+            <a-icon
+              style="font-size: 16px"
+              :type="collapsed ? 'menu-unfold' : 'menu-fold'"
+              @click="collapsed = !collapsed"
+            />
+          </div>
+          <a-tree
+            v-show="!collapsed"
+            style="height: calc(100vh - 165px); overflow: hidden; overflow-y: auto"
+            :replaceFields="{ title: 'dictDataName', key: 'dictDataNumber' }"
+            :load-data="onLoadInteractiveData"
+            :tree-data="interactiveData"
+            :defaultExpandedKeys="[0]"
+            @select="interactiveSelect"
+          />
+        </a-card>
+      </a-layout-sider>
+      <a-layout-content
+        :style="{ background: 'white', display: 'flex', 'flex-direction': 'column' }"
+        style="height: 100%"
+      >
+        <a-spin :spinning="spinning" style="height: 100%">
+          <div class="page">
+            <a-form
+              v-show="cardTemplate.length === 0 && loading && template.length > 0"
+              :form="form"
+              :colon="false"
+              class="search"
+            >
+              <a-card size="small" :title="$t('搜索')">
+                <a-space slot="extra" style="margin-left: 8px">
+                  <a-button
+                    v-if="searchSection.combinationShow === '0'"
+                    htmlType="submit"
+                    type="primary"
+                    @click="handleSearch({ tag: true })"
+                  >
+                    {{ $t('搜索') }}
+                  </a-button>
+                  <a-dropdown-button v-else htmlType="submit" class="dropdown" @click="handleSearch({ tag: true })">
+                    <span>{{ $t('搜索') }}</span>
+                    <a-menu slot="overlay">
+                      <a-menu-item :key="2" @click="showSearch">{{ $t('组合搜索') }}</a-menu-item>
+                      <template v-for="(item, index) in condiList">
+                        <a-menu-item :key="index + 3" @click="handleHighSearchMenu(item)">
+                          {{ item.name }}
+                        </a-menu-item>
+                      </template>
+                    </a-menu>
+                  </a-dropdown-button>
+                  <a-button @click="resetAll">{{ $t('重置') }}</a-button>
+                  <a-button
+                    :icon="advancedSearch ? 'up' : 'down'"
+                    style="font-size: 11px"
+                    @click="advancedSearch = !advancedSearch"
+                  />
+                </a-space>
+                <a-row :gutter="16" class="form" :class="advancedSearch ? 'advanced' : 'normal'">
+                  <!-- 下面是动态生成区域，要根据不同的组件进行相应展示 -->
+                  <a-col
+                    v-for="(item, index) in template.filter(
+                      (item) => (item.type === 'field' && item.field) || item.type !== 'field'
+                    )"
+                    v-show="item.fieldRule !== 'hidden'"
+                    :key="index"
+                    v-bind="{ span: item.column }"
+                  >
+                    <a-form-item
+                      v-if="item.field"
+                      :validate-status="item.formType === 'number' ? 'success' : ''"
+                      :labelCol="searchSection.labelLocation !== 'top' ? labelCol : {}"
+                      :wrapperCol="searchSection.labelLocation !== 'top' ? wrapperCol : {}"
+                    >
+                      <span slot="label">
+                        <span :title="item.changeTitle ? item.changeTitle : item.name">
+                          {{ item.changeTitle ? item.changeTitle : item.name }}
+                        </span>
+                        <a-tooltip v-if="item.help" placement="top">
+                          <template slot="title">
+                            <span>{{ item.help }}</span>
+                          </template>
+                          <a-icon style="padding-left: 4px" type="question-circle" />
+                        </a-tooltip>
+                      </span>
+                      <!-- 单行文本 多行文本 -->
+                      <a-input
+                        v-if="['text', 'textarea', 'associated', 'serialnumber'].includes(item.formType)"
+                        v-decorator="[
+                          item.field.alias,
+                          {
+                            rules: [
+                              {
+                                required: false,
+                                message: item.name + $t('不能为空')
+                              }
+                            ]
+                          }
+                        ]"
+                        :disabled="item.fieldRule !== 'allow'"
+                        :placeholder="item.placeholder || $t('请输入')"
+                      />
+                      <!-- 日期 -->
+                      <a-range-picker
+                        v-else-if="item.formType === 'datetime' && item.field.fieldType === 'DATETIME'"
+                        v-decorator="[
+                          item.field.alias,
+                          {
+                            rules: [
+                              {
+                                required: false,
+                                message: item.name + $t('不能为空')
+                              }
+                            ]
+                          }
+                        ]"
+                        :disabled="item.fieldRule !== 'allow'"
+                        :showTime="{ defaultValue: [moment('00:00:00', 'HH:mm:ss'), moment('23:59:59', 'HH:mm:ss')] }"
+                        style="width: 100%"
+                        format="YYYY-MM-DD HH:mm:ss"
+                        @change="
+                          (time, timeString) => {
+                            timeObj[item.field.alias] = timeString && timeString[0] ? timeString : undefined
+                          }
+                        "
+                      ></a-range-picker>
+                      <a-range-picker
+                        v-else-if="item.formType === 'datetime' && item.field.fieldType === 'DATE'"
+                        v-decorator="[
+                          item.field.alias,
+                          {
+                            rules: [
+                              {
+                                required: false,
+                                message: item.name + $t('不能为空')
+                              }
+                            ]
+                          }
+                        ]"
+                        :disabled="item.fieldRule !== 'allow'"
+                        style="width: 100%"
+                        format="YYYY-MM-DD"
+                        @change="
+                          (time, timeString) => {
+                            timeObj[item.field.alias] = timeString && timeString[0] ? timeString : undefined
+                          }
+                        "
+                      ></a-range-picker>
+                      <a-row
+                        v-else-if="item.formType === 'datetime' && item.field.fieldType == 'TIME'"
+                        type="flex"
+                        align="middle"
+                      >
+                        <a-col flex="1">
+                          <a-time-picker
+                            v-decorator="[
+                              item.field.alias + '[0]',
+                              {
+                                rules: [
+                                  {
+                                    required: false,
+                                    message: item.name + $t('不能为空')
+                                  }
+                                ]
+                              }
+                            ]"
+                            showTime
+                            style="width: 100%"
+                            :disabled="item.fieldRule !== 'allow'"
+                            format="HH:mm:ss"
+                            @change="
+                              (time, timeString) => {
+                                item.timeStart = timeString
+                                timeObj[item.field.alias] = [item.timeStart, item.timeEnd]
+                              }
+                            "
+                          ></a-time-picker>
+                        </a-col>
+                        <a-col flex="20px" style="text-align: center">~</a-col>
+                        <a-col flex="1">
+                          <a-time-picker
+                            v-decorator="[
+                              item.field.alias + '[1]',
+                              {
+                                rules: [
+                                  {
+                                    required: false,
+                                    message: item.name + $t('不能为空')
+                                  }
+                                ]
+                              }
+                            ]"
+                            showTime
+                            style="width: 100%"
+                            :disabled="item.fieldRule !== 'allow'"
+                            format="HH:mm:ss"
+                            @change="
+                              (time, timeString) => {
+                                item.timeEnd = timeString
+                                timeObj[item.field.alias] = [item.timeStart, item.timeEnd]
+                              }
+                            "
+                          ></a-time-picker>
+                        </a-col>
+                      </a-row>
+                      <!-- 下拉框、单选框、复选框 -->
+                      <a-select
+                        v-else-if="['combobox', 'radio', 'checkbox'].includes(item.field.formType)"
+                        v-decorator="[
+                          item.field.alias,
+                          {
+                            rules: [
+                              {
+                                required: false,
+                                message: item.name + $t('不能为空')
+                              }
+                            ]
+                          }
+                        ]"
+                        :disabled="item.fieldRule !== 'allow'"
+                        mode="multiple"
+                        :placeholder="item.placeholder || $t('请选择')"
+                        :allowClear="true"
+                        show-search
+                        :show-arrow="
+                          item.field.setting.attribute.dataSource !== 'otherTable' &&
+                          item.field.setting.form.loadMode !== 'dynamic' &&
+                          item.fieldRule !== 'readonly'
+                        "
+                        option-filter-prop="children"
+                        @search="
+                          (value) => {
+                            getOption(item, value)
+                          }
+                        "
+                      >
+                        <a-select-option
+                          v-for="(myitem, myindex) in item.field.option"
+                          :key="myindex"
+                          :value="myitem.value"
+                        >
+                          {{ myitem.label }}
+                        </a-select-option>
+                      </a-select>
+                      <a-select
+                        v-else-if="['score'].includes(item.field.formType)"
+                        v-decorator="[
+                          item.field.alias,
+                          {
+                            rules: [
+                              {
+                                required: false,
+                                message: item.name + $t('不能为空')
+                              }
+                            ]
+                          }
+                        ]"
+                        :disabled="item.fieldRule !== 'allow'"
+                        mode="multiple"
+                        :placeholder="item.placeholder || $t('请选择')"
+                        :allowClear="true"
+                        show-search
+                        option-filter-prop="children"
+                      >
+                        <a-select-option v-for="myitem in item.field.option" :key="myitem.value">
+                          {{ myitem.label }}
+                        </a-select-option>
+                      </a-select>
+                      <!-- 数字 -->
+                      <a-input-group v-else-if="item.formType === 'number'" compact style="margin-bottom: 0px">
+                        <a-input-number
+                          v-decorator="[item.field.alias + '.left']"
+                          style="width: calc(50% - 15px)"
+                          :disabled="item.fieldRule !== 'allow'"
+                        />
+                        <a-input
+                          placeholder="~"
+                          disabled
+                          style="width: 32px; pointer-events: none; backgroundcolor: #fff"
+                        />
+                        <a-input-number
+                          v-decorator="[item.field.alias + '.right']"
+                          style="width: calc(50% - 15px)"
+                          :disabled="item.fieldRule !== 'allow'"
+                        />
+                      </a-input-group>
+                      <!-- 标签 -->
+                      <div v-else-if="item.field.formType === 'tag'">
+                        <tag-data-picker
+                          ref="tagDataPicker"
+                          :placeholder="item.placeholder || $t('请选择标签')"
+                          :name="item.field.alias"
+                          :allowClear="true"
+                          :config="item"
+                          :value="item.field.value"
+                          pageType="search"
+                          @select="
+                            (e) => {
+                              objTag = {}
+                              objTag[item.field.alias] = e
+                              form.setFieldsValue(objTag)
+                            }
+                          "
+                        />
+                      </div>
+                      <!-- 开关 -->
+                      <a-select
+                        v-else-if="item.field.formType === 'switch'"
+                        v-decorator="[item.field.alias]"
+                        :placeholder="item.placeholder || $t('请选择')"
+                        :allowClear="true"
+                      >
+                        <a-select-option :value="1">
+                          {{ item.field.setting.form.word.value[1] }}
+                        </a-select-option>
+                        <a-select-option :value="0">
+                          {{ item.field.setting.form.word.value[0] }}
+                        </a-select-option>
+                      </a-select>
+                      <!-- 地址组件 -->
+                      <div v-else-if="item.formType === 'address'">
+                        <data-picker
+                          ref="dataPicker"
+                          :placeholder="$t('请选择')"
+                          :name="item.field.alias"
+                          :allowClear="true"
+                          parentId="parentNumber"
+                          displayType="tree"
+                          url="/admin/address/getAddressChildren"
+                          searchUrl="/admin/search/addressSearch"
+                          :multiple="true"
+                          :scope="scope"
+                          :optionsConversion="
+                            (list, displayType, searchType) => {
+                              if (searchType) {
+                                return list.map((item) => {
+                                  const obj = item
+                                  obj.key = item.number
+                                  obj.label = item.fullName
+                                  return obj
+                                })
+                              } else {
+                                return list.map((item) => {
+                                  const obj = item
+                                  obj.key = item.number
+                                  obj.label = item.name
+                                  return obj
+                                })
+                              }
+                            }
+                          "
+                        />
+                      </div>
+                      <!-- 级联选择 -->
+                      <div v-else-if="item.formType === 'cascader'">
+                        <data-picker
+                          ref="dataPicker"
+                          :placeholder="$t('请选择')"
+                          :name="item.field.alias"
+                          :allowClear="true"
+                          parentId="parentDictDataNumber"
+                          :parameter="{ dictCategoryNumber: item.field.setting.form.src }"
+                          displayType="tree"
+                          url="/admin/dict/initData"
+                          searchUrl="/admin/search/dictSearch"
+                          :multiple="true"
+                          :scope="scope"
+                          :optionsConversion="
+                            (list, displayType, searchType) => {
+                              if (searchType) {
+                                return list.map((item) => {
+                                  const obj = item
+                                  obj.key = item.dictDataNumber
+                                  obj.label = item.fullName
+                                  return obj
+                                })
+                              } else {
+                                return list.map((item) => {
+                                  const obj = item
+                                  obj.key = item.dictDataNumber
+                                  obj.label = item.dictDataName
+                                  return obj
+                                })
+                              }
+                            }
+                          "
+                        />
+                      </div>
+                      <!-- 树选择 -->
+                      <div v-else-if="item.field.formType === 'treeselect'">
+                        <data-picker
+                          ref="dataPicker"
+                          :placeholder="
+                            item.field.setting.attribute.emptyText
+                              ? $t(item.field.setting.attribute.emptyText)
+                              : $t('请选择')
+                          "
+                          :name="item.field.alias"
+                          :allowClear="true"
+                          :parentId="
+                            item.field.setting.attribute.dataSource === 'addressBook'
+                              ? 'parentNumber'
+                              : 'parentDictDataNumber'
+                          "
+                          :parameter="
+                            item.field.setting.attribute.dataSource === 'addressBook'
+                              ? {}
+                              : { dictCategoryNumber: item.field.setting.form.src }
+                          "
+                          displayType="tree"
+                          :url="
+                            item.field.setting.attribute.dataSource === 'addressBook'
+                              ? '/admin/address/getAddressChildren'
+                              : '/admin/dict/initData'
+                          "
+                          :searchUrl="
+                            item.field.setting.attribute.dataSource === 'addressBook'
+                              ? '/admin/search/addressSearch'
+                              : '/admin/search/dictSearch'
+                          "
+                          :multiple="true"
+                          :scope="scope"
+                          :optionsConversion="
+                            (list, displayType, searchType) =>
+                              optionsConversionTreeselect(item, list, displayType, searchType)
+                          "
+                        />
+                      </div>
+                      <!-- 组织结构 -->
+                      <div v-else-if="item.field.formType === 'organization'">
+                        <data-picker
+                          ref="dataPicker"
+                          :placeholder="
+                            $t(
+                              `请选择${
+                                item.field.setting.form.optionType === 'department'
+                                  ? '部门'
+                                  : item.field.setting.form.optionType === 'role'
+                                  ? '角色'
+                                  : '用户'
+                              }`
+                            )
+                          "
+                          :allowClear="true"
+                          :name="item.field.alias"
+                          :parameter="item.field.setting.form.optionType === 'user' ? { sortField: 'username' } : {}"
+                          parentId="parentDepartmentId"
+                          :displayType="item.field.setting.form.optionType === 'department' ? 'tree' : 'list'"
+                          :url="
+                            item.field.setting.form.optionType === 'department'
+                              ? '/admin/department/init'
+                              : item.field.setting.form.optionType === 'role'
+                              ? '/admin/search/roleSearch'
+                              : '/admin/search/userSearch'
+                          "
+                          :searchUrl="
+                            item.field.setting.form.optionType === 'department'
+                              ? '/admin/search/departmentSearch'
+                              : item.field.setting.form.optionType === 'role'
+                              ? '/admin/search/roleSearch'
+                              : '/admin/search/userSearch'
+                          "
+                          :multiple="true"
+                          :scope="scope"
+                          :optionsConversion="
+                            (list, displayType, searchType) => optionsConversion(item, list, displayType, searchType)
+                          "
+                        />
+                      </div>
+                    </a-form-item>
+                    <a-divider v-else-if="item.type === 'divider'" :orientation="item.dividerDirection">
+                      {{ item.dividerText }}
+                    </a-divider>
+                    <a-input v-else-if="item.type === 'place'" style="opacity: 0"></a-input>
+                    <component :is="item.component" v-else-if="item.type === 'component'" />
+                    <a-form-item
+                      v-else-if="item.type === 'workflowFilter'"
+                      :labelCol="
+                        (item.changeTitle || item.name) && searchSection.labelLocation !== 'top' ? labelCol : {}
+                      "
+                      :wrapperCol="
+                        (item.changeTitle || item.name) && searchSection.labelLocation !== 'top'
+                          ? wrapperCol
+                          : { style: 'width: 100%; display: inline-block' }
+                      "
+                    >
+                      <span :slot="item.changeTitle || item.name ? 'label' : undefined">
+                        <span :title="item.changeTitle ? item.changeTitle : item.name">
+                          {{ item.changeTitle ? item.changeTitle : item.name }}
+                        </span>
+                        <a-tooltip v-if="item.help" placement="top">
+                          <template slot="title">
+                            <span>{{ item.help }}</span>
+                          </template>
+                          <a-icon style="padding-left: 4px" type="question-circle" />
+                        </a-tooltip>
+                      </span>
+                      <a-radio-group
+                        v-model="flowCondition"
+                        button-style="solid"
+                        style="margin-right: 8px"
+                        @change="
+                          (e) => {
+                            handleConditionChange(e)
+                          }
+                        "
+                      >
+                        <a-tooltip
+                          v-for="actionItem in item.actionTab"
+                          v-show="(actionItem.priv === 'visit') & (actionItem.enable !== '0')"
+                          :key="actionItem.value"
+                          :title="actionItem.help"
+                        >
+                          <a-radio-button :value="actionItem.value">
+                            {{ actionItem.customName ? actionItem.customName : actionItem.name }}
+                          </a-radio-button>
+                        </a-tooltip>
+                      </a-radio-group>
+                    </a-form-item>
+                    <a-form-item
+                      v-else-if="item.type === 'searchTemplate'"
+                      :labelCol="
+                        (item.changeTitle || item.name) && searchSection.labelLocation !== 'top' ? labelCol : {}
+                      "
+                      :wrapperCol="
+                        (item.changeTitle || item.name) && searchSection.labelLocation !== 'top'
+                          ? wrapperCol
+                          : { style: 'width: 100%; display: inline-block' }
+                      "
+                    >
+                      <span :slot="item.changeTitle || item.name ? 'label' : undefined">
+                        <span :title="item.changeTitle ? item.changeTitle : item.name">
+                          {{ item.changeTitle ? item.changeTitle : item.name }}
+                        </span>
+                        <a-tooltip v-if="item.help" placement="top">
+                          <template slot="title">
+                            <span>{{ item.help }}</span>
+                          </template>
+                          <a-icon style="padding-left: 4px" type="question-circle" />
+                        </a-tooltip>
+                      </span>
+                      <a-select
+                        v-if="item.searchStyle === '0'"
+                        v-model="item.searchValue"
+                        allowClear
+                        @change="
+                          (e) => {
+                            $set(item, 'searchValue', e)
+                          }
+                        "
+                      >
+                        <a-select-option
+                          v-for="searchItem in item.templateSearchConditionList"
+                          :key="searchItem.id"
+                          :value="searchItem.id"
+                        >
+                          {{ searchItem.name }}
+                        </a-select-option>
+                      </a-select>
+                      <a-radio-group
+                        v-else
+                        v-model="item.searchValue"
+                        button-style="solid"
+                        style="margin-right: 8px"
+                        @change="
+                          (e) => {
+                            $set(item, 'searchValue', e.target.value)
+                            handleSearch({ tag: true })
+                          }
+                        "
+                      >
+                        <a-radio-button :value="undefined">{{ $t('全部') }}</a-radio-button>
+                        <a-radio-button
+                          v-for="searchItem in item.templateSearchConditionList"
+                          :key="searchItem.id"
+                          :value="searchItem.id"
+                        >
+                          {{ searchItem.name }}
+                        </a-radio-button>
+                      </a-radio-group>
+                    </a-form-item>
+                    <a-form-item
+                      v-else-if="item.type === 'multiFieldSearch'"
+                      :labelCol="
+                        (item.changeTitle || item.name) && searchSection.labelLocation !== 'top' ? labelCol : {}
+                      "
+                      :wrapperCol="
+                        (item.changeTitle || item.name) && searchSection.labelLocation !== 'top'
+                          ? wrapperCol
+                          : { style: 'width: 100%; display: inline-block' }
+                      "
+                    >
+                      <span :slot="item.changeTitle || item.name ? 'label' : undefined">
+                        <span :title="item.changeTitle ? item.changeTitle : item.name">
+                          {{ item.changeTitle ? item.changeTitle : item.name }}
+                        </span>
+                        <a-tooltip v-if="item.help" placement="top">
+                          <template slot="title">
+                            <span>{{ item.help }}</span>
+                          </template>
+                          <a-icon style="padding-left: 4px" type="question-circle" />
+                        </a-tooltip>
+                      </span>
+                      <a-input v-model="item.searchValue" allowClear />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </a-card>
+            </a-form>
+            <!-- 操作按钮 -->
+            <div
+              v-if="(cardTemplate.length === 0 && tbar.length && loading) || customColumns == '1' || helpText"
+              style="margin: 8px 8px 0 8px"
+            >
+              <!-- 下面是动态生成区域 -->
+              <a-row type="flex" align="middle">
+                <a-col :span="20">
+                  <a-space>
+                    <template v-for="(item, index) in tbar">
+                      <div :key="index">
+                        <user-table-components :ref="'component' + item.id" />
+                        <component :is="item.component" />
+                      </div>
+                    </template>
+                    <a-button
+                      v-if="params.type === 'table_subform_list' && multiSelect"
+                      :disabled="selectedRowKeys.length === 0"
+                      type="primary"
+                      @click="
+                        () => {
+                          $emit('ok', selectedRows, 'line')
+                        }
+                      "
+                    >
+                      {{ $t('确认选择') }}
+                    </a-button>
+                  </a-space>
+                </a-col>
+                <a-col :span="4" style="text-align: right">
+                  <a-space>
+                    <a-button
+                      v-if="customColumns == '1' ? true : false"
+                      icon="setting"
+                      style="border: none; font-size: 18px; margin-right: 0px"
+                      @click="customShow"
+                    ></a-button>
+                    <template v-if="helpText">
+                      <a-popover
+                        v-if="helpManifestation === 'hover'"
+                        :arrowPointAtCenter="true"
+                        placement="bottomRight"
+                      >
+                        <template slot="content">
+                          <div style="max-width: 352px" class="helpText">
+                            <span v-dompurify-html="helpIllustrate" v-viewer></span>
+                          </div>
+                        </template>
+                        <a-icon type="question-circle" style="font-size: 18px; color: rgba(0, 0, 0, 0.65)"></a-icon>
+                      </a-popover>
+                      <a-icon
+                        v-else
+                        type="question-circle"
+                        style="font-size: 18px; color: rgba(0, 0, 0, 0.65)"
+                        @click="
+                          () => {
+                            $showDocument({ visible: true, content: helpIllustrate })
+                          }
+                        "
+                      ></a-icon>
+                    </template>
+                  </a-space>
+                </a-col>
+              </a-row>
+            </div>
+            <!-- 数据列表 -->
+            <s-table
+              v-show="cardTemplate.length === 0 && loading"
+              ref="table"
+              style="margin: 8px"
+              class="table-fill"
+              size="small"
+              rowKey="id"
+              :columns="columns"
+              :data="loadDataTable"
+              :rowSelection="rowSelection"
+              :pageSize="pageSize"
+              :pageMode="pageMode"
+              :showSome="pageMode == 'simple'"
+              :autoLoad="false"
+              :scroll="scroll"
+              :sorter="sorter"
+            ></s-table>
+            <div v-if="cardTemplate.length !== 0 && loading">
+              <user-table-card
+                ref="userTableCard"
+                :cardTemplate="cardTemplate"
+                :sorter="sorter"
+                :tplviewid="tplviewid"
+                :params="params"
+                :dataSource="dataSource"
+                :viewThis="viewThis"
+                :columns="columns"
+                :tbar="tbar"
+                :actionArray="actionArray"
+                :pageSize="pageSize"
+              />
+            </div>
+          </div>
+        </a-spin>
+      </a-layout-content>
+    </a-layout>
+
+    <!-- 数据表单 -->
+    <user-table-form ref="userTableForm" :key="indexKey" @ok="refresh('noRefresh')"></user-table-form>
+    <!-- 用户自定义列 -->
+    <user-table-column-custom ref="userTableColumnCustom" @ok="getData"></user-table-column-custom>
+    <!-- 批量编辑 -->
+    <user-table-bulk-edit ref="userTableBulkEdit" @ok="refresh('noRefresh')"></user-table-bulk-edit>
+    <!-- 导入表单 -->
+    <user-table-import ref="userTableImport" @ok="refresh"></user-table-import>
+    <!-- 导出表单 -->
+    <user-table-export ref="userTableExport" :key="exportKey" @ok="refresh"></user-table-export>
+    <user-table-components ref="userTableComponents" />
+    <!-- 组合搜索 -->
+    <user-table-search
+      ref="userTableSearch"
+      :key="searchKey"
+      @ok="handleHighSearch"
+      @change="handleChange"
+      @save="saveSearch"
+    />
+    <workflow-handle-form ref="workflowHandleForm" @ok="refresh('noRefresh')" />
+    <!-- 添加办理备注 -->
+    <user-table-workflow-remarks ref="userTableWorkflowRemarks" :key="remarkKey" @ok="refresh('noRefresh')" />
+    <!-- 流转 -->
+    <user-table-workflow-jump ref="userTableWorkflowJump" :key="jumpKey" @ok="refresh('noRefresh')" />
+    <!-- 转办 -->
+    <user-table-workflow-complaint ref="userTableWorkflowComplaint" :key="complaintKey" @ok="refresh('noRefresh')" />
+    <!-- 撤销 -->
+    <user-table-workflow-repeal ref="userTableWorkflowRepeal" :key="repealKey" @ok="refresh('noRefresh')" />
+    <!-- 催办 -->
+    <user-table-workflow-urge ref="userTableWorkflowUrge" :key="urgeKey" @ok="refresh('noRefresh')" />
+    <!-- 批量搜索 -->
+    <user-table-batch-search ref="userTableBatchSearch" :key="batchSearchKey" @ok="handleHighSearch" />
+  </div>
+</template>
+<script>
+import Vue from 'vue'
+import { mapGetters } from 'vuex'
+import { Rate, TreeSelect } from 'ant-design-vue'
+import UserTableComponents from './UserTableComponents'
+import debounce from 'lodash/debounce'
+Vue.use(Rate)
+Vue.use(TreeSelect)
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    UserTableBulkEdit: () => import('./UserTableBulkEdit'),
+    UserTableImport: () => import('./UserTableImport'),
+    UserTableExport: () => import('./UserTableExport'),
+    UserTableComponents,
+    UserTableSearch: () => import('./UserTableSearch'),
+    UserTableCard: () => import('./UserTableCard'),
+    UserTableColumnCustom: () => import('./UserTableColumnCustom'),
+    AddressSelect: () => import('../Field/AddressSelect'),
+    TabsSelect: () => import('../Field/TabsSelect'),
+    UserTableForm: () => import('./UserTableForm.vue'),
+    WorkflowHandleForm: () => import('../WorkflowHandleForm'),
+    UserTableBatchSearch: () => import('./UserTableBatchSearch'),
+    UserTableWorkflowRemarks: () => import('./UserTableWorkflowRemarks'),
+    UserTableWorkflowJump: () => import('./UserTableWorkflowJump'),
+    UserTableWorkflowComplaint: () => import('./UserTableWorkflowComplaint'),
+    UserTableWorkflowRepeal: () => import('./UserTableWorkflowRepeal'),
+    UserTableWorkflowUrge: () => import('./UserTableWorkflowUrge'),
+    TagDataPicker: () => import('../Tag/TagDataPicker')
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {
+          tplviewid: ''
+        }
+      },
+      required: true
+    },
+    query: {
+      type: Object,
+      default () {
+        return {}
+      }
+    },
+    viewThis: {
+      type: Object,
+      default () {
+        return {}
+      }
+    },
+    filtersData: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: false
+    },
+    // userTableFormd的vue实例对象
+    formThis: {
+      type: Object,
+      default () { }
+    },
+    screenData: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    this.handleSearch = debounce(this.handleSearch, 500)
+    this.searchTabs = debounce(this.searchTabs, 800)
+    return {
+      ENV: process.env,
+      visible: false,
+      loading: false,
+      spinning: false,
+      imgSrc: '', // 点击查看大图
+      indexKey: 0, // 用于表单刷新数据
+      exportKey: 2,
+      searchKey: 4,
+      userKey: 'user',
+      departmentKey: 'department',
+      remarkKey: 'remark',
+      jumpKey: 'jump',
+      complaintKey: 'complaint',
+      repealKey: 'repeal',
+      urgeKey: 'urge',
+      batchSearchKey: 'batchSearch',
+      SHOW_PARENT: TreeSelect.SHOW_PARENT,
+      SHOW_CHILD: TreeSelect.SHOW_CHILD,
+      endDate: this.moment().startOf('month'),
+      role: '',
+      username: '',
+      department: '',
+      tableId: '',
+      tplviewid: '',
+      flowCondition: 'my_process',
+      // 搜索参数
+      queryParam: {},
+      labelCol: { style: 'width: 104px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 104px); display: inline-block' },
+      customColumnsData: {},
+      timeStart: null,
+      timeEnd: null,
+      timeObj: {},
+      // 组合搜索展开/折叠标识
+      advancedSearch: true,
+      // 搜索表单
+      form: this.$form.createForm(this),
+      // 搜索表单
+      template: [],
+      // 表头
+      columns: [],
+      columnsExport: [],
+      actionArray: [],
+      collapsed: false,
+      // 工具栏菜单
+      tbar: [],
+      batchSearch: {
+        field: '',
+        text: ''
+      },
+      selectedRowKeys: [],
+      selectedRows: [],
+      rowSelection: null,
+      multiSelect: false, // table是否多选
+      // colLayout: {},
+      scroll: { x: 0, y: true },
+      sorter: {},
+      dataSource: '',
+      comsShowFlag: false,
+      actions: new Map([[
+        '', function (value, inputValue) {
+          return true
+        }], [
+        'contain', function (value, inputValue) {
+          if (inputValue.indexOf(value) === -1) {
+            return false
+          } else {
+            return true
+          }
+        }], [
+        'equal', function (value, inputValue) {
+          if (inputValue === value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'great', function (value, inputValue) {
+          if (inputValue > value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'nc', function (value, inputValue) {
+          if (inputValue.indexOf(value) === -1) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'ne', function (value, inputValue) {
+          if (inputValue !== value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'lt', function (value, inputValue) {
+          if (inputValue < value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'ge', function (value, inputValue) {
+          if (inputValue > value || inputValue === value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'le', function (value, inputValue) {
+          if (inputValue < value || inputValue === value) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'bw', function (value, inputValue) {
+          if (inputValue.indexOf(value) === 0) {
+            return true
+          } else {
+            return false
+          }
+        }], [
+        'ew', function (value, inputValue) {
+          const len = value.length
+          if (inputValue.slice(-len) === value) {
+            return true
+          } else {
+            return false
+          }
+        }]]),
+      customColumns: 0,
+      lockLeft: 0,
+      lockRight: 0,
+      totalCount: 0,
+      pageSize: 20,
+      pageMode: 'default', // 分页器模式
+      sendData: false,
+      where: '',
+      data: [], // 视图规则
+      settingData: {},
+      customSearch: [], // 组合搜索数据
+      condiList: [],
+      searchFlag: true,
+      searchData: {},
+      timeRangeDisplay: '',
+      scope: this,
+      searchString: {}, // 开窗搜索
+      cardTemplate: [], // 卡片数据窗口模板数据
+      multiFieldSearchList: [],
+      searchSection: {},
+      interactiveType: '', // 交互模式
+      interactiveFieldAlias: '', // 树形DW左侧树字段内容
+      interactiveNumber: '', // 当前选中的树节点
+      interactiveField: {},
+      interactiveData: [{ dictDataName: '全部', dictDataNumber: 0 }],
+      interactiveObj: {},
+      interactiveSearchData: [],
+      interactiveSearchValue: '',
+      lastFetchId: 0,
+      fetching: false,
+      scrollStats: true,
+      interactivePage: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'listOrder',
+        sortOrder: 'ascend'
+      },
+      helpIllustrate: '',
+      helpManifestation: '',
+      helpText: false
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  watch: {
+    params: {
+      handler (newValue) {
+        if (newValue.relation && Object.keys(newValue.relation).length !== 0) {
+          // 查看不同的数据时刷新子表
+          this.refresh()
+        }
+      },
+      deep: true
+    }
+  },
+  // 祖先级组件数据传递，以及被子孙级组件动态修改
+  provide () {
+    this.theme = Vue.observable({
+      data: this
+    })
+    return {
+      theme: this.theme
+    }
+  },
+  created () {
+    this.role = this.userInfo.roleId
+    this.username = this.userInfo.username
+    this.department = this.userInfo.departmentId
+    this.spinning = true
+    this.axios({
+      url: '/admin/userTable/init',
+      data: this.params
+    }).then(res => {
+      this.loading = true
+      this.interactiveType = res.result.interactiveType
+      this.interactiveFieldAlias = res.result.interactiveFieldAlias
+      this.interactiveField = res.result.interactiveField
+      this.helpIllustrate = res.result.helpIllustrate
+      this.helpManifestation = res.result.helpManifestation
+      this.helpText = res.result.helpText
+      if (res.result.interactiveType === 'tree') {
+        this.getTreeList()
+      }
+      this.tableId = res.result.tableId
+      this.sorter = res.result.sorter
+      this.searchSection = res.result.searchSection || {}
+      if (this.searchSection.labelLocation === 'left') {
+        this.labelCol = { style: `width: ${this.searchSection.labelWidth}px; display: inline-block` }
+        this.wrapperCol = { style: `width: calc(100% - ${this.searchSection.labelWidth}px); display: inline-block` }
+      }
+      this.advancedSearch = this.searchSection.defaultStatus === '1'
+      res.result.columns.forEach(item => {
+        item.name = this.$t(item.name)
+      })
+      this.columns = res.result.columns.filter(item => item.display === 'v')
+      this.columnsExport = res.result.columns
+      this.actionArray = this.columns.filter(item => item.dataIndex === 'action')
+      this.pageSize = Number(res.result.pageSize)
+      this.cardTemplate = res.result.cardTemplate
+      this.lockLeft = res.result.lockLeft
+      this.pageMode = res.result.pageMode
+      this.lockRight = res.result.lockRight
+      this.timeRangeDisplay = res.result.timeRangeDisplay
+      this.spinning = false
+      for (const i in this.columns) {
+        if (this.columns[i].customTitle) {
+          this.columns[i].title = this.columns[i].customTitle
+        }
+        if (['textarea', 'image', 'file', 'editor'].includes(this.columns[i].type)) {
+          this.columns[i].sorter = false
+        } else {
+          if ((this.columns[i].sorter === '1' || !this.columns[i].sorter) && this.columns[i].dataIndex !== 'action') {
+            this.columns[i].sorter = true
+          } else {
+            this.columns[i].sorter = false
+          }
+        }
+      }
+      this.template = res.result.search.template
+      this.customSearch = res.result.customSearch
+      this.customColumns = res.result.customColumns
+      const columnsList = []
+      if (res.result.customColumnsData.id) {
+        this.sendData = true
+        this.customColumnsData = JSON.parse(res.result.customColumnsData.setting).data
+        if (this.customColumnsData) {
+          for (const i in res.result.columns) {
+            for (const j in this.customColumnsData) {
+              if (this.customColumnsData[j].dataIndex === res.result.columns[i].dataIndex) {
+                this.customColumnsData[j] = res.result.columns[i]
+              }
+            }
+          }
+          this.customColumnsData.forEach(item => {
+            if (res.result.columns.indexOf(item) !== -1) {
+              columnsList.push(item)
+            }
+          })
+          this.customColumnsData = columnsList
+          this.customColumnsData = this.customColumnsData.filter(item => item.display === 'v')
+        }
+        this.lockLeft = JSON.parse(res.result.customColumnsData.setting).lockLeft
+        this.lockRight = JSON.parse(res.result.customColumnsData.setting).lockRight
+        this.pageSize = Number(JSON.parse(res.result.customColumnsData.setting).pageSize)
+      }
+      this.dataSource = res.result.dataSource
+      this.condiList = this.customSearch.length > 0 ? this.customSearch.map(item => {
+        const obj = JSON.parse(item.setting)
+        obj.id = item.id
+        return obj
+      }) : []
+      this.tplviewid = res.result.tplviewid
+      this.data = res.result.formView
+      this.searchPriv = res.result.searchPriv
+      if (res.result.workflow) {
+        this.workflowId = res.result.workflow.workflowId
+        this.workflowName = res.result.workflow.workflowName
+      }
+      this.template.forEach(item => {
+        if (item.placeholder === '0') {
+          item.placeholder = ''
+        }
+        if (item.type === 'workflowFilter') {
+          this.flowCondition = item.actionTab.filter(item => item.priv === 'visit' & item.enable !== '0')[0].value
+          this.axios({
+            url: '/admin/workflow/flowSetting',
+            data: { action: 'get' }
+          }).then(res => {
+            const allActionTab = res.result.actionTab
+            item.actionTab.forEach(actionItem => {
+              const obj = allActionTab.find(allItem => allItem.value === actionItem.value)
+              if (obj) {
+                actionItem.customName = obj.customName
+                actionItem.help = obj.help
+              }
+            })
+          })
+        } else if (item.type === 'component') {
+          item.component = {
+            template: `<span>${item.attribute}</span>`,
+            data: () => {
+              return {
+                parent: this
+              }
+            }
+          }
+        }
+      })
+      res.result.tbar.forEach(item => {
+        item.component = {
+          template: `<span>${item.attribute}</span>`,
+          data: () => {
+            return {
+              parent: this
+            }
+          }
+        }
+      })
+      this.tbar = res.result.tbar
+      // 表格是否出现行选择功能
+      this.multiSelect = res.result.multiSelect
+      this.rowSelection = res.result.multiSelect ? {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+          this.selectedRows = selectedRows
+        }
+      } : null
+      const that = this
+      if (this.customColumnsData.length > 0) {
+        this.columns = this.customColumnsData
+      }
+
+      // 循环处理表格的列
+      if ((this.params.type === 'table_subform_list' || this.params.type === 'associated') && !this.columns.some(item => item.dataIndex === 'action')) {
+        this.columns.unshift({
+          align: 'center',
+          dataIndex: 'action',
+          rowAction: [],
+          type: 'action',
+          width: 120
+        })
+      }
+      for (let i = 0; i < this.lockLeft; i++) {
+        this.columns[i]['fixed'] = 'left'
+        this.scroll.x -= Number(this.columns[i].width)
+      }
+      let keyLength = this.columns.length - 1
+      for (let i = 0; i < this.lockRight; i++) {
+        this.columns[keyLength]['fixed'] = 'right'
+        this.scroll.x -= Number(this.columns[keyLength].width)
+        keyLength--
+      }
+      const actionObj = JSON.parse(JSON.stringify(res.result.columns)).find(item => item.dataIndex === 'action')
+      if (actionObj.width === '0') {
+        this.columns = this.columns.filter(item => item.dataIndex !== 'action')
+      }
+      this.columns.map((item) => {
+        let style = {}
+        if (item.style) {
+          style = {
+            'background-color': item.style.bgcolor,
+            'color': item.style.color,
+            'font-size': item.style.fontsize
+          }
+        }
+        if (item.attribute && !item.attribute.includes('<')) {
+          item.attribute = JSON.parse(item.attribute)
+        }
+        item.ellipsis = true
+        item.width = Number(item.width)
+        if (item.width === 0) {
+          delete item.width
+          this.scroll.x = null
+        } else {
+          if (this.scroll.x !== null) {
+            this.scroll.x += item.width
+          }
+        }
+        item.customCell = (record, index) => {
+          if (item.attribute && item.attribute.styleFunc) {
+            const str = 'return ' + item.attribute.styleFunc
+            // eslint-disable-next-line no-new-func
+            const func = new Function(str)
+            return func()(record, item)
+          }
+        }
+        if (item.dataIndex === 'action') {
+          item.title = item.name
+          const obj = {}
+          if (this.params.type === 'table_subform_list' && this.params.selectAction) {
+            obj.attribute = `<a href="javascript:;" @click="() => { const val = [record]; parent.$emit('ok', val, 'line') }">选择</a>`
+            item.rowAction.push(obj)
+          } else if (this.params.type === 'associated') {
+            obj.attribute = `<a href="javascript:;" @click="() => {  parent.axios({url: '/admin/userTable/getTableRecord',data: { tableId: parent.tableId, id: record.id }}).then(res => { parent.$emit('ok', res.result.data, 'associated', parent.screenData)})}">选择</a>`
+            item.rowAction.push(obj)
+          }
+        }
+        item.customRender = (text, record, index) => {
+          const showText = record[item.dataIndex + '__'] || record[item.dataIndex]
+          item.func = () => { }
+          if (item.attribute) {
+            // 获取属性key
+            const key = record[item.attribute.key]
+            style = item.attribute.value ? item.attribute.value[key] : ''
+            if (item.attribute.event) {
+              const str = 'return ' + item.attribute.event
+              // eslint-disable-next-line no-new-func
+              const func = new Function(str)
+              item.func = func()
+            }
+          }
+          if (item.dataIndex === 'action') {
+            const menuArr = []
+            item.rowAction.forEach(rowItem => {
+              const Menu = {
+                template: `<span>${rowItem.attribute}</span>`,
+                data: () => {
+                  return {
+                    parent: this,
+                    record: record
+                  }
+                }
+              }
+              switch (rowItem.barAlias) {
+                case 'flow_process':
+                  if (['all_process', 'my_entrust'].indexOf(this.flowCondition) > -1 || (this.flowCondition === 'my_process' && this.userInfo.username === record.process_current_user__)) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_takeprocess':
+                  if (this.flowCondition === 'my_process' && this.userInfo.username !== record.process_current_user__) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_take':
+                  if (this.flowCondition === 'my_process' && this.userInfo.username !== record.process_current_user__) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_remarks':
+                  if (['op'].indexOf(record.case_status__) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_urge':
+                  if (['my_process', 'all_process', 'my_entrust'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_repeal':
+                  if (['my_process', 'all_process', 'my_entrust'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_delete':
+                  if (['my_create', 'all_flow'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_jump':
+                  if (['all_process'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_transfer':
+                  if (['my_process', 'all_process', 'my_entrust'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_hangup':
+                  if (['my_process', 'my_cc', 'all_process', 'all_flow', 'my_entrust'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_activate':
+                  if (['my_suspend', 'all_suspend'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                default:
+                  menuArr.push(Menu)
+                  break
+              }
+            })
+            if (item.actionType === '1') {
+              return (
+                <div>
+                  {
+                    menuArr.map((menuItem, menuIndex) => {
+                      if (menuIndex === menuArr.length - 1) {
+                        return (
+                          <span>
+                            <menuItem />
+                          </span>
+                        )
+                      } else {
+                        return (
+                          <span>
+                            <menuItem />
+                            <a-divider type="vertical" />
+                          </span>
+                        )
+                      }
+                    })
+                  }
+                </div>
+              )
+            } else if (item.actionType === '2') {
+              const data = menuArr.length > item.actionShow ? <span>
+                <span>
+                  {
+                    menuArr.map((menuItem, menuIndex) => {
+                      if (menuIndex < (item.actionShow - 1)) {
+                        return (
+                          <span>
+                            <menuItem />
+                            <a-divider type="vertical" />
+                          </span>
+                        )
+                      }
+                    })
+                  }
+                </span>
+                <a-dropdown>
+                  <a>{this.$t('更多')} <a-icon type="down" /></a>
+                  <a-menu slot="overlay">
+                    {
+                      menuArr.map((menuItem, menuIndex) => {
+                        if (menuIndex > (item.actionShow - 2)) {
+                          return (
+                            <a-menu-item>
+                              <menuItem />
+                            </a-menu-item>
+                          )
+                        }
+                      })
+                    }
+                  </a-menu>
+                </a-dropdown>
+              </span> : <div>
+                {
+                  menuArr.map((menuItem, menuIndex) => {
+                    if (menuIndex === menuArr.length - 1) {
+                      return (
+                        <span>
+                          <menuItem />
+                        </span>
+                      )
+                    } else {
+                      return (
+                        <span>
+                          <menuItem />
+                          <a-divider type="vertical" />
+                        </span>
+                      )
+                    }
+                  })
+                }
+              </div>
+              return data
+            } else {
+              return (
+                <span>
+                  <a-dropdown>
+                    <a-button icon="more" type="link"></a-button>
+                    <a-menu slot="overlay">
+                      {
+                        menuArr.map((menuItem, menuIndex) => {
+                          return (
+                            <a-menu-item>
+                              <menuItem />
+                            </a-menu-item>
+                          )
+                        })
+                      }
+                    </a-menu>
+                  </a-dropdown>
+                </span>
+              )
+            }
+          }
+          if (item.attribute && JSON.stringify(item.attribute).includes('<')) {
+            let data = ''
+            const parent = this
+            const MyComponent = Vue.component('my-component', {
+              data: function () {
+                return { text: text, record: record, parent: parent }
+              },
+              template: item.attribute
+            })
+            data = (<MyComponent></MyComponent>)
+            return data
+          } else {
+            switch (item.type) {
+              case 'datetime':
+                return (
+                  <div style={style} onClick={() => { item.func(that, record) }}>
+                    {(showText === null || showText === '') ? '--' : showText}
+                  </div>
+                )
+              case 'image':
+                if (text && text.length > 0) {
+                  return (
+                    <viewer>
+                      {showText.map((val) => {
+                        return (
+                          <img src={process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + val.filePath} style={style} style="width: 64px; height: 64px; cursor: pointer; margin-right: 2px;" />
+                        )
+                      })}
+                    </viewer>
+                  )
+                } else {
+                  return '--'
+                }
+              case 'file':
+                if (text && text.length > 0) {
+                  return (
+                    <div>
+                      {showText.map((val) => {
+                        const filePath = encodeURIComponent(val.filePath)
+                        return (
+                          <a href={process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + filePath} target="_blank" style={style} style="display: block;">{val.fileName}</a>
+                        )
+                      })}
+                    </div>
+                  )
+                } else {
+                  return '--'
+                }
+              case 'score':
+                return (
+                  <a-rate value={Number(showText)} disabled allow-half />
+                )
+              case 'tag':
+                if (record[item.dataIndex]) {
+                  return (
+                    <div>
+                      {record[item.dataIndex].split(',').map((val) => {
+                        return (
+                          <a-tag color={showText && showText.find(item => item.tagNumber === val) && showText.find(item => item.tagNumber === val).tagType === 1 ? 'green' : 'red'}>
+                            {showText && showText.find(item => item.tagNumber === val) ? showText.find(item => item.tagNumber === val).tagName : ''}
+                          </a-tag>
+                        )
+                      })}
+                    </div>
+                  )
+                } else {
+                  return '--'
+                }
+              default:
+                return (
+                  <div style={style} onClick={() => { item.func(that, record) }} domPropsInnerHTML={showText || '--'}>
+                  </div>
+                )
+            }
+          }
+        }
+      })
+      this.refresh()
+    })
+  },
+  methods: {
+    // 加载表格数据
+    loadDataTable (parameter) {
+      if (this.params.type !== 'table_card_list') {
+        parameter.pageSize = this.pageSize
+        const customColumns = []
+        if (this.sendData) {
+          for (let i = 1; i < this.columns.length; i++) {
+            customColumns.push(this.columns[i].dataIndex)
+          }
+        }
+        const multiFieldSearchList = this.template.map(item => {
+          if (item.type === 'multiFieldSearch' && item.searchValue) {
+            const obj = {}
+            obj.comparison = item.comparison
+            obj.selectedRowKeys = item.selectedRowKeys
+            obj.searchValue = item.searchValue
+            return obj
+          }
+        }).filter(item => item)
+        const templateSearchList = this.template.map(item => {
+          if (item.type === 'searchTemplate' && item.searchValue) {
+            const obj = item.templateSearchConditionList.find(findItem => findItem.id === item.searchValue)
+            return obj.data
+          }
+        }).filter(item => item)
+        if (!this.queryParam.commonSearch) {
+          this.queryParam.commonSearch = {}
+        }
+        Object.assign(this.queryParam.commonSearch, this.interactiveObj)
+        return this.axios({
+          url: this.dataSource || '/admin/userTable/init',
+          data: Object.assign(this.queryParam, this.params, this.sorter, parameter,
+            {
+              customColumns: customColumns,
+              associated: this.filtersData,
+              flowCondition: this.flowCondition,
+              multiFieldSearchList,
+              templateSearchList
+            })
+        }).then(res => {
+          this.sendData = false
+          this.where = res.result.where
+          this.totalCount = res.result.totalCount
+          return res.result
+        })
+      }
+    },
+    getEndDateChange (date, dateString) {
+      this.endDate = date
+      this.sorter.end_date = date ? date.format('YYYY-MM') : dateString
+    },
+    // 刷新表格
+    refresh (type) {
+      if (this.$refs.table) {
+        this.$refs.table.refresh(!type)
+      }
+    },
+    // 打开组合搜索
+    showSearch () {
+      this.searchKey = this.searchKey === 4 ? 5 : 4
+      this.$nextTick(() => {
+        this.$refs.userTableSearch.show({
+          tableId: this.tableId,
+          customSearch: this.customSearch,
+          tplviewid: this.tplviewid,
+          newFlag: this.searchFlag,
+          data: this.searchData
+        })
+      })
+    },
+    onLoadData (treeNode, item) {
+      const { value } = treeNode.dataRef
+      return new Promise((resolve) => {
+        this.axios({
+          url: '/admin/address/getAddressChildren',
+          data: { parentNumber: value }
+        }).then(res => {
+          item.field.option.forEach(item => {
+            if (item.value === value && !item.children) {
+              const arr = []
+              res.result.forEach(arrItem => {
+                const obj = { label: arrItem.name, value: arrItem.number }
+                arr.push(obj)
+              })
+              this.$set(item, 'children', arr)
+            } else if (item.children) {
+              item.children.forEach(childItem => {
+                if (childItem.value === value && !childItem.children) {
+                  const arr = []
+                  res.result.forEach(arrItem => {
+                    const obj = { label: arrItem.name, value: arrItem.number }
+                    arr.push(obj)
+                  })
+                  this.$set(childItem, 'children', arr)
+                } else if (childItem.children) {
+                  childItem.children.forEach(childrenItem => {
+                    if (childrenItem.value === value && !childrenItem.children) {
+                      const arr = []
+                      res.result.forEach(arrItem => {
+                        const obj = { label: arrItem.name, value: arrItem.number, isLeaf: true }
+                        arr.push(obj)
+                      })
+                      this.$set(childrenItem, 'children', arr)
+                    }
+                  })
+                }
+              })
+            }
+          })
+        })
+        resolve()
+      })
+    },
+    saveSearch (val, flag) {
+      this.searchFlag = flag
+      this.searchData = JSON.parse(JSON.stringify(val))
+    },
+    // 获取组合搜索数据
+    handleHighSearch (val, flag, type) {
+      if (type) {
+        this.batchSearch.text = val.text
+        this.queryParam = Object.assign(this.queryParam, {
+          bulkSearch: this.batchSearch
+        })
+      } else {
+        this.searchFlag = flag
+        this.searchData = JSON.parse(JSON.stringify(val))
+        // 不保存这些参数
+        val.searchConditions.forEach(item => {
+          item.fieldType = item.formType = item.optionValue = item.condiArr = undefined
+        })
+        this.queryParam = {
+          advanceSearch: val
+        }
+      }
+      this.refresh()
+    },
+    // 获取地址
+    getAddress (name, number, alias) {
+      const obj = {}
+      obj[alias] = number
+      this.form.setFieldsValue(obj)
+    },
+    clearAddress () {
+      this.template.forEach(item => {
+        if (['address'].includes(item.formType) && this.$refs[item.value]) {
+          this.$refs[item.value][0].resetClear()
+        }
+      })
+    },
+    // 获取自定义列点击显示时数据
+    getData (data) {
+      this.sendData = true
+      this.pageSize = Number(data.pageSize)
+      this.columns = this.columns.filter(item => item.dataIndex === 'action')
+      if (this.columns[0]) {
+        this.columns[0].fixed = false
+      }
+      for (const i in data.data) {
+        data.data[i]['ellipsis'] = true
+        if (['textarea', 'image', 'file', 'editor'].includes(data.data[i].type)) {
+          data.data[i].sorter = false
+        } else {
+          if ((data.data[i].sorter === '1' || !data.data[i].sorter) && data.data[i].dataIndex !== 'action') {
+            data.data[i].sorter = true
+          } else {
+            data.data[i].sorter = false
+          }
+        }
+        this.columns.push(data.data[i])
+      }
+      this.columns = this.columns.filter(item => item.display !== 'd')
+      const that = this
+      this.scroll.x = null
+      this.columns.map((item) => {
+        let style = {}
+        if (item.style) {
+          style = {
+            'background-color': item.style.bgcolor,
+            'color': item.style.color,
+            'font-size': item.style.fontsize
+          }
+        }
+        if (item.attribute && !item.attribute.includes('<')) {
+          item.attribute = JSON.parse(item.attribute)
+        }
+        item.customCell = (record, index) => {
+          if (item.attribute && item.attribute.styleFunc) {
+            const str = 'return ' + item.attribute.styleFunc
+            // eslint-disable-next-line no-new-func
+            const func = new Function(str)
+            return func()(record, item)
+          }
+        }
+        item.ellipsis = true
+        item.width = Number(item.width)
+        if (item.width === 0) {
+          delete item.width
+          this.scroll.x = null
+        } else {
+          if (this.scroll.x !== null) {
+            this.scroll.x += item.width
+          }
+        }
+        if (item.dataIndex === 'action') {
+          const obj = {}
+          if (this.params.type === 'table_subform_list') {
+            obj.attribute = `<a href="javascript:;" @click="() => { const val = [record]; parent.$emit('ok', val, 'line') }">选择</a>`
+            item.rowAction.push(obj)
+          } else if (this.params.type === 'associated') {
+            obj.attribute = `<a href="javascript:;" @click="() => {  parent.axios({url: '/admin/userTable/getTableRecord', data: { tableId: parent.tableId, id: record.id }}).then(res => { parent.$emit('ok', res.result.data, 'associated')})}">选择</a>`
+            item.rowAction.push(obj)
+          }
+        }
+        item.customRender = (text, record, index) => {
+          const showText = record[item.dataIndex + '__']
+          item.func = () => { }
+          if (item.attribute) {
+            // 获取属性key
+            const key = record[item.attribute.key]
+            style = item.attribute.value ? item.attribute.value[key] : ''
+            if (item.attribute.event) {
+              const str = 'return ' + item.attribute.event
+              // eslint-disable-next-line no-new-func
+              const func = new Function(str)
+              item.func = func()
+            }
+          }
+          if (item.dataIndex === 'action') {
+            const menuArr = []
+            item.rowAction.forEach(rowItem => {
+              const Menu = {
+                template: `<span>${rowItem.attribute}</span>`,
+                data: () => {
+                  return {
+                    parent: this,
+                    record: record
+                  }
+                }
+              }
+              switch (rowItem.barAlias) {
+                case 'flow_process':
+                  if (['all_flow', 'all_process'].indexOf(this.flowCondition) > -1 || (this.flowCondition === 'my_process' && this.userInfo.username === record.process_current_user__)) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_takeprocess':
+                  if (this.flowCondition === 'my_process' && this.userInfo.username !== record.process_current_user__) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_take':
+                  if (this.flowCondition === 'my_process' && this.userInfo.username !== record.process_current_user__) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_remarks':
+                  if (['op'].indexOf(record.case_status__) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_urge':
+                  if (['my_process', 'all_process'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_repeal':
+                  if (['my_process', 'all_process'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_delete':
+                  if (['my_create', 'all_flow'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_jump':
+                  if (['all_process'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                case 'flow_transfer':
+                  if (['my_process', 'all_process'].indexOf(this.flowCondition) > -1) {
+                    menuArr.push(Menu)
+                  }
+                  break
+                default:
+                  menuArr.push(Menu)
+                  break
+              }
+            })
+            if (item.actionType === '1') {
+              return (
+                <div>
+                  {
+                    menuArr.map((menuItem, menuIndex) => {
+                      if (menuIndex === menuArr.length - 1) {
+                        return (
+                          <span>
+                            <menuItem />
+                          </span>
+                        )
+                      } else {
+                        return (
+                          <span>
+                            <menuItem />
+                            <a-divider type="vertical" />
+                          </span>
+                        )
+                      }
+                    })
+                  }
+                </div>
+              )
+            } else if (item.actionType === '2') {
+              const data = menuArr.length > item.actionShow ? <span>
+                <span>
+                  {
+                    menuArr.map((menuItem, menuIndex) => {
+                      if (menuIndex < (item.actionShow - 1)) {
+                        return (
+                          <span>
+                            <menuItem />
+                            <a-divider type="vertical" />
+                          </span>
+                        )
+                      }
+                    })
+                  }
+                </span>
+                <a-dropdown>
+                  <a>{this.$t('更多')} <a-icon type="down" /></a>
+                  <a-menu slot="overlay">
+                    {
+                      menuArr.map((menuItem, menuIndex) => {
+                        if (menuIndex > (item.actionShow - 2)) {
+                          return (
+                            <a-menu-item>
+                              <menuItem />
+                            </a-menu-item>
+                          )
+                        }
+                      })
+                    }
+                  </a-menu>
+                </a-dropdown>
+              </span> : <div>
+                {
+                  menuArr.map((menuItem, menuIndex) => {
+                    if (menuIndex === menuArr.length - 1) {
+                      return (
+                        <span>
+                          <menuItem />
+                        </span>
+                      )
+                    } else {
+                      return (
+                        <span>
+                          <menuItem />
+                          <a-divider type="vertical" />
+                        </span>
+                      )
+                    }
+                  })
+                }
+              </div>
+              return data
+            } else {
+              return (
+                <span>
+                  <a-dropdown>
+                    <a-button icon="more" type="link"></a-button>
+                    <a-menu slot="overlay">
+                      {
+                        menuArr.map((menuItem, menuIndex) => {
+                          return (
+                            <a-menu-item>
+                              <menuItem />
+                            </a-menu-item>
+                          )
+                        })
+                      }
+                    </a-menu>
+                  </a-dropdown>
+                </span>
+              )
+            }
+          }
+          if (item.attribute && JSON.stringify(item.attribute).includes('<')) {
+            let data = ''
+            const parent = this
+            const MyComponent = Vue.component('my-component', {
+              data: function () {
+                return { text: text, record: record, parent: parent }
+              },
+              template: item.attribute
+            })
+            data = (<MyComponent></MyComponent>)
+            return data
+          } else {
+            switch (item.type) {
+              case 'datetime':
+                return (
+                  <div style={style} onClick={() => { item.func(that, record) }}>
+                    {(showText === null || showText === '') ? '--' : showText}
+                  </div>
+                )
+              case 'image':
+                if (text && text.length > 0) {
+                  return (
+                    <viewer>
+                      {showText.map((val) => {
+                        return (
+                          <img src={process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + val.filePath} style={style} style="width: 64px; height: 64px; cursor: pointer; margin-right: 2px;" />
+                        )
+                      })}
+                    </viewer>
+                  )
+                } else {
+                  return '--'
+                }
+              case 'file':
+                if (text && text.length > 0) {
+                  return (
+                    <div>
+                      {showText.map((val) => {
+                        const filePath = encodeURIComponent(val.filePath)
+                        return (
+                          <a href={process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + filePath} target="_blank" style={style} style="display: block;">{val.fileName}</a>
+                        )
+                      })}
+                    </div>
+                  )
+                } else {
+                  return '--'
+                }
+              case 'score':
+                return (
+                  <a-rate value={Number(text)} disabled allow-half />
+                )
+              case 'tag':
+                if (record[item.dataIndex]) {
+                  return (
+                    <div>
+                      {record[item.dataIndex].split(',').map((val) => {
+                        return (
+                          <a-tag color={showText && showText.find(item => item.tagNumber === val) && showText.find(item => item.tagNumber === val).tagType === 1 ? 'green' : 'red'}>
+                            {showText && showText.find(item => item.tagNumber === val) ? showText.find(item => item.tagNumber === val).tagName : ''}
+                          </a-tag>
+                        )
+                      })}
+                    </div>
+                  )
+                } else {
+                  return '--'
+                }
+              default:
+                return (
+                  <div style={style} onClick={() => { item.func(that, record) }}>
+                    {showText === '' ? '--' : showText}
+                  </div>
+                )
+            }
+          }
+        }
+      })
+      this.lockLeft = data.lockLeft
+      this.lockRight = data.lockRight
+      for (let i = 0; i < this.lockLeft; i++) {
+        this.columns[i]['fixed'] = 'left'
+        this.scroll.x -= Number(this.columns[i].width)
+      }
+      let keyLength = this.columns.length - 1
+      for (let i = 0; i < this.lockRight; i++) {
+        this.columns[keyLength]['fixed'] = 'right'
+        this.scroll.x -= Number(this.columns[keyLength].width)
+        keyLength--
+      }
+      this.columns.forEach(item => {
+        item.dataIndex = item.dataIndex === 'action' ? item.dataIndex : item.dataIndex + '__'
+      })
+      this.refresh()
+    },
+    getTreeList () {
+      const setting = JSON.parse(this.interactiveField.setting)
+      this.axios({
+        url: '/admin/dict/getChildren',
+        data: {
+          dictCategoryNumber: setting.form.src, parentDictDataNumber: null
+        }
+      }).then(res => {
+        res.result.forEach(item => {
+          if (!item.subCount) {
+            item.isLeaf = true
+          }
+        })
+        this.interactiveData[0].children = res.result
+      })
+    },
+    onLoadInteractiveData (treeNode, item) {
+      const { value } = treeNode.dataRef
+      const setting = JSON.parse(this.interactiveField.setting)
+      return new Promise((resolve) => {
+        this.axios({
+          url: '/admin/dict/getChildren',
+          data: {
+            dictCategoryNumber: setting.form.src, parentDictDataNumber: value
+          }
+        }).then(res => {
+          res.result.forEach(item => {
+            if (!item.subCount) {
+              item.isLeaf = true
+            }
+          })
+          treeNode.dataRef.children = res.result
+          this.interactiveData = [...this.interactiveData]
+          resolve()
+        })
+      })
+    },
+    interactiveSelect (selectedKeys) {
+      this.interactiveObj = {
+        [this.interactiveFieldAlias]: selectedKeys.filter(item => item)
+      }
+      this.refresh()
+    },
+    searchTabs (val) {
+      this.interactiveSearchValue = val
+      this.interactivePage.pageNo = 1
+      this.scrollStats = true
+      if (val) {
+        this.lastFetchId += 1
+        const fetchId = this.lastFetchId
+        this.fetching = true
+        const setting = JSON.parse(this.interactiveField.setting)
+        this.axios({
+          url: '/admin/search/dictSearch',
+          data: Object.assign({ searchName: val, dictCategoryNumber: setting.form.src, filterDisabled: true }, this.interactivePage)
+        }).then(res => {
+          if (fetchId !== this.lastFetchId) {
+            return
+          }
+          this.interactiveSearchData = res.result.data
+          this.fetching = false
+        })
+      } else {
+        this.interactiveSearchData = []
+      }
+    },
+    getTabsScroll () {
+      const setting = JSON.parse(this.interactiveField.setting)
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: Object.assign({ searchName: this.interactiveSearchValue, dictCategoryNumber: setting.form.src, filterDisabled: true }, this.interactivePage)
+      }).then(res => {
+        if (!res.result.data.length) {
+          this.scrollStats = false
+        }
+        this.interactiveSearchData = [...this.interactiveSearchData, ...res.result.data]
+      })
+    },
+    popupScroll (e) {
+      const scrollTop = e.target.scrollTop
+      const scrollHeight = e.target.scrollHeight
+      const clientHeight = e.target.clientHeight
+      const scrollBottom = scrollHeight - clientHeight - scrollTop
+      if (scrollBottom < 1 && this.scrollStats && this.interactiveSearchValue) {
+        this.interactivePage.pageNo++
+        this.getTabsScroll()
+      }
+    },
+    // 自定义列打开
+    customShow () {
+      this.$refs.userTableColumnCustom.show({
+        title: this.$t('用户自定义列'),
+        data: this.columns,
+        tplviewid: this.tplviewid,
+        tableId: this.tableId
+      })
+    },
+    // 获取搜索栏级联选择数据
+    getcascaderValue (val, alias) {
+      const obj = {}
+      obj[alias] = val
+      this.form.setFieldsValue(obj)
+    },
+    handleConditionChange (e) {
+      this.flowCondition = e.target.value
+      this.refresh()
+    },
+    handleHighSearchMenu (val) {
+      this.queryParam = {
+        advanceSearch: val
+      }
+      this.refresh()
+    },
+    // 组合搜索改变列表值
+    handleChange (action, data, index) {
+      const obj = {}
+      obj.id = data.id
+      obj.setting = JSON.stringify(data)
+      if (action === 'add') {
+        this.customSearch.push(obj)
+      } else if (action === 'edit') {
+        this.customSearch.splice(index, 1, obj)
+      } else {
+        this.customSearch.splice(index, 1)
+      }
+      this.condiList = this.customSearch.length > 0 ? this.customSearch.map(item => {
+        const obj = JSON.parse(item.setting)
+        obj.id = item.id
+        return obj
+      }) : []
+    },
+    // 添加/编辑
+    onShow (parameter) {
+      parameter.jointable = this.params.jointable
+      parameter.listThis = this
+      this.indexKey = this.indexKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.userTableForm.show(parameter)
+      })
+    },
+    // 删除
+    onDelete (parameter) {
+      const that = this
+      const id = parameter && parameter.record ? parameter.record.id : this.selectedRowKeys
+      this.$confirm({
+        title: parameter && parameter.title ? parameter.title : parameter ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          that.axios({
+            url: parameter && parameter.url ? parameter.url : '/admin/userTable/delete',
+            data: Object.assign({ id: id, tplviewid: that.params.tplviewid }, parameter && parameter.data ? parameter.data : {})
+          }).then(res => {
+            that.refresh('noRefresh')
+          })
+        }
+      })
+    },
+    // 批量编辑
+    onBulkEdit (parameter) {
+      this.$refs.userTableBulkEdit.show(Object.assign({
+        title: this.$t('批量编辑'),
+        url: '/admin/userTable/bulkEdit',
+        tplviewid: this.params.tplviewid,
+        tableId: this.tableId,
+        totalCount: this.totalCount
+      }, parameter))
+    },
+    // 创建流程
+    handleCreate (parameter) {
+      this.indexKey = this.indexKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('创建流程') + ': ' + this.workflowName,
+            width: 1200,
+            tplviewUrl: parameter ? parameter.tplviewUrl : '/admin/wcase/add',
+            url: parameter ? parameter.url : '/admin/wcase/add',
+            workflowId: parameter ? parameter.workflowId : this.workflowId,
+            parameter: parameter ? parameter.data : '',
+            viewType: 'create'
+          },
+          listThis: this
+        })
+      })
+    },
+    handleView (record, config) {
+      this.indexKey = this.indexKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('查看流程'),
+            width: config && config.width ? config.width : 1200,
+            tplviewUrl: '/admin/centerflow/viewOrder',
+            caseId: record.case_id,
+            viewType: 'view',
+            flowCondition: this.flowCondition
+          },
+          record: record,
+          listThis: this
+        })
+      })
+    },
+    handleProcess (record, config) {
+      this.indexKey = this.indexKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('办理流程'),
+            width: config && config.width ? config.width : 1200,
+            tplviewUrl: '/admin/centerflow/handleOrder',
+            url: '/admin/workitem/processing',
+            caseId: record.case_id,
+            operation: 'handle',
+            viewType: 'handle',
+            flowCondition: this.flowCondition
+          },
+          record: record,
+          listThis: this
+        })
+      })
+    },
+    handleTakeProcess (record) {
+      this.indexKey = this.indexKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('办理流程'),
+            width: 1200,
+            tplviewUrl: '/admin/centerflow/handleOrder',
+            url: '/admin/workitem/processing',
+            caseId: record.case_id,
+            viewType: 'handle',
+            flowCondition: this.flowCondition,
+            takeFlow: 1
+          },
+          record: record,
+          listThis: this
+        })
+      })
+    },
+    handleDelete (record) {
+      const me = this
+      this.$confirm({
+        title: this.$t('您确认要删除该流程吗？'),
+        onOk () {
+          me.axios({
+            url: '/admin/wcase/delete',
+            data: { caseId: record.case_id }
+          }).then(res => {
+            me.refresh()
+          })
+        }
+      })
+    },
+    handleTakeFlow (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要领取该数据吗？'),
+        onOk () {
+          that.loading = true
+          that.axios({
+            url: '/admin/workitem/processing',
+            data: {
+              handleWay: this.$t('领取'),
+              operation: 'take_flow',
+              caseId: record.case_id
+            }
+          }).then(res => {
+            that.loading = false
+            if (res.code === 0) {
+              that.$message.success(this.$t('领取成功'))
+            } else {
+              that.$message.error(res.message)
+            }
+            that.refresh()
+          })
+        }
+      })
+    },
+    // 录音播放
+    onVideoPlay (file, url) {
+      if (file) {
+        const sourceUrl = `${process.env.VUE_APP_API_BASE_URL}${url}${file}`
+        this.$setSetting({ audioPlayData: { visible: true, sourceUrl: sourceUrl } })
+      } else {
+        this.$message.info('录音文件为空')
+      }
+    },
+    // 录音下载
+    onVideoDownload (file, url) {
+      if (file) {
+        window.open(`${process.env.VUE_APP_API_BASE_URL}${url}${file}`)
+      } else {
+        this.$message.info('录音文件为空')
+      }
+    },
+    // 导入
+    onImport (parameter) {
+      this.$refs.userTableImport.show(Object.assign({
+        title: this.$t('导入'),
+        url: '/admin/api/importFile',
+        tplviewid: this.params.tplviewid,
+        tableId: this.tableId
+      }, parameter))
+    },
+    // 导出
+    onExport (parameter) {
+      this.exportKey = this.exportKey === 2 ? 3 : 2
+      const data = this.queryParam.commonSearch ? this.queryParam.commonSearch : this.form.getFieldsValue()
+      Object.assign(data, this.interactiveObj)
+      this.$nextTick(() => {
+        this.$refs.userTableExport.show(Object.assign({
+          title: this.$t('导出'),
+          url: '/admin/userTable/export',
+          tplviewid: this.params.tplviewid,
+          tableId: this.tableId,
+          condition: Object.assign({},
+            this.queryParam,
+            this.params,
+            {
+              sortField: this.sorter.sortField,
+              sortOrder: this.sorter.sortOrder,
+              commonSearch: !this.queryParam.advanceSearch ? data : undefined,
+              associated: this.filtersData,
+              flowCondition: this.flowCondition,
+              pageNo: undefined,
+              pageSize: undefined
+            }),
+          columns: this.columnsExport
+        }, parameter))
+      })
+    },
+    // 办理备注
+    handleRemarks (record) {
+      this.remarkKey = this.remarkKey === 'remark' ? 'remark_1' : 'remark'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowRemarks.show({
+          caseId: record.case_id
+        })
+      })
+    },
+    handleBatchSearch () {
+      this.batchSearchKey = this.batchSearchKey === 'batchSearch' ? 'batchSearch_1' : 'batchSearch'
+      const data = this.tbar.find(item => item.barAlias === 'sys_batchsearch')
+      this.batchSearch.field = data.searchField
+      this.$nextTick(() => {
+        this.$refs.userTableBatchSearch.show(this.batchSearch)
+      })
+    },
+    // 流转
+    handleJump (record) {
+      this.jumpKey = this.jumpKey === 'jump' ? 'jump_1' : 'jump'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowJump.show({
+          caseId: record.case_id
+        })
+      })
+    },
+    // 挂起
+    handleHangUp (record) {
+      const me = this
+      this.$confirm({
+        title: this.$t('您确认要挂起该流程吗？'),
+        onOk () {
+          me.axios({
+            url: '/admin/workitem/processing',
+            data: {
+              action: 'suspend',
+              handleWay: '挂起',
+              operation: 'suspend',
+              caseId: record.case_id
+            }
+          }).then(res => {
+            me.refresh()
+          })
+        }
+      })
+    },
+    // 激活
+    handleActivate (record) {
+      const me = this
+      this.$confirm({
+        title: this.$t('您确认要激活该流程吗？'),
+        onOk () {
+          me.axios({
+            url: '/admin/workitem/processing',
+            data: {
+              action: 'activate',
+              handleWay: '激活',
+              operation: 'activate',
+              caseId: record.case_id
+            }
+          }).then(res => {
+            me.refresh()
+          })
+        }
+      })
+    },
+    // 批量流转
+    handleBatchJump () {
+      this.jumpKey = this.jumpKey === 'jump' ? 'jump_1' : 'jump'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowJump.show({
+          workflowId: this.workflowId,
+          data: this.selectedRows,
+          url: '/admin/centerflow/blukJumpFlow',
+          type: 'batch'
+        })
+      })
+    },
+    // 转办
+    handleTransfer (record) {
+      this.complaintKey = this.complaintKey === 'complaint' ? 'complaint_1' : 'complaint'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowComplaint.show({
+          caseId: record.case_id
+        })
+      })
+    },
+    // 撤销
+    handleRepeal (record, type) {
+      if (record.gdbh && record.gdbh.includes('WX') && !type) {
+        type = 'WX'
+      }
+      this.repealKey = this.repealKey === 'repeal' ? 'repeal_1' : 'repeal'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowRepeal.show({
+          caseId: record.case_id,
+          record: record,
+          type: type,
+          tplviewid: this.tplviewid
+        })
+      })
+    },
+    handleBatchRepeal () {
+      this.repealKey = this.repealKey === 'repeal' ? 'repeal_1' : 'repeal'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowRepeal.show({
+          workflowId: this.workflowId,
+          data: this.selectedRows,
+          url: '/admin/centerflow/bulkCancelFlow',
+          type: 'batch',
+          tplviewid: this.tplviewid
+        })
+      })
+    },
+    // 催办
+    handleUrge (record) {
+      this.urgeKey = this.urgeKey === 'urge' ? 'urge_1' : 'urge'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowUrge.show({
+          caseId: record.case_id,
+          record
+        })
+      })
+    },
+    // 生成唯一ID
+    uuid (n) {
+      n = 1 // 生成一个唯一id，包含数字和字母
+      var random = function () {
+        // 生成10-12位不等的字符串
+        return Number(
+          Math.random()
+            .toString()
+            .substr(2)
+        ).toString(36) // 转换成十六进制
+      }
+      var arr = []
+      function createId () {
+        var num = random()
+        var _bool = false
+        arr.forEach(v => {
+          if (v === num) _bool = true
+        })
+        if (_bool) {
+          createId()
+        } else {
+          arr.push(num)
+        }
+      }
+      var i = 0
+      while (i < n) {
+        createId()
+        i++
+      }
+      return arr[0] // 将生成的转为我们需要的字符串并赋值
+    },
+    // 组织结构options转换
+    optionsConversion (record, list, displayType, searchType) {
+      if (record.field.setting.form.optionType === 'department') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.departmentId
+            obj.label = item.fullDepartmentName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.departmentId
+            obj.label = item.departmentName
+            return obj
+          })
+        }
+      } else if (record.field.setting.form.optionType === 'role') {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.roleId
+          obj.label = item.roleName
+          return obj
+        })
+      } else {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.username
+          obj.label = `${item.username}(${item.realName})`
+          return obj
+        })
+      }
+    },
+    // 组织结构options转换
+    optionsConversionTreeselect (record, list, displayType, searchType) {
+      if (record.field.setting.attribute.dataSource === 'addressBook') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.name
+            return obj
+          })
+        }
+      } else {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.dictDataName
+            return obj
+          })
+        }
+      }
+    },
+    // 数据处理，主要用于发送一个请求到后面，后端进行简单的逻辑处理，如删除数据，标记数据状态等
+    onRequest (parameter) {
+      const me = this
+      if (parameter.confirm) {
+        this.$confirm({
+          title: parameter.confirm.title || this.$t('您确认要处理该记录吗？'),
+          okText: parameter.confirm.okText || this.$t('确定'),
+          okType: parameter.confirm.okType || 'primary',
+          cancelText: parameter.confirm.cancelText || this.$t('取消'),
+          onOk () {
+            me.axios({
+              url: parameter.url,
+              data: Object.assign(parameter, me.params)
+            }).then(res => {
+              if (res.code === 0) {
+                me.$message.info(res.message)
+              } else {
+                me.$message.warning(res.message)
+              }
+              me.refresh()
+            })
+          }
+        })
+      } else {
+        this.axios({
+          url: parameter.url,
+          data: Object.assign(parameter, me.params)
+        }).then(res => {
+          if (res.code === 0) {
+            me.$message.info(res.message)
+          } else {
+            me.refresh()
+          }
+          me.$message.warning(res.message)
+        })
+      }
+    },
+    resetAll () {
+      this.queryParam = {}
+      this.template.forEach(item => {
+        if (item.type === 'multiFieldSearch') {
+          item.searchValue = undefined
+        } else if (item.type === 'searchTemplate') {
+          item.searchValue = undefined
+        }
+      })
+      this.searchString = {}
+      this.clearAddress()
+      if (this.$refs.dataPicker) {
+        this.$refs.dataPicker.forEach(item => {
+          item.reset()
+        })
+      }
+      this.form.resetFields()
+      this.timeObj = {}
+      this.handleSearch({ tag: false })
+    },
+    handleSearch (parameter) {
+      const { form } = this
+      if (parameter.tag) {
+        const search = form.getFieldsValue()
+        const otherSearch = this.queryParam.commonSearch || {}
+        const commonSearch = Object.assign(otherSearch, search)
+        this.queryParam = {
+          commonSearch
+        }
+        if (Object.keys(this.timeObj).length) {
+          Object.assign(this.queryParam.commonSearch, this.timeObj)
+        }
+      } else {
+        this.queryParam = {}
+      }
+      this.refresh()
+    },
+    changeAdvancedSearch () {
+      this.advancedSearch = !this.advancedSearch
+    },
+    // 下拉框数据源
+    getOption (item, value) {
+      if (item.field.setting.form.loadMode === 'dynamic') {
+        clearTimeout(this.selectTimeout)
+        this.selectTimeout = setTimeout(() => {
+          const src = item.field.setting.form.src
+          if (value) {
+            this.axios({
+              url: '/admin/search/dictSearch',
+              data: {
+                dictCategoryNumber: src,
+                searchName: value
+              }
+            }).then(res => {
+              item.field.option = res.result
+            })
+          } else {
+            item.field.option = []
+          }
+        }, 300)
+      } else if (item.field.setting.attribute.dataSource === 'otherTable') {
+        clearTimeout(this.selectTimeout)
+        this.selectTimeout = setTimeout(() => {
+          const form = item.field.setting.form
+          if (value) {
+            this.axios({
+              url: '/admin/userTable/getAnyTableData',
+              data: {
+                tableId: form.otherTable[1],
+                fieldName: form.otherTableField,
+                condition: value
+              }
+            }).then(res => {
+              item.field.option = res.result
+            })
+          } else {
+            item.field.option = []
+          }
+        }, 300)
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+// 使用scoped无法修改到css属性
+.dropdown {
+  /deep/ button {
+    margin-right: 0;
+  }
+}
+.tabsHeight {
+  /deep/.ant-tabs-top-content,
+  /deep/.ant-tabs-bottom-content {
+    height: calc(100% - 50px);
+  }
+}
+</style>

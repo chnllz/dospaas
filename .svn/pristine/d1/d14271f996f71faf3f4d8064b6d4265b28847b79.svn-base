@@ -1,0 +1,1492 @@
+<template>
+  <a-layout style="padding: 0; background: white; height: 100%; overflow: auto" class="layoutStyle">
+    <a-layout-sider style="background: white; min-width: 35%; overflow: auto; height: 100%">
+      <a-tabs
+        v-model="activeKey"
+        size="small"
+        :tabBarStyle="{ marginBottom: 0 }"
+        tabPosition="left"
+        style="background: white; min-width: 35%; overflow: auto; height: 100%"
+      >
+        <a-tab-pane key="1" :tab="$t('本表')" :style="activeKey === '1' ? { height: '100%' } : {}">
+          <s-table
+            ref="fieldSelfTable"
+            class="table-fill"
+            :scroll="{ y: true }"
+            size="small"
+            :columns="fieldColumns"
+            :pagination="{
+              simple: true
+            }"
+            rowKey="id"
+            :data="fieldSelfData"
+          >
+            <template slot="title">
+              <a-form :form="form">
+                <a-form-item>
+                  <a-input-search
+                    :placeholder="$t('请输入显示名称搜索')"
+                    @search="
+                      (e) => {
+                        fieldSelfParam.name = e
+                        onChange('fieldSelfTable')
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-form>
+            </template>
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.alias}'`, `{${record.name}}`, 'cm-field')
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+              <a-divider type="vertical" />
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`$getData('${record.alias}')`, '${' + record.name + '}', 'cm-field')
+                  }
+                "
+              >
+                {{ $t('取值') }}
+              </a>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane key="2" :tab="$t('其他表')" :style="activeKey === '2' ? { height: '100%' } : {}">
+          <s-table
+            ref="tableTable"
+            class="table-fill"
+            :scroll="{ y: true }"
+            :pagination="{
+              simple: true
+            }"
+            size="small"
+            :hidden="tableHidden"
+            :columns="tableColumns"
+            rowKey="id"
+            :data="tableData"
+          >
+            <template slot="title">
+              <a-form :form="form">
+                <a-form-item>
+                  <a-select
+                    v-model="tableParam.module"
+                    style="width: 120px"
+                    @change="
+                      () => {
+                        $refs.tableTable.refresh()
+                      }
+                    "
+                  >
+                    <a-select-option v-for="(val, key) in modules" :key="key" :value="val">{{ val }}</a-select-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item>
+                  <a-input-search
+                    :placeholder="$t('请输入数据表名搜索')"
+                    @search="
+                      (e) => {
+                        tableParam.name = e
+                        onChange('tableTable')
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-form>
+            </template>
+            <span slot="tableName" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    tableHidden = !tableHidden
+                    fieldParam.tableId = record.tableId
+                    $refs.fieldTable.refresh()
+                  }
+                "
+              >
+                {{ text }}
+              </a>
+            </span>
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.module + '_' + record.alias}'`, `#${record.name}#`, 'cm-table')
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+            </span>
+          </s-table>
+          <s-table
+            ref="fieldTable"
+            class="table-fill"
+            :scroll="{ y: true }"
+            :pagination="{
+              simple: true
+            }"
+            size="small"
+            :hidden="!tableHidden"
+            :columns="fieldColumns"
+            rowKey="id"
+            :data="fieldData"
+          >
+            <template slot="title">
+              <a-form :form="form">
+                <a-form-item>
+                  <a-button
+                    @click="
+                      () => {
+                        tableHidden = !tableHidden
+                        fieldParam = {}
+                        $refs.fieldTable.refresh()
+                      }
+                    "
+                  >
+                    <a-icon type="left" />
+                    {{ $t('返回') }}
+                  </a-button>
+                </a-form-item>
+                <a-form-item>
+                  <a-input-search
+                    :placeholder="$t('请输入显示名称搜索')"
+                    @search="
+                      (e) => {
+                        fieldParam.name = e
+                        $refs.fieldTable.refresh()
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-form>
+            </template>
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.alias}'`, `{${record.name}}`, 'cm-field')
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane key="3" :tab="$t('字典')" :style="activeKey === '3' ? { height: '100%' } : {}">
+          <a-tabs class="tabs-flex">
+            <a-tab-pane key="plane" :tab="$t('平面字典')">
+              <s-table
+                ref="dictTable"
+                class="table-fill"
+                :scroll="{ y: true }"
+                :pagination="{
+                  simple: true
+                }"
+                size="small"
+                rowKey="id"
+                :columns="dictName === 'data' ? dictDataColumns : dictColumns"
+                :pageSize="dictObj ? 100 : 20"
+                :data="dictData"
+              >
+                <template slot="title">
+                  <a-form>
+                    <a-form-item>
+                      <a-input-search
+                        :placeholder="$t('请输入编号或名称')"
+                        @search="
+                          (e) => {
+                            dictParam.key = e
+                            dictParam, onChange('dictTable')
+                          }
+                        "
+                      />
+                    </a-form-item>
+                    <a-form-item>
+                      <a-breadcrumb style="line-height: 38px">
+                        <a-breadcrumb-item>
+                          <a
+                            href="javascript:;"
+                            @click="
+                              () => {
+                                dictParam = {}
+                                dictObj = null
+                                $refs.dictTable.refresh()
+                              }
+                            "
+                          >
+                            {{ $t('所有字典') }}
+                          </a>
+                        </a-breadcrumb-item>
+                        <a-breadcrumb-item v-for="(item, key) in dictPath" :key="key">
+                          <a
+                            href="javascript:;"
+                            @click="
+                              () => {
+                                onChange('dictTable')
+                              }
+                            "
+                          >
+                            {{ item.name }}
+                          </a>
+                        </a-breadcrumb-item>
+                      </a-breadcrumb>
+                    </a-form-item>
+                  </a-form>
+                </template>
+                <span slot="dictCategoryName" slot-scope="text, record">
+                  <a
+                    href="javascript:;"
+                    @click="
+                      () => {
+                        dictObj = record
+                        onChange('dictTable')
+                      }
+                    "
+                  >
+                    {{ text ? text + (record.subCount > 0 ? '(' + record.subCount + ')' : '') : '' }}
+                  </a>
+                </span>
+                <span slot="action" slot-scope="text, record">
+                  <a
+                    href="javascript:;"
+                    @click="
+                      () => {
+                        dictObj
+                          ? addText(`'${record.dictDataNumber}'`, `${$t('字典')}: ${record.dictDataName}`, 'cm-dict')
+                          : addText(
+                              `'${record.dictCategoryNumber}'`,
+                              `${$t('字典')}: ${record.dictCategoryName}`,
+                              'cm-dict'
+                            )
+                      }
+                    "
+                  >
+                    {{ $t('引用') }}
+                  </a>
+                </span>
+              </s-table>
+            </a-tab-pane>
+            <a-tab-pane key="tree" :tab="$t('树形字典')">
+              <s-table
+                ref="treeDictTable"
+                class="table-fill"
+                :scroll="{ y: true }"
+                :pagination="{
+                  simple: true
+                }"
+                size="small"
+                rowKey="id"
+                :columns="dictTreeName === 'data' ? dictDataTreeColumns : dictColumns"
+                :pageSize="dictTreeObj ? 100 : 20"
+                :data="treeDictData"
+              >
+                <template slot="title">
+                  <a-form>
+                    <a-form-item>
+                      <a-input-search
+                        :placeholder="$t('请输入编号或名称')"
+                        @search="
+                          (e) => {
+                            treeDictParam.key = e
+                            onChange('treeDictTable')
+                          }
+                        "
+                      />
+                    </a-form-item>
+                    <a-form-item>
+                      <a-breadcrumb style="line-height: 38px">
+                        <a-breadcrumb-item>
+                          <a
+                            href="javascript:;"
+                            @click="
+                              () => {
+                                dictTreeObj = null
+                                treeDictPath = []
+                                $refs.treeDictTable.refresh()
+                              }
+                            "
+                          >
+                            {{ $t('所有字典') }}
+                          </a>
+                        </a-breadcrumb-item>
+                        <a-breadcrumb-item v-for="(item, key) in treeDictPath" :key="key">
+                          <a
+                            href="javascript:;"
+                            @click="
+                              () => {
+                                if (item.level !== 1) {
+                                  dictTreeObj.dictDataNumber = item.number
+                                } else {
+                                  dictTreeObj.dictDataNumber = null
+                                  dictTreeObj.dictCategoryName = item.name
+                                }
+                                $refs.treeDictTable.refresh()
+                              }
+                            "
+                          >
+                            {{ item.name }}
+                          </a>
+                        </a-breadcrumb-item>
+                      </a-breadcrumb>
+                    </a-form-item>
+                  </a-form>
+                </template>
+                <span slot="dictCategoryName" slot-scope="text, record">
+                  <a
+                    href="javascript:;"
+                    @click="
+                      () => {
+                        dictTreeObj = record
+                        onChange('treeDictTable')
+                      }
+                    "
+                  >
+                    {{ text ? text + (record.subCount > 0 ? '(' + record.subCount + ')' : '') : '' }}
+                  </a>
+                </span>
+                <span slot="action" slot-scope="text, record">
+                  <a
+                    href="javascript:;"
+                    @click="
+                      () => {
+                        dictTreeObj
+                          ? addText(`'${record.dictDataNumber}'`, `${$t('字典')}: ${record.dictDataName}`, 'cm-dict')
+                          : addText(
+                              `'${record.dictCategoryNumber}'`,
+                              `${$t('字典')}: ${record.dictCategoryName}`,
+                              'cm-dict'
+                            )
+                      }
+                    "
+                  >
+                    {{ $t('引用') }}
+                  </a>
+                </span>
+              </s-table>
+            </a-tab-pane>
+          </a-tabs>
+        </a-tab-pane>
+        <a-tab-pane key="4" :tab="$t('用户')" :style="activeKey === '4' ? { height: '100%' } : {}">
+          <s-table
+            ref="userTable"
+            class="table-fill"
+            :scroll="{ y: true }"
+            :pagination="{
+              simple: true
+            }"
+            size="small"
+            rowKey="id"
+            :columns="userColumns"
+            :data="userData"
+            :sorter="{ field: 'id', order: 'descend' }"
+          >
+            <template slot="title">
+              <a-form :form="form">
+                <a-row type="flex" :gutter="8">
+                  <a-col flex="auto">
+                    <a-form-item>
+                      <a-select v-model="userParamType" @change="userParam = {}">
+                        <a-select-option value="username">{{ $t('用户名') }}</a-select-option>
+                        <a-select-option value="department">{{ $t('部门') }}</a-select-option>
+                        <a-select-option value="role">{{ $t('角色') }}</a-select-option>
+                      </a-select>
+                    </a-form-item>
+                  </a-col>
+                  <a-col flex="190px">
+                    <a-form-item v-if="userParamType === 'username'">
+                      <a-input-search
+                        :placeholder="$t('请输入用户名称搜索')"
+                        @search="
+                          (e) => {
+                            userParam.username = e
+                            $refs.userTable.refresh(true)
+                          }
+                        "
+                      />
+                    </a-form-item>
+                    <a-form-item v-else-if="userParamType === 'department'">
+                      <a-input-search
+                        :placeholder="$t('请输入部门名称搜索')"
+                        @search="
+                          (e) => {
+                            userParam.departmentName = e
+                            $refs.userTable.refresh(true)
+                          }
+                        "
+                      />
+                    </a-form-item>
+                    <a-form-item v-else>
+                      <a-input-search
+                        :placeholder="$t('请输入角色名称搜索')"
+                        @search="
+                          (e) => {
+                            userParam.roleName = e
+                            $refs.userTable.refresh(true)
+                          }
+                        "
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </a-form>
+            </template>
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.username}'`, `${$t('用户')}: ${record.username}`)
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane key="5" :tab="$t('部门')" :style="activeKey === '5' ? { height: '100%' } : {}">
+          <s-table
+            ref="departmentTable"
+            class="table-fill"
+            :scroll="{ y: true }"
+            :pagination="{
+              simple: true
+            }"
+            size="small"
+            rowKey="departmentId"
+            :columns="departmentColumns"
+            :showPagination="false"
+            :data="departmentData"
+            @expand="getDepartment"
+          >
+            <template slot="title">
+              <a-form :form="form">
+                <a-form-item>
+                  <department-search
+                    @ok="
+                      (e, dep) => {
+                        addText(`'${dep.departmentId}'`, `${$t('部门')}: ${dep.departmentName}`)
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-form>
+            </template>
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.departmentId}'`, `${$t('部门')}: ${record.departmentName}`)
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane key="6" :tab="$t('角色')" :style="activeKey === '6' ? { height: '100%' } : {}">
+          <s-table
+            ref="roleTable"
+            size="small"
+            :columns="roleColumns"
+            :pagination="{
+              simple: true
+            }"
+            rowKey="id"
+            :data="roleData"
+            class="table-fill"
+            :scroll="{ y: true }"
+          >
+            <template slot="title">
+              <a-form :form="form">
+                <a-form-item>
+                  <a-input-search
+                    :placeholder="$t('请输入角色名称搜索')"
+                    @search="
+                      (e) => {
+                        roleParam.roleName = e
+                        roleParam, onChange('roleTable')
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-form>
+            </template>
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.roleId}'`, `${$t('角色')}: ${record.roleName}`)
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane
+          v-if="transitionData.length > 0"
+          key="7"
+          :tab="$t('流程变迁')"
+          :style="activeKey === '7' ? { height: '100%' } : {}"
+        >
+          <s-table
+            rowKey="transitionId"
+            :columns="transitionColumns"
+            :data="getTransitionData"
+            size="small"
+            :showPagination="false"
+            class="table-fill"
+            :scroll="{ y: true }"
+          >
+            <span slot="action" slot-scope="text, record">
+              <a
+                href="javascript:;"
+                @click="
+                  () => {
+                    addText(`'${record.transitionId}'`, `${$t('变迁')}: ${record.transitionName}`, 'cm-transition')
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane key="8" :tab="$t('函数列表')" :style="activeKey === '8' ? { height: '100%' } : {}">
+          <s-table
+            ref="funcTable"
+            class="table-fill"
+            :scroll="{ y: true }"
+            :pagination="{
+              simple: true
+            }"
+            size="small"
+            rowKey="id"
+            :columns="funcColumns"
+            :data="funcData"
+            :showPagination="false"
+          >
+            <template slot="funcName" slot-scope="text, record">
+              <a-popover v-if="record.remarks" :title="`${text}`" placement="leftBottom">
+                <div slot="content" v-dompurify-html="record.remarks" style="width: 500px; white-space: pre-wrap">
+                  {{ record.remarks }}
+                </div>
+                <a-icon type="code" />
+                <span>&nbsp;{{ text }}</span>
+              </a-popover>
+              <span v-else>
+                <a-icon type="calculator" />
+                <span style="font-weight: bold">&nbsp;{{ text }}</span>
+              </span>
+            </template>
+            <span slot="action" slot-scope="text, record">
+              <a
+                v-if="record.remarks"
+                href="javascript:;"
+                @click="
+                  () => {
+                    addFun(record.name + '()')
+                  }
+                "
+              >
+                {{ $t('引用') }}
+              </a>
+              <span v-else>--</span>
+            </span>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane key="9" :tab="$t('辅助输入')" :style="activeKey === '9' ? { height: '100%' } : {}">
+          <template>
+            <a-form :form="form">
+              <a-form-item>
+                <a-select :placeholder="$t('显示名称')" @change="helpSelField">
+                  <a-select-option v-for="(val, key) in fieldHelpData" :key="key" :value="key">
+                    {{ val.name }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item>
+                <a-select v-model="helpData.oper" :placeholder="$t('计算公式')">
+                  <a-select-option v-for="(val, key) in fieldHelpFunc" :key="key" :value="val.value">
+                    {{ val.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item>
+                <a-input v-model="helpData.valueStr" />
+              </a-form-item>
+              <a-form-item>
+                <a-button type="primary" @click="helpInput">
+                  {{ $t('生成公式') }}
+                </a-button>
+              </a-form-item>
+            </a-form>
+          </template>
+        </a-tab-pane>
+        <a-tab-pane
+          v-if="handleData.data.length > 0"
+          key="10"
+          :tab="$t('办理方式')"
+          :style="activeKey === '10' ? { height: '100%' } : {}"
+        >
+          <template>
+            <a-form :form="form">
+              <a-form-item>
+                <a-select v-model="handleData.handleWay" :placeholder="$t('办理方式')">
+                  <a-select-option v-for="(val, key) in handleData.data" :key="key" :value="val.alias">
+                    {{ val.way }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item>
+                <a-button type="primary" @click="addHandle">
+                  {{ $t('生成公式') }}
+                </a-button>
+              </a-form-item>
+            </a-form>
+          </template>
+        </a-tab-pane>
+      </a-tabs>
+    </a-layout-sider>
+    <a-layout-content style="display: flex; flex-direction: column; padding: 0 8px">
+      <div style="flex-gorw: 1; height: 100%">
+        <code-mirror
+          ref="mycode"
+          class="mycode"
+          :style="codeStyle"
+          :value="codeValue"
+          :options="cmOptions"
+          @ready="setValue"
+          @inputRead="paste"
+        ></code-mirror>
+      </div>
+      <a-textarea rows="5" :placeholder="$t('复制粘贴区域')" @change="copycode"></a-textarea>
+    </a-layout-content>
+  </a-layout>
+</template>
+<script>
+import { codemirror as CodeMirror } from 'vue-codemirror'
+import 'codemirror/theme/ambiance.css'
+import 'codemirror/theme/monokai.css'
+import 'codemirror/lib/codemirror.css'
+import 'codemirror/addon/hint/show-hint.css'
+import 'codemirror/addon/selection/active-line'
+
+require('./mymodel/mymodel')
+require('codemirror/mode/javascript/javascript')
+require('codemirror/lib/codemirror')
+require('codemirror/addon/hint/show-hint')
+require('codemirror/mode/xml/xml')
+require('codemirror/mode/sql/sql')
+require('codemirror/mode/htmlmixed/htmlmixed')
+require('codemirror/addon/edit/matchbrackets')
+require('codemirror/mode/python/python')
+require('codemirror/addon/fold/foldcode')
+require('codemirror/addon/fold/foldgutter')
+require('codemirror/addon/fold/brace-fold')
+require('codemirror/addon/fold/xml-fold')
+require('codemirror/addon/fold/indent-fold')
+require('codemirror/addon/fold/markdown-fold')
+require('codemirror/addon/fold/comment-fold')
+require('codemirror/mode/groovy/groovy')
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    CodeMirror,
+    DepartmentSearch: () => import('@/views/admin/Department/DepartmentSearch')
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      codeStyle: {
+        height: '100%',
+        fontSize: '13px',
+        fontWeight: '600',
+        color: 'rgb(95, 97, 97)',
+        lineHeight: '20px',
+        background: '#FFFFFF',
+        border: '1px dashed #a9a7a7'
+      },
+      activeKey: '1',
+      // 高亮代码
+      codeValue: '',
+      cmOptions: {
+        value: '',
+        styleActiveLine: true,
+        lineNumbers: false,
+        lineWrapping: 'wrap',
+        foldGutter: true,
+        mode: 'text/x-mymodel',
+        theme: 'railscasts',
+        // smartIndent: true,
+        // theme: 'monokai',
+        ukeys: '$if $ifs $boolean $isempty $and $or $sum $average $max $min $round $int $mod $product $num $rmbupper $roundup $rounddown $abs $concat $mid $left $right $len $upper $lower $replace $startwith $contains $trim $urlencode $urldecode $year $month $day $hour $minute $second $today $now $years $days $hours $minutes $addday $addmonth $addyear $quarter $weekday $weeknum $curUserInfo $getUserInfo $delete $insert $update $updateMe $upsert $rdid $getData $getTableData $username $deptname $curUser $rolename $getuser $sendSms $deptUser $roleUser $innerUser $joinUser $creator $transitionUser $caseInfo $execIf $getConfig $callMethod $getRequest $compute',
+        scrollbarStyle: null,
+        hintOptions: {
+          // 当匹配只有一项的时候是否自动补全
+          completeSingle: true
+        },
+        // keyMap: 'sublime',
+        matchBrackets: true, // 括号匹配
+        readOnly: false
+      },
+      form: this.$form.createForm(this),
+      // 模块数据
+      modules: [],
+      collapsed: false,
+      // 字段条件
+      fieldSelfParam: { tableId: this.params.tableId },
+      // 字段条件
+      fieldParam: {},
+      // 字段表头
+      fieldColumns: [{
+        title: this.$t('字段名'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 120,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 数据表隐藏显示
+      tableHidden: false,
+      // 数据表条件
+      tableParam: { module: 'crm', name: '' },
+      // 数据表字段
+      tableColumns: [{
+        title: this.$t('数据表名'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'tableName' }
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 数据字典搜索条件
+      dictParam: {},
+      treeDictParam: {},
+      // 当前平面字典路径
+      dictPath: [],
+      // 当前树形字典路径
+      treeDictPath: [],
+      // 数据字典表头
+      dictColumns: [{
+        title: this.$t('字典名称'),
+        dataIndex: 'dictCategoryName',
+        scopedSlots: { customRender: 'dictCategoryName' }
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      dictDataColumns: [{
+        title: this.$t('字典名称'),
+        dataIndex: 'dictDataName'
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      dictDataTreeColumns: [{
+        title: this.$t('字典名称'),
+        dataIndex: 'dictDataName',
+        scopedSlots: { customRender: 'dictCategoryName' }
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      dictObj: null,
+      dictTreeObj: null,
+      dictName: 'category',
+      dictTreeName: 'category',
+      departmentParam: {},
+      departmentSearch: [],
+      // 组织表头
+      departmentColumns: [{
+        title: this.$t('名称'),
+        dataIndex: 'departmentName',
+        scopedSlots: { customRender: 'departmentName' }
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      userParam: {},
+      userParamType: 'username',
+      userColumns: [{
+        title: this.$t('用户名'),
+        dataIndex: 'username',
+        scopedSlots: { customRender: 'userName' }
+      }, {
+        title: this.$t('所属部门'),
+        dataIndex: 'departmentName'
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 角色搜索条件
+      roleParam: {},
+      // 角色表头
+      roleColumns: [{
+        title: this.$t('角色名称'),
+        dataIndex: 'roleName'
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 流程变迁表头
+      transitionColumns: [{
+        title: this.$t('变迁名称'),
+        dataIndex: 'transitionName'
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 函数表头
+      funcColumns: [{
+        title: this.$t('函数名称'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'funcName' }
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 辅助输入数据
+      helpData: {
+        name: '',
+        value: '',
+        oper: '',
+        valueStr: ''
+      },
+      // 办理方式数据
+      handleData: {
+        data: this.getHandleData(),
+        handleWay: ''
+      },
+      // 流程变迁数据
+      transitionData: [],
+      // 辅助输入字段
+      fieldHelpData: [],
+      // 辅助输入公式
+      fieldHelpFunc: [
+        { value: 'like', text: this.$t('包含') },
+        { value: '=', text: this.$t('等于') },
+        { value: 'not like', text: this.$t('不包含') },
+        { value: '!=', text: this.$t('不等于') },
+        { value: '>', text: this.$t('大于') },
+        { value: '<', text: this.$t('小于') },
+        { value: '>=', text: this.$t('大于等于') },
+        { value: '<=', text: this.$t('小于等于') }
+      ],
+      newOption: {
+        placeholder: this.$t('请填写简介'),
+        history: {
+          delay: 100,
+          maxStack: 100,
+          userOnly: false
+        },
+        modules: {
+          toolbar: [
+            ['bold', 'italic', 'underline', 'strike'],
+            ['blockquote', 'code-block'],
+            [{ 'header': 1 }, { 'header': 2 }],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+            [{ 'script': 'sub' }, { 'script': 'super' }],
+            [{ 'indent': '-1' }, { 'indent': '+1' }],
+            [{ 'direction': 'rtl' }],
+            [{ 'size': ['small', false, 'large', 'huge'] }],
+            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+            [{ 'font': [] }],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'align': [] }],
+            ['clean'],
+            ['link', 'image', 'video']
+          ]
+        }
+      },
+      timeout: null
+    }
+  },
+  watch: {
+    params (val) {
+      console.log(val)
+      this.setValue()
+      this.handleData.data = this.getHandleData()
+      this.handleData.handleWay = ''
+    }
+  },
+  mounted () {
+    this.$refs.mycode.codemirror.setSize('auto', '100%')
+    this.getTransitionData()
+  },
+  methods: {
+    onChange (type) {
+      if (this.timeout) {
+        clearTimeout(this.timeout)
+      }
+      this.timeout = setTimeout(() => {
+        this.$refs[type].refresh(true)
+      }, 500)
+    },
+    // 获取办理方式
+    getHandleData () {
+      console.log()
+      var handleArr = []
+      if (this.params.flowData && this.params.currentSelect && this.params.currentSelect.type === 'link') {
+        const linkList = this.params.flowData.linkList
+        const nodeList = this.params.flowData.nodeList
+        var currentSelect = this.params.currentSelect
+        if (currentSelect.sourceId.indexOf('transition') > -1) {
+          for (var k in nodeList) {
+            if (nodeList[k].id === currentSelect.sourceId && nodeList[k].wayData) {
+              handleArr = nodeList[k].wayData
+              break
+            }
+          }
+        } else if (currentSelect.sourceId.indexOf('gateway') > -1) {
+          for (var lk in linkList) {
+            if (linkList[lk].target && linkList[lk].source && linkList[lk].target.cell === currentSelect.sourceId && linkList[lk].source.cell.indexOf('transition') > -1) {
+              currentSelect = linkList[lk]
+              break
+            }
+          }
+          for (var nk in nodeList) {
+            if (currentSelect.source && nodeList[nk].id === currentSelect.source.cell && nodeList[nk].wayData) {
+              handleArr = nodeList[nk].wayData
+              break
+            }
+          }
+        }
+      }
+      return handleArr
+    },
+    // 获取流程变迁
+    getTransitionData (parameter) {
+      return new Promise((resolve, reject) => {
+        const transitionArr = []
+        if (this.params.flowData && this.params.currentSelect && this.params.currentSelect.type.indexOf('transition') > -1) {
+          const nodeList = this.params.flowData.nodeList
+          for (const k in nodeList) {
+            if (Object.keys(nodeList[k]).length && !nodeList[k].quoteId && nodeList[k].id.indexOf('transition') > -1) {
+              transitionArr.push({ transitionId: nodeList[k].id.split('-')[1], transitionName: nodeList[k].data ? nodeList[k].data.nodeName : '--' })
+            }
+          }
+        }
+        this.transitionData = transitionArr
+        resolve({
+          data: transitionArr,
+          pageNo: 1,
+          totalCount: 0
+        })
+      })
+    },
+    // 复制粘贴
+    copycode (e) {
+      const text = e.target.value
+      e.target.value = ''
+      const strList = text.split('#>')
+      for (var i in strList) {
+        if (!strList[i]) continue
+        const arr = strList[i].split('<#')
+        if (arr[0]) {
+          this.addFun(arr[0])
+        }
+        if (arr[1]) {
+          var json = arr[1].split('|')
+          this.addText(json[1], json[0], json[2], json[3])
+        }
+      }
+    },
+    // 添加文本
+    addText (value, name, cls, type) {
+      const editor = this.$refs.mycode.codemirror
+      name = name || value
+      const msg = document.createElement('a-tag')
+      msg.className = cls || 'cm-else'
+      msg.innerHTML = name
+      msg.readOnly = true
+      const cur = editor.getDoc().getCursor()
+      const str = '<#' + name + '|' + value + '|' + msg.className + (type ? `|${type}` : '') + '#>'
+      const length = str.length
+      editor.replaceSelection(str)
+      const options = {
+        replacedWith: msg,
+        atomic: true,
+        selectLeft: true,
+        selectRight: true,
+        handleMouseEvents: true
+      }
+      editor.getDoc().markText({
+        line: cur.line,
+        ch: cur.ch
+      }, {
+        line: cur.line,
+        ch: cur.ch + length
+      }, options)
+      editor.setCursor({
+        line: cur.line,
+        ch: cur.ch + length
+      })
+      editor.focus()
+    },
+    // 添加函数
+    addFun (func) {
+      const editor = this.$refs.mycode.codemirror
+      editor.replaceSelection(func)
+      editor.focus()
+    },
+    getDepartment (expanded, record) {
+      if (record.children.length === 0) {
+        this.axios({
+          url: '/admin/department/getChildren',
+          data: { parentDepartmentId: record.departmentId }
+        }).then(res => {
+          res.result.forEach(item => {
+            if (item.childCount) {
+              item.children = []
+            }
+            item.departmentName = item.label
+            item.departmentId = item.value
+          })
+          const array = res.result
+          this.$set(record, 'children', array)
+        })
+      }
+    },
+    // 添加办理方式
+    addHandle () {
+      let handleWay = ''
+      this.handleData.data.forEach(item => {
+        if (item.alias === this.handleData.handleWay) {
+          handleWay = item.way
+        }
+      })
+      const editor = this.$refs.mycode.codemirror
+      this.addText('post.handleWay', '办理方式', 'cm-handle')
+      editor.replaceSelection(`==`)
+      this.addText(`'${this.handleData.handleWay}'`, handleWay, 'cm-handle')
+      var length = handleWay.length
+      if (handleWay.indexOf('()') > -1) {
+        length -= 1
+      }
+      const cur = editor.getDoc().getCursor()
+      editor.setCursor({
+        line: cur.line,
+        ch: cur.ch + length
+      })
+      editor.focus()
+    },
+    // 辅助输入
+    helpInput () {
+      const name = this.helpData.name
+      const value = this.helpData.value
+      const oper = this.helpData.oper
+      const valueStr = this.helpData.valueStr
+      var fzStr = ''
+      const editor = this.$refs.mycode.codemirror
+      if (oper.indexOf('like') > -1) {
+        fzStr = " '%" + valueStr + "%' "
+      } else {
+        fzStr = " '" + valueStr + "' "
+      }
+      var str = ''
+      if (value && name) {
+        this.addText(value, name, 'cm-field')
+      }
+      if (oper) {
+        str += ' ' + oper
+      }
+      if (valueStr) {
+        str += fzStr
+      }
+      var length = str.length
+      const cur = editor.getDoc().getCursor()
+      editor.replaceSelection(str)
+      editor.setCursor({
+        line: cur.line,
+        ch: cur.ch + length
+      })
+      editor.focus()
+    },
+    // 粘贴
+    paste (c, e) {
+      const editor = this.$refs.mycode.codemirror
+      if (e.origin === 'paste') {
+        const text = e.text
+        const cur = editor.getDoc().getCursor()
+        for (var i in text) {
+          var txt = text[i]
+          var oldCh = 0
+          if (!txt) continue
+          const depLength = txt.length
+          const strList = txt.split('#>')
+          strList.forEach(item => {
+            if (item.length > 0) {
+              item += '#>'
+              var start = item.lastIndexOf('<#')
+              var end = item.indexOf('#>')
+              if (start > -1 && end > -1) {
+                var jsonstr = item.substring(start + 2, end)
+                var json = jsonstr.split('|')
+                if (json[0] && json[1] && json[2]) {
+                  var msg = document.createElement('a-tag')
+                  msg.className = json[2]
+                  msg.readOnly = true
+                  const repStr = '<#' + jsonstr + '#>'
+                  msg.innerHTML = json[0]
+                  const step = repStr.length
+                  const newCh = cur.ch - depLength + txt.indexOf(repStr) + oldCh
+                  oldCh += txt.indexOf(repStr) + step
+                  txt = txt.substring(txt.indexOf(repStr) + step)
+                  const options = {
+                    replacedWith: msg,
+                    atomic: true,
+                    selectLeft: true,
+                    selectRight: true,
+                    handleMouseEvents: true
+                  }
+                  editor.getDoc().markText({
+                    line: cur.line,
+                    ch: newCh
+                  }, {
+                    line: cur.line,
+                    ch: newCh + step
+                  }, options)
+                }
+              }
+            }
+          })
+        }
+      } else {
+        // editor.showHint()
+      }
+    },
+    // 解析
+    getValue () {
+      var editor = this.$refs.mycode.codemirror
+      var html = editor.getValue()
+      var value = html
+      const strList = html.split('#>')
+      strList.forEach(item => {
+        if (item) {
+          item += '#>'
+        }
+        var start = item.lastIndexOf('<#')
+        var end = item.indexOf('#>')
+        if (start > -1 && end > -1) {
+          const json = item.substring(start + 2, end)
+          const arr = json.split('|')
+          if (arr[0] && arr[1]) {
+            value = value.replace('<#' + json + '#>', arr[1])
+          }
+        }
+      })
+      return { 'html': html, 'value': value }
+    },
+    getDepartmentData (e) {
+      const page = {
+        pageNo: 1,
+        pageSize: 999,
+        sortField: 'id',
+        sortOrder: 'descend'
+      }
+      if (e) {
+        this.axios({
+          url: '/admin/search/departmentSearch',
+          data: Object.assign(page, { searchName: e })
+        }).then(res => {
+          this.departmentSearch = res.result.data
+        })
+      } else {
+        this.departmentSearch = []
+      }
+    },
+    // 默认赋值
+    setValue () {
+      this.$refs.mycode.codemirror.setValue('')
+      const text = this.params.data.html
+      if (text) {
+        const strList = text.split('#>')
+        for (var i in strList) {
+          if (!strList[i]) continue
+          const arr = strList[i].split('<#')
+          if (arr[0]) {
+            this.addFun(arr[0])
+          }
+          if (arr[1]) {
+            var json = arr[1].split('|')
+            this.addText(json[1], json[0], json[2], json[3])
+          }
+        }
+      }
+    },
+    // 加载本表字段数据
+    fieldSelfData (parameter) {
+      return this.axios({
+        url: '/admin/codemirror/fieldData',
+        data: Object.assign(parameter, this.fieldSelfParam)
+      }).then(res => {
+        this.fieldHelpData = res.result.helpData
+        this.tableParam.module = res.result.module || 'crm'
+        return res.result
+      })
+    },
+    // 字段数据
+    fieldData (parameter) {
+      if (this.fieldParam.tableId) {
+        return this.axios({
+          url: '/admin/codemirror/fieldData',
+          data: Object.assign(parameter, this.fieldParam)
+        }).then(res => {
+          return res.result
+        })
+      } else {
+        return {
+          data: [],
+          pageNo: 1,
+          totalCount: 0
+        }
+      }
+    },
+    // 加载其他表数据
+    tableData (parameter) {
+      if (!this.tableParam.module) {
+        this.tableParam.module = 'crm'
+      }
+      return this.axios({
+        url: '/admin/codemirror/tableData',
+        data: Object.assign(parameter, this.tableParam)
+      }).then(res => {
+        this.modules = res.result.modules
+        return res.result
+      })
+    },
+    // 数据字典
+    dictData (parameter) {
+      if (this.dictObj) {
+        return this.axios({
+          url: '/admin/dict/initData',
+          data: {
+            dictCategoryNumber: this.dictObj.dictCategoryNumber
+          }
+        }).then(res => {
+          this.dictName = 'data'
+          const data = res.result ?? []
+          this.dictPath = [{ number: this.dictObj.dictCategoryNumber, name: this.dictObj.dictCategoryName }]
+          const obj = { data: data, totalCount: data.length, pageNo: 1 }
+          return obj
+        })
+      } else {
+        return this.axios({
+          url: '/admin/dict/initCategory',
+          data: Object.assign(parameter, this.dictParam, { dictMode: '0' })
+        }).then(res => {
+          this.dictPath = res.result.path
+          this.dictName = 'category'
+          return res.result
+        })
+      }
+    },
+    treeDictData (parameter) {
+      if (this.dictTreeObj) {
+        return this.axios({
+          url: '/admin/dict/getChildren',
+          data: {
+            dictCategoryNumber: this.dictTreeObj.dictCategoryNumber,
+            parentDictDataNumber: this.dictTreeObj.dictDataNumber || null
+          }
+        }).then(res => {
+          this.dictTreeName = 'data'
+          const data = res.result
+          if (this.dictTreeObj.dictDataNumber) {
+            const index = this.treeDictPath.findIndex(item => item.number === this.dictTreeObj.dictDataNumber)
+            if (index === -1) {
+              this.treeDictPath.push({ number: this.dictTreeObj.dictDataNumber, name: this.dictTreeObj.dictDataName })
+            } else {
+              this.treeDictPath.splice(index + 1, this.treeDictPath.length - (index + 1))
+            }
+          } else {
+            this.treeDictPath = [{ number: this.dictTreeObj.dictCategoryNumber, name: this.dictTreeObj.dictCategoryName, level: 1 }]
+          }
+          const obj = { data: data, totalCount: data.length, pageNo: 1 }
+          return obj
+        })
+      } else {
+        return this.axios({
+          url: '/admin/dict/initCategory',
+          data: Object.assign(parameter, this.treeDictParam, { dictMode: '1' })
+        }).then(res => {
+          this.dictTreeName = 'category'
+          return res.result
+        })
+      }
+    },
+    // 组织
+    departmentData (parameter) {
+      return this.axios({
+        url: '/admin/department/init',
+        data: Object.assign(parameter)
+      }).then(res => {
+        res.result.data.forEach(item => {
+          item.children = []
+        })
+        return res.result
+      })
+    },
+    userData (parameter) {
+      return this.axios({
+        url: '/admin/search/userSearch',
+        data: Object.assign(parameter, this.userParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 加载角色
+    roleData (parameter) {
+      return this.axios({
+        url: '/admin/role/init',
+        data: Object.assign(parameter, this.roleParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 函数列表
+    funcData (parameter) {
+      return this.axios({
+        url: '/admin/codemirror/funcData',
+        data: Object.assign(parameter)
+      }).then(res => {
+        this.cmOptions.ukeys = res.result.funcs
+        let key = 0
+        res.result.data.forEach(item => {
+          item.id = key
+          key++
+          if (item.children && item.children.length) {
+            item.children.forEach(funItem => {
+              funItem.id = key
+              key++
+            })
+          }
+        })
+        return res.result
+      })
+    },
+    helpSelField (val) {
+      const data = this.fieldHelpData[val]
+      this.helpData.name = data.name
+      this.helpData.value = data.alias
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.layoutStyle {
+  /deep/ .ant-tabs .ant-tabs-left-content {
+    height: 100%;
+  }
+}
+.mycode /deep/ .CodeMirror {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Helvetica Neue', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+}
+.mycode /deep/ .cm-field,
+.mycode /deep/ .cm-table,
+.mycode /deep/ .cm-dict,
+.mycode /deep/ .cm-handle,
+.mycode /deep/ .cm-transition,
+.mycode /deep/ .cm-else {
+  display: inline-block;
+  line-height: 18px;
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 6px;
+  margin: 4px;
+  letter-spacing: 1px;
+}
+
+/*字段：#5FB257*/
+.mycode /deep/ .cm-field {
+  background: #5fb257;
+}
+
+/*表：#D4584A*/
+.mycode /deep/ .cm-table {
+  background: #d4584a;
+}
+
+/*字典：#9C6A46*/
+.mycode /deep/ .cm-dict {
+  background: #377ff7;
+}
+
+/*办理方式：#58B8B3*/
+.mycode /deep/ .cm-handle {
+  background: #58b8b3;
+}
+
+/*流程变迁：#58B8B3*/
+.mycode /deep/ .cm-transition {
+  background: rgb(136, 166, 212);
+}
+
+/*组织+角色+其他：#8F30AA*/
+.mycode /deep/ .cm-else {
+  background: #8f30aa;
+}
+
+.mycode /deep/ .cm-function {
+  color: #aa04bf;
+}
+</style>

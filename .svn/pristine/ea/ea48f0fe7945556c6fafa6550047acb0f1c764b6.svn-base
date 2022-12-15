@@ -1,0 +1,134 @@
+<template>
+  <div style="height: 100%; padding: 8px">
+    <a-spin :spinning="loading" style="height: 100%">
+      <div style="height: 100%; padding-bottom: 20px">
+        <ExpressWorkbenchCardDeatils ref="ExpressWorkbenchCardDeatils" />
+      </div>
+      <div
+        v-if="
+          bbar.some(i => i.visible)
+        "
+        style="
+          position: fixed;
+          bottom: 0;
+          right: 0;
+          width: 100%;
+          border-top: 1px solid #e9e9e9;
+          padding: 5px 16px;
+          background: #fff;
+          text-align: right;
+        "
+      >
+        <component
+          :is="item.component"
+          v-for="(item, index) in bbar.filter(i => i.visible)"
+          :key="index"
+          style="margin: 5px"
+        />
+      </div>
+    </a-spin>
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import UserTableComponents from '@/views/admin/UserTable/UserTableComponents'
+import ExpressWorkbenchCardDeatils from '@/views/express/ExpressWorkbenchCardDeatils'
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    UserTableFormView: () => import('@/views/admin/UserTable/UserTableFormView'),
+    UserTableComponents,
+    SendForm: () => import('@/views/sms/SendForm'),
+    UserTableList: () => import('@/views/admin/UserTable/UserTableList'),
+    Preview: () => import('@/views/admin/Index/Preview'),
+    ExpressWorkbenchCardDeatils
+  },
+  data () {
+    return {
+      data: [],
+      form: this.$form.createForm(this),
+      // 关联数据表
+      relationTable: [],
+      labelCol: { style: 'width: 100px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 100px); display: inline-block' },
+      tableName: '',
+      template: [],
+      templateOther: [],
+      fieldRule: [],
+      sourceUrl: null,
+      params: {
+        url: '/crm/order/orderAdd',
+        workflowId: 'ba913d89ff384293b782f3a22e5a001b',
+        viewType: 'create',
+        title: '创建流程: 服务单流程',
+        popscreenType: 'popscreen',
+        popscreenThis: this
+      },
+      title: this.$t('新增服务单信息'),
+      bbar: [],
+      pageLoading: false,
+      loading: false,
+      handleWayData: [],
+      wayDataRule: [],
+      remarksRule: '',
+      // 表单默认数据
+      formData: {},
+      callinfo: {},
+      collapsed: false
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo', 'setting'])
+  },
+  created () {
+    // 使用实例 window.top.view({fileName: 'VIOMI牌MR1072-1000G型双出水净水器.pdf', authCode: '4c30943026ca2e32adac7cbb9a060fc7'})
+    window.top.view = (config) => {
+      this.$refs.preview.show(config)
+    }
+  },
+  mounted () {
+    this.$nextTick(() => {
+      this.$refs.ExpressWorkbenchCardDeatils.show({ data: { type: 'create' }, parent: { flowCondition: 'all_flow' } }, this)
+    })
+  },
+  methods: {
+    // 提交表单
+    handleSubmit (data) {
+      this.loading = true
+      const verifJs = this.verifJs
+      if (verifJs) {
+        const parent = this
+        const str = 'return ' + verifJs
+        // eslint-disable-next-line no-new-func
+        const func = new Function(str)
+        const flag = func()(parent)
+        if (flag) {
+          this.$refs.ExpressWorkbenchCardDeatils.$refs.userTableFormView.handleSubmit(data).then(res => {
+            if (!res) {
+              setTimeout(() => {
+                this.handleCancel()
+              }, 1500)
+            }
+          }).finally(() => {
+            this.loading = false
+          })
+        }
+      } else {
+        this.$refs.ExpressWorkbenchCardDeatils.$refs.userTableFormView.handleSubmit(data).then(res => {
+          if (!res) {
+            setTimeout(() => {
+              this.handleCancel()
+            }, 1500)
+          }
+        }).finally(() => {
+          this.loading = false
+        })
+      }
+    },
+    // 取消表单
+    handleCancel () {
+      window.close()
+    }
+  }
+}
+</script>

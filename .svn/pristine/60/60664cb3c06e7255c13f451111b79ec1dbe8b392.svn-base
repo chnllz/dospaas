@@ -1,0 +1,735 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item label="任务名称">
+              <a-input v-model.trim="queryParam.taskname" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      class="table-fill"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="detailsPage(record)">查看明细</a>
+      </div>
+    </s-table>
+    <!-- 查看明细 -->
+    <a-drawer :title="config1.title" width="80%" :visible="details" @close="details = !details">
+      <div>
+        <a-card class="table-search" :bordered="true" :title="detailsadvanced ? '过滤' : ''" size="small">
+          <a v-if="detailsadvanced" slot="extra" href="#">
+            <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">搜索</a-button>
+            <a-button
+              icon="sync"
+              @click="
+                () => {
+                  searchData = null
+                  paramDetails = {}
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              重置
+            </a-button>
+            <a @click="changedetailsAdvanced(true)">
+              {{ detailsadvanced ? '收起' : '展开' }}
+              <a-icon :type="detailsadvanced ? 'up' : 'down'" />
+            </a>
+          </a>
+          <a-form :layout="detailsadvanced ? 'vertical' : 'inline'" :class="detailsadvanced ? 'advanced' : 'normal'">
+            <div v-if="!detailsadvanced" class="head">
+              <div class="title"></div>
+              <a-space style="margin-left: 8px">
+                <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">
+                  搜索
+                </a-button>
+                <a-button
+                  icon="sync"
+                  @click="
+                    () => {
+                      paramDetails = {}
+                      $refs.table.refresh(true)
+                    }
+                  "
+                >
+                  重置
+                </a-button>
+                <a @click="changedetailsAdvanced(true)">
+                  {{ detailsadvanced ? '收起' : '展开' }}
+                  <a-icon :type="detailsadvanced ? 'up' : 'down'" />
+                </a>
+              </a-space>
+            </div>
+            <a-row :gutter="16">
+              <a-col v-if="advanced" span="24">
+                <div class="divider"></div>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item label="质检员">
+                  <a-select v-model.trim="paramDetails.quality_agent" show-search :allowClear="true">
+                    <a-select-option v-for="(item, key) in quality_agent" :key="key" :value="item.value">
+                      {{ item.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item label="坐席姓名">
+                  <a-select v-model.trim="paramDetails.agent" show-search :allowClear="true">
+                    <a-select-option v-for="(item, key) in agent" :key="key" :value="item.value">
+                      {{ item.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item label="主叫号码">
+                  <a-input v-model.trim="paramDetails.src" />
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item label="被叫号码">
+                  <a-input v-model.trim="paramDetails.dst" />
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item label="质检时间">
+                  <a-range-picker v-model="searchDate" showTime style="width: 100%" @change="getSearchDate" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form>
+        </a-card>
+        <a-card size="small">
+          <s-table
+            ref="table"
+            size="small"
+            rowKey="id"
+            :columns="columns2"
+            :data="detailsDataShow"
+            :sorter="{ field: 'id', order: 'descend' }"
+          >
+            <div slot="action" slot-scope="text, record">
+              <a @click="scorePage(record)">评分</a>
+            </div>
+          </s-table>
+        </a-card>
+      </div>
+    </a-drawer>
+    <!-- 评分 -->
+    <a-drawer :title="config.title" :width="1200" :visible="visiblescore" @close="visiblescore = !visiblescore">
+      <a-spin :spinning="loading">
+        <a-form :form="form" @submit="handleSubmit">
+          <a-row>
+            <a-form-item>
+              <a-card title="基本信息" size="small">
+                <audio ref="audio" controls style="margin: 10px">
+                  <source :src="recording.recordingfile" type="audio/wav" />
+                </audio>
+                <a-card size="small">
+                  <a-col :span="4">
+                    <p>
+                      主叫号码：
+                      <a-input v-model="recording.src" class="input" :read-only="true" />
+                    </p>
+                  </a-col>
+                  <a-col :span="1"></a-col>
+                  <a-col :span="4">
+                    <p>
+                      被叫号码：
+                      <a-input v-model="recording.dst" class="input" :read-only="true" />
+                    </p>
+                  </a-col>
+                  <a-col :span="1"></a-col>
+                  <a-col :span="4">
+                    <p>
+                      呼叫时间：
+                      <a-input v-model="recording.calldate" class="input" :read-only="true" />
+                    </p>
+                  </a-col>
+                  <a-col :span="1"></a-col>
+                  <a-col :span="4">
+                    <p>
+                      质检员：
+                      <a-input v-model="recording.quality_agent" class="input" :read-only="true" />
+                    </p>
+                  </a-col>
+                  <a-col :span="1"></a-col>
+                  <a-col :span="4">
+                    <p>
+                      当前得分:
+                      <a-input v-model="total_score" class="input" :read-only="true" />
+                    </p>
+                  </a-col>
+                </a-card>
+              </a-card>
+            </a-form-item>
+            <a-card title="一票否决" size="small">
+              <a-form-item v-for="(item, string, key) in showingveto.list" :key="key">
+                <a-row :gutter="16">
+                  <a-col :span="16">
+                    <a-form-item :label="key + 1" :label-col="{ span: 2 }" :wrapper-col="{ span: 22 }">
+                      <a-col :span="1">
+                        <a-tooltip>
+                          <template slot="title">
+                            {{ item.name }}
+                          </template>
+                          <a-icon type="question-circle" />
+                        </a-tooltip>
+                      </a-col>
+                      <a-col :span="23">
+                        <a-input class="input" :read-only="true" :value="item.name" />
+                      </a-col>
+                    </a-form-item>
+                  </a-col>
+                  <a-form-item v-show="false">
+                    <a-input
+                      v-decorator="[
+                        'items[itemslistscore_' + nowtime + '_' + (lasttime + key) + ']',
+                        { initialValue: item.listscore, preserve: true }
+                      ]"
+                    />
+                  </a-form-item>
+                  <a-col :span="1">
+                    <a-checkbox @change="vetochange($event, key, string)"></a-checkbox>
+                    <div>
+                      <a-form-item>
+                        <a-modal v-model="visibleVetoCheck[key]" title="备注" @ok="handleOk($event, key)">
+                          <a-textarea
+                            v-decorator="[
+                              'info[itemslistremark_' + nowtime + '_' + (lasttime + key) + ']',
+                              { initialValue: '' }
+                            ]"
+                            :auto-size="{ minRows: 10, maxRows: 10 }"
+                          />
+                        </a-modal>
+                      </a-form-item>
+                    </div>
+                  </a-col>
+                  <a-col :span="7">
+                    <a-form-item label="备注" :label-col="{ span: 4 }" :wrapper-col="{ span: 18 }">
+                      <a-textarea
+                        v-decorator="[
+                          'info[itemslistremark_' + nowtime + '_' + (lasttime + key) + ']',
+                          { initialValue: '' }
+                        ]"
+                        :auto-size="{ minRows: 3, maxRows: 5 }"
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+              </a-form-item>
+            </a-card>
+            <div v-for="(value, timestamp, index) in showing" :key="index">
+              <a-form-item v-show="false">
+                <a-input v-decorator="['info[itemsname_' + (lasttime + index) + ']', { initialValue: value.name }]" />
+              </a-form-item>
+              <a-form-item v-show="false">
+                <a-input
+                  v-decorator="['info[itemsscore_display_' + (lasttime + index) + ']', { initialValue: value.score }]"
+                />
+              </a-form-item>
+              <a-form-item v-show="false">
+                <a-input
+                  v-decorator="['info[moren_itemsscore_' + (lasttime + index) + ']', { initialValue: value.score }]"
+                />
+              </a-form-item>
+              <a-form-item v-show="false">
+                <a-input
+                  v-decorator="['info[itemsscore_' + (lasttime + index) + ']', { initialValue: value.listscore }]"
+                />
+              </a-form-item>
+              <a-form-item>
+                <a-card v-if="index > 0" :title="value.name" size="small">
+                  <a-form-item v-for="(item, timestamp1, index2) in value.list" :key="index2">
+                    <a-col :span="14">
+                      <a-form-item :label="index2 + 1" :label-col="{ span: 2 }" :wrapper-col="{ span: 22 }">
+                        <a-col :span="1">
+                          <a-tooltip>
+                            <template slot="title">
+                              <div v-dompurify-html="item.remark">
+                                {{ item.remark }}
+                              </div>
+                            </template>
+                            <a-icon type="question-circle" />
+                          </a-tooltip>
+                        </a-col>
+                        <a-col :span="22"><a-input class="input" :read-only="true" :value="item.name" /></a-col>
+                      </a-form-item>
+                    </a-col>
+                    <a-col :span="3">
+                      <a-form-item label="分数" :label-col="{ span: 8 }" :wrapper-col="{ span: 16 }">
+                        <a-select
+                          v-decorator="[
+                            'info[itemslistscore_' + (lasttime + index) + '_' + (lasttime + index + index2 + 1) + ']',
+                            { initialValue: item.scoreall[0] }
+                          ]"
+                          style="width: 80px"
+                          @change="correcting($event, timestamp, timestamp1)"
+                        >
+                          <a-select-option v-for="(values, indexs) in item.scoreall" :key="indexs" :value="values">
+                            {{ values }}
+                          </a-select-option>
+                        </a-select>
+                      </a-form-item>
+                    </a-col>
+                    <a-col :span="7">
+                      <a-form-item label="备注" :label-col="{ span: 4 }" :wrapper-col="{ span: 18 }">
+                        <a-textarea
+                          v-decorator="[
+                            'info[itemslistremark_' + (lasttime + index) + '_' + (lasttime + index + index2 + 1) + ']'
+                          ]"
+                          :auto-size="{ minRows: 3, maxRows: 5 }"
+                        />
+                      </a-form-item>
+                    </a-col>
+                    <div>
+                      <a-modal v-model="item.visibleCheck" title="备注" @ok="correctingok(timestamp, timestamp1)">
+                        <a-textarea
+                          v-decorator="[
+                            'info[itemslistremark_' + (lasttime + index) + '_' + (lasttime + index + index2 + 1) + ']'
+                          ]"
+                          :auto-size="{ minRows: 10, maxRows: 10 }"
+                        />
+                      </a-modal>
+                    </div>
+                  </a-form-item>
+                </a-card>
+              </a-form-item>
+            </div>
+            <a-form-item>
+              <a-card title="综合评语" size="small">
+                <a-row>
+                  <a-col :span="5">
+                    <a-form-item label="优秀案例" :label-col="{ span: 7 }" :wrapper-col="{ span: 12 }">
+                      <a-switch
+                        v-decorator="['info[typical_case]', { valuePropName: 'checked', initialValue: false }]"
+                        checked-children="是"
+                        un-checked-children="否"
+                      />
+                    </a-form-item>
+                  </a-col>
+                  <a-col :span="5">
+                    <a-form-item label="无效数据" :label-col="{ span: 8 }" :wrapper-col="{ span: 12 }">
+                      <a-switch
+                        v-decorator="['info[invalid_phone]', { valuePropName: 'checked', initialValue: false }]"
+                        checked-children="是"
+                        un-checked-children="否"
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+                <a-form-item label="综合评语:">
+                  <a-textarea v-model="recordremark" :auto-size="{ minRows: 3, maxRows: 5 }" />
+                </a-form-item>
+              </a-card>
+            </a-form-item>
+          </a-row>
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" icon="snippets" @click="handleSubmit">保存并处理下一条</a-button>
+          <a-button type="primary" icon="file" @click="storage">保存并关闭</a-button>
+          <a-button icon="download">录音下载</a-button>
+          <a-button icon="close" @click="visiblescore = !visiblescore">关闭</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+export default {
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      searchDate: null,
+      advanced: false,
+      detailsadvanced: false,
+      details: false,
+      visiblescore: false,
+      loading: false,
+      recording: {},
+      showingveto: {},
+      showing: [],
+      vetochecked: false,
+      // 搜索参数
+      queryParam: {},
+      paramDetails: {},
+      quality_agent: [],
+      agent: [],
+      recordremark: '',
+      nowtime: null,
+      lasttime: null,
+      config: {
+        data: {}
+      },
+      listscore: '',
+      visibleVetoCheck: [false, false, false, false, false, false, false, false, false, false],
+      visibleCheck: [],
+      form: this.$form.createForm(this),
+      // 表头
+      columns: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: '任务名称',
+        dataIndex: 'taskname',
+        sorter: true
+      }, {
+        title: '任务类型',
+        dataIndex: 'task_type'
+      }, {
+        title: '质检总数',
+        dataIndex: 'sum_number'
+      }, {
+        title: '已质检数',
+        dataIndex: 'finished_number'
+      }, {
+        title: '完成率',
+        dataIndex: 'finish_rate'
+      }, {
+        title: '质检坐席',
+        dataIndex: 'quality_agent'
+      }, {
+        title: '创建时间',
+        dataIndex: 'inputTime'
+      }],
+      columns2: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: '坐席姓名',
+        dataIndex: 'agent',
+        sorter: true
+      }, {
+        title: '主叫号码',
+        dataIndex: 'src',
+        sorter: true
+      }, {
+        title: '被叫号码',
+        dataIndex: 'dst',
+        sorter: true
+      }, {
+        title: '呼叫时间',
+        dataIndex: 'calldate',
+        width: 150,
+        sorter: true
+      }, {
+        title: '通话时长',
+        dataIndex: 'billsec',
+        sorter: true
+      }, {
+        title: '质检状态',
+        dataIndex: 'status',
+        sorter: true
+      }, {
+        title: '质检员',
+        dataIndex: 'quality_agent',
+        sorter: true
+      }, {
+        title: '分配人',
+        dataIndex: 'distribute_agent',
+        sorter: true
+      }, {
+        title: '分配时间',
+        dataIndex: 'distribute_time',
+        width: 140,
+        sorter: true
+      }],
+      colLayout: {},
+      config1: {},
+      total_score: 0,
+      sumstay: null
+    }
+  },
+  watch: {
+    recording () {
+      this.lasttime = new Date().getTime()
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  mounted () {
+    this.getUserName()
+  },
+  methods: {
+    // 页面数据渲染
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/quality/test/mockInit',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        for (const i in res.result.data) {
+          res.result.data[i]['task_type'] = '录音质检'
+        }
+        this.nowtime = res.timestamp
+        return res.result
+      })
+    },
+    // 获取用户名单
+    getUserName () {
+      return this.axios({
+        url: '/quality/template/mockGetUsername'
+      }).then(res => {
+        this.quality_agent = res.result.data
+        this.agent = res.result.data
+        return res.result
+      })
+    },
+    // 待质检任务搜索
+    waitSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 查看详情搜索
+    detailsSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 查看明细数据
+    detailsDataShow (parameter) {
+      return this.axios({
+        url: '/quality/test/mockViewDetails',
+        data: Object.assign(parameter, this.paramDetails, { id: this.config1.id })
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 查看明细抽屉以及数据
+    detailsPage (record) {
+      this.details = true
+      const id = record.id
+      this.paramDetails = {}
+      this.config1 = {
+        id: id,
+        action: 'details',
+        title: '查看明细',
+        url: '/quality/test/mockViewDetails',
+        data: {}
+      }
+      this.$refs.table.refresh()
+    },
+    // 评分抽屉以及对应数据
+    scorePage (record) {
+      this.showingveto = {}
+      this.showing = {}
+      this.visiblescore = true
+      const id = record.id
+      this.total_score = 0
+      this.config = {
+        id: id,
+        templateid: record.templateid,
+        action: 'score',
+        title: '评分',
+        url: '/quality/data/already_record',
+        data: {}
+      }
+      this.recording = record
+      this.showingveto = Object.values(record.quality_template.template_data)[0]
+      this.showing = record.quality_template.template_data
+      for (const i in this.showing) {
+        for (const j in this.showing[i].list) {
+          if (this.showing[i].list[j].score) {
+            this.showing[i].list[j]['scoreall'] = this.showing[i].list[j].score.split('|')
+            this.total_score = this.total_score + Number(this.showing[i].list[j].scoreall[0])
+            this.showing[i].list[j]['visibleCheck'] = false
+          }
+        }
+        this.showing[i]['listscore'] = this.showing[i].score
+        this.sumstay = this.total_score
+      }
+      this.loading = false
+    },
+    // 评分数据提交并打开下一个
+    handleSubmit (value) {
+      value.preventDefault()
+      const id = this.config.id
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          values.info['id'] = id
+          values.info['templateid'] = this.config.templateid
+          values.info['totalscore_real'] = this.total_score
+          values.info['totalscore-inputEl'] = this.total_score
+          values.info['remark'] = this.recordremark
+          values.info['score_recordingfile-inputEl'] = this.recording.recordingfile
+          values.info['items'] = values.items
+          if (values.info.typical_case === true) {
+            values.info.typical_case = 1
+          } else {
+            values.info.typical_case = 0
+          }
+          if (values.info.invalid_phone === true) {
+            values.info.invalid_phone = 1
+          } else {
+            values.info.invalid_phone = 0
+          }
+          this.axios({
+            url: '/quality/data/quality',
+            data: values.info
+          }).then((res) => {
+            return res.result
+          })
+        }
+      })
+    },
+    // 评分数据提交并关闭
+    storage (value) {
+      value.preventDefault()
+      const table = this.$refs.table
+      const id = this.config.id
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          values.info['id'] = id
+          values.info['templateid'] = this.config.templateid
+          values.info['totalscore_real'] = this.total_score
+          values.info['totalscore-inputEl'] = this.total_score
+          values.info['remark'] = this.recordremark
+          values.info['score_recordingfile-inputEl'] = this.recording.recordingfile
+          values.info['items'] = values.items
+          if (values.info.typical_case === true) {
+            values.info.typical_case = 1
+          } else {
+            values.info.typical_case = 0
+          }
+          if (values.info.invalid_phone === true) {
+            values.info.invalid_phone = 1
+          } else {
+            values.info.invalid_phone = 0
+          }
+          this.axios({
+            url: '/quality/data/quality',
+            data: values.info
+          }).then((res) => {
+            this.visiblescore = false
+            this.loading = false
+            this.$message.success('评分完毕')
+            table.refresh()
+          })
+        }
+      })
+    },
+    // 打分时总分变化
+    correcting (e, index, index2) {
+      this.total_score = 0
+      this.showing[index]['listscore'] = Number(this.showing[index].score) - Number(this.showing[index].list[index2].scoreall[0]) + Number(e)
+      this.showing[index].list[index2] = Object.assign({}, this.showing[index].list[index2], { visibleCheck: true })
+      for (const i in this.showing) {
+        if (this.showing[i].listscore) {
+          this.total_score = Number(this.total_score) + Number(this.showing[i].listscore)
+        }
+      }
+      this.sumstay = this.total_score
+    },
+    // 关闭一票否决备注弹出窗口
+    handleOk (e, value) {
+      this.visibleVetoCheck.splice(value, 1, false)
+    },
+    // 关闭评分备注窗口
+    correctingok (index, index2) {
+      this.showing[index].list[index2] = Object.assign({}, this.showing[index].list[index2], { visibleCheck: false })
+    },
+    vetochange (e, index, item) {
+      if (e.target.checked === false) {
+        this.visibleVetoCheck.splice(index, 1, false)
+      } else {
+        this.visibleVetoCheck.splice(index, 1, true)
+        this.$set(this.showingveto.list[item], 'listscore', 1)
+      }
+      if (e.target.checked === true) {
+        this.total_score = 0
+      } else {
+        this.total_score = this.sumstay
+      }
+    },
+    // 获取搜索框日期
+    getSearchDate (date, dateString) {
+      this.paramDetails.begin_time = dateString[0]
+      this.paramDetails.endTime = dateString[1]
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict'
+      })
+    },
+    // 搜索框样式
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    // 查看详情搜索样式
+    changedetailsAdvanced (tag) {
+      if (tag) {
+        this.detailsadvanced = !this.detailsadvanced
+      }
+      if (this.detailsadvanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    }
+  }
+}
+</script>
+<style scoped>
+.input {
+  background-color: #f5f5f5;
+}
+</style>

@@ -1,0 +1,17 @@
+<template>
+  <div class="subtableBox">
+    <div class="MarkBox topMark leftMark"></div>
+    <div class="MarkBox topMark rightMark" style="right: 0"></div>
+    <div class="MarkBox bottomMark leftMark" style="bottom: 0; left: 0"></div>
+    <div class="MarkBox bottomMark rightMark" style="bottom: 0; right: 0"></div>
+    <slot name="body"></slot>
+  </div>
+</template>
+<script>
+import '../assets/css/chartframe.less'
+export default {
+  data () {
+    return {}
+  }
+}
+</script>

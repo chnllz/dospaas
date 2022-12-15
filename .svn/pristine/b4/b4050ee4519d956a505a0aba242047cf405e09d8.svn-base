@@ -1,0 +1,556 @@
+<template>
+  <div>
+    <h3>
+      <tag-icon />
+      {{ $t('基础设置') }}
+    </h3>
+    <a-card size="small" style="margin-bottom: 16px">
+      <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-input
+          v-decorator="[
+            'info[name]',
+            { initialValue: data.name || '', rules: [{ required: true, message: $t('请输入名称') }] }
+          ]"
+        >
+          <set-lang slot="addonAfter" />
+        </a-input>
+      </a-form-item>
+      <a-form-item :label="$t('条件设置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-button size="small" @click="handleCondition">
+          <a-badge v-if="settingFlag" status="success" :text="$t('设置')" />
+          <a-badge v-else status="default" :text="$t('设置')" />
+        </a-button>
+      </a-form-item>
+      <a-form-item :label="$t('自定义数据源')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-input
+          v-decorator="['setting[dataSource]', { initialValue: setting.dataSource || '' }]"
+          :placeholder="$t('如：/admin/api/test')"
+        />
+      </a-form-item>
+      <a-form-item :label="$t('帮助说明设置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-button @click="getEditor">
+          {{ $t('设置') }}
+        </a-button>
+        <a-modal
+          :title="$t('帮助说明设置')"
+          :visible="visible"
+          :width="900"
+          :destroyOnClose="true"
+          @cancel="visible = !visible"
+        >
+          <a-spin :spinning="loading">
+            <a-form :form="form" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+              <a-form-item :label="$t('帮助说明')">
+                <a-switch
+                  v-decorator="['status', { initialValue: setting.helpText, valuePropName: 'checked' }]"
+                  @change="
+                    (e) => {
+                      setting.helpText = e
+                    }
+                  "
+                />
+              </a-form-item>
+              <template v-if="setting.helpText">
+                <a-form-item>
+                  <span slot="label">
+                    {{ $t('帮助展开形式') }}
+                    <a-tooltip placement="top">
+                      <template slot="title">
+                        <div>点击展开：帮助说明以弹层形式展开，富文本内容展示。</div>
+                        <div>鼠标停留时气泡框展开：帮助说明以气泡框形式展开，强制文本格式，并自动剔除图片。</div>
+                      </template>
+                      <a-icon type="question-circle" />
+                    </a-tooltip>
+                  </span>
+                  <a-radio-group
+                    v-decorator="['displayMode', { initialValue: helpText.displayMode || 'drawer' }]"
+                    name="radioGroup"
+                  >
+                    <a-radio value="drawer">{{ $t('左侧抽屉打开') }}</a-radio>
+                    <a-radio value="popover">{{ $t('气泡框打开') }}</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+                <a-form-item label="帮助内容">
+                  <tiny-mce v-decorator="['content', { initialValue: helpText.content }]" />
+                </a-form-item>
+              </template>
+            </a-form>
+          </a-spin>
+          <div slot="footer">
+            <a-spin :spinning="loading">
+              <span slot="indicator" />
+              <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+              <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+            </a-spin>
+          </div>
+        </a-modal>
+      </a-form-item>
+      <a-form-item :label="$t('流程功能')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-row type="flex" :gutter="8">
+          <a-col>
+            <a-switch
+              v-decorator="[
+                'setting[enableWorkflow]',
+                { initialValue: setting.enableWorkflow, valuePropName: 'checked' }
+              ]"
+              @change="
+                (e) => {
+                  $set(setting, 'enableWorkflow', e)
+                }
+              "
+            />
+          </a-col>
+          <a-col flex="auto">
+            <a-select
+              v-if="setting.enableWorkflow"
+              v-decorator="[
+                'setting[workflowId]',
+                {
+                  initialValue: setting.workflowId || undefined,
+                  rules: [{ required: true, message: $t('请选择流程') }]
+                }
+              ]"
+              :placeholder="$t('请选择一个与当前数据表关联的流程')"
+              show-search
+            >
+              <a-select-option v-for="(value, key) in workflow" :key="key" :value="value.workflowId">
+                {{ value.workflowName }}
+              </a-select-option>
+            </a-select>
+          </a-col>
+        </a-row>
+      </a-form-item>
+      <a-form-item
+        :label="$t('交互模式')"
+        :labelCol="labelCol"
+        :wrapperCol="wrapperCol"
+        :required="setting.interactiveType === 'tree'"
+      >
+        <a-row :gutter="8">
+          <a-col :span="8">
+            <a-form-item>
+              <a-select
+                v-decorator="['setting[interactiveType]', { initialValue: setting.interactiveType || 'default' }]"
+                show-search
+                option-filter-prop="children"
+                @change="
+                  (e) => {
+                    setting.interactiveType = e
+                  }
+                "
+              >
+                <a-select-option value="default">默认</a-select-option>
+                <a-select-option value="tree">左侧导航树</a-select-option>
+                <a-select-option value="calendar">日历（建设中）</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="16">
+            <a-form-item v-if="setting.interactiveType === 'tree'">
+              <a-select
+                v-decorator="[
+                  'setting[interactiveAlias]',
+                  {
+                    rules: [{ required: setting.interactiveType === 'tree', message: $t(`请选择树选择字段`) }],
+                    initialValue: setting.interactiveAlias || undefined
+                  }
+                ]"
+                :placeholder="`请选择树选择字段`"
+                show-search
+                allowClear
+                option-filter-prop="children"
+              >
+                <a-select-option v-for="(value, key) in treeSelectList" :key="key" :value="value.alias">
+                  {{ value.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-form-item>
+      <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-textarea
+          v-decorator="['setting[description]', { initialValue: setting.description }]"
+          :auto-size="{ minRows: 1, maxRows: 5 }"
+        />
+      </a-form-item>
+      <a-form-item v-if="userInfo.superAdmin" :label="$t('访问级别')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-radio-group v-decorator="['info[accessLevel]', { initialValue: data.accessLevel || 0 }]">
+          <a-radio :value="0" style="width: 100%">{{ $t('可见可编可删') }}</a-radio>
+          <a-radio :value="1" style="width: 100%">{{ $t('可见可编不可删') }}</a-radio>
+          <a-radio :value="2" style="width: 100%">{{ $t('可见不可编不可删') }}</a-radio>
+          <a-radio :value="3" style="width: 100%">{{ $t('不可见不可编不可删') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+    </a-card>
+    <h3>
+      <tag-icon />
+      {{ $t('表格设置') }}
+    </h3>
+    <a-card size="small">
+      <a-form-item v-if="pageName !== 'fieldForm'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <span slot="label">
+          {{ pageName === 'table_card_list' ? $t('预加载数量') : $t('每页行数') }}
+          <a-tooltip placement="top">
+            <template slot="title">
+              <span v-if="pageName === 'table_card_list'">{{ $t('每页行数 最小为5，最大为10') }}</span>
+              <span v-else>{{ $t('每页行数 最小为5，最大为50') }}</span>
+            </template>
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-input-number
+          v-if="pageName === 'table_card_list'"
+          v-decorator="[
+            'setting[pageSize]',
+            { initialValue: setting.pageSize || 5, rules: [{ required: true, message: $t('请输入预加载数量') }] }
+          ]"
+          :min="5"
+          :max="10"
+        />
+        <a-input-number
+          v-else
+          v-decorator="[
+            'setting[pageSize]',
+            { initialValue: setting.pageSize || 15, rules: [{ required: true, message: $t('请输入每页行数') }] }
+          ]"
+          :min="5"
+          :max="50"
+        />
+      </a-form-item>
+      <a-row v-else>
+        <a-col :span="8">
+          <a-form-item :label="$t('是否分页')" :labelCol="{ span: 12 }" :wrapperCol="{ span: 8 }">
+            <a-switch v-decorator="['setting[paging]', { initialValue: false, valuePropName: 'checked' }]" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="8">
+          <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+            <span slot="label">
+              {{ $t('每页行数') }}
+              <a-tooltip placement="top">
+                <template slot="title">
+                  <span>{{ $t('每页行数 最小为10，最大为50') }}</span>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="[
+                'setting[pageSize]',
+                { initialValue: setting.pageSize || 20, rules: [{ required: true, message: $t('请输入每页行数') }] }
+              ]"
+              :min="1"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item
+        v-if="pageName !== 'table_subform_list'"
+        :label="$t('列锁的起始列数')"
+        :labelCol="labelCol"
+        :wrapperCol="wrapperCol"
+      >
+        <span>{{ $t('从左往右') }}</span>
+        <a-input-number
+          v-decorator="['setting[lockLeft]', { initialValue: setting.lockLeft || 0 }]"
+          style="margin: 0 8px"
+          :min="0"
+        />
+        <span style="margin-right: 8px">{{ $t('从右往左') }}</span>
+        <a-form-item style="display: inline-block">
+          <a-input-number v-decorator="['setting[lockRight]', { initialValue: setting.lockRight || 0 }]" :min="0" />
+        </a-form-item>
+      </a-form-item>
+      <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <span slot="label">
+          {{ $t('分页模式') }}
+          <a-tooltip placement="top" :title="$t('默认模式返回数据总量，简易模式不返回数据总量。')">
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-radio-group
+          v-decorator="['setting[pageMode]', { initialValue: setting.pageMode || 'default' }]"
+          name="radioGroup"
+        >
+          <a-radio value="default">{{ $t('默认模式') }}</a-radio>
+          <a-radio value="simple">{{ $t('简易模式') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item :label="$t('排序方式')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-row :gutter="8">
+          <a-col :span="8">
+            <a-form-item>
+              <a-select
+                v-decorator="[
+                  'setting[sort]',
+                  { rules: [{ required: true, message: $t('请选择排序字段') }], initialValue: setting.sort || 'id' }
+                ]"
+                show-search
+                option-filter-prop="children"
+              >
+                <a-select-option v-for="(value, key) in fieldslist" :key="key" :value="value.value">
+                  {{ value.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="4">
+            <a-form-item>
+              <a-select
+                v-decorator="[
+                  'setting[dir]',
+                  { rules: [{ required: true, message: $t('请选择排序方式') }], initialValue: setting.dir || 'descend' }
+                ]"
+              >
+                <a-select-option value="descend">{{ $t('降序') }}</a-select-option>
+                <a-select-option value="ascend">{{ $t('升序') }}</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-form-item>
+      <a-form-item :label="$t('多选')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-switch
+          v-decorator="['setting[multiSelect]', { initialValue: setting.multiSelect, valuePropName: 'checked' }]"
+        />
+      </a-form-item>
+      <a-form-item
+        v-if="pageName !== 'table_subform_list'"
+        :label="$t('用户自定义列')"
+        :labelCol="labelCol"
+        :wrapperCol="wrapperCol"
+      >
+        <a-switch
+          v-decorator="['setting[customColumns]', { initialValue: setting.customColumns, valuePropName: 'checked' }]"
+        />
+      </a-form-item>
+    </a-card>
+    <!--
+    <a-form-item label="表单Label宽度" :labelCol="labelCol" :wrapperCol="wrapperCol" v-if="pageName !== 'table_subform_list'">
+      <a-input-number :min="50" v-decorator="['setting[labelWidth]', {initialValue: setting.labelWidth || 100}]"/>
+    </a-form-item>
+    <a-form-item label="添加编辑样式" :labelCol="labelCol" :wrapperCol="wrapperCol" v-else>
+      <a-radio-group name="radioGroup" v-decorator="['setting[style]', { initialValue: setting.style || 'dialog' }]">
+        <a-radio value="dialog">
+          对话框样式
+        </a-radio>
+        <a-radio value="inline">
+          行内样式
+        </a-radio>
+      </a-radio-group>
+    </a-form-item>
+    <a-form-item v-if="data.variable == 'table_form_list'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <span slot="label">显示数据范围
+        <a-tooltip>
+          <template slot="title">
+            <div>1、进行中&已结束，显示顶部tab页签，分别显示进行中、已结束的数据</div>
+            <div>2、进行中，不出现顶部tab页签，仅显示进行中的数据</div>
+            <div>3、已结束，不出现顶部tab页签，仅显示已结束的数据</div>
+          </template>
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-radio-group name="radioGroup" v-decorator="['setting[flowScope]', { initialValue: setting.flowScope || 'proceed' }]" @change="(e)=>{ timeRangeShow = timePartition = e.target.value !== 'proceed'; }">
+        <a-radio value="proceed">进行中</a-radio>
+        <a-radio value="finish">已结束</a-radio>
+        <a-radio value="all">进行中&已结束</a-radio>
+      </a-radio-group>
+    </a-form-item>
+    <a-form-item label="时间分区" v-if="data.variable == 'table_form_list' && (timePartition || ( setting.flowScope && setting.flowScope !== 'proceed' ))" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-select show-search option-filter-prop="children" v-decorator="[ 'setting[timePartition]', {rules: [{ required: timePartition || ( setting.flowScope && setting.flowScope !== 'proceed' ), message: '请选择时间分区'}], initialValue: setting.timePartition || undefined} ]" >
+        <a-select-option v-for="(value, key) in fieldslist" :key="key" :value="value.value">{{ value.display }}</a-select-option>
+      </a-select>
+    </a-form-item>
+    <a-form-item v-if="data.variable == 'table_flow_list'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <span slot="label">显示流程范围
+        <a-tooltip>
+          <template slot="title">
+            <div>1、进行中&已结束，显示顶部tab页签，分别显示进行中、已结束的流程</div>
+            <div>2、进行中，不出现顶部tab页签，仅显示进行中的流程</div>
+            <div>3、已结束，不出现顶部tab页签，仅显示已结束的流程</div>
+          </template>
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-radio-group name="radioGroup" v-decorator="['setting[flowScope]', { initialValue: setting.flowScope || '' }]" @change="(e)=>{ timeRangeShow = e.target.value !== 'proceed'}">
+        <a-radio value="proceed">进行中</a-radio>
+        <a-radio value="finish">已结束</a-radio>
+        <a-radio value="">进行中&已结束</a-radio>
+      </a-radio-group>
+    </a-form-item>
+    <a-form-item
+      :label="data.variable == 'table_form_list' ? '数据时间范围' : '流程结束时间'"
+      v-if="(['table_form_list'].includes(data.variable) && setting.flowScope && setting.flowScope !== 'proceed') || (['table_flow_list'].includes(data.variable) && setting.flowScope !== 'proceed')"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol">
+      <a-radio-group name="radioGroup" v-decorator="['setting[timeRangeDisplay]', { initialValue: setting.timeRangeDisplay || '1' }]">
+        <a-radio value="1">显示</a-radio>
+        <a-radio value="0">隐藏</a-radio>
+      </a-radio-group>
+    </a-form-item>
+    <a-form-item v-if="data.variable == 'table_flow_list'" label="快捷搜索按钮样式" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-radio-group name="radioGroup" v-decorator="['setting[searchStyle]', { initialValue: setting.searchStyle || '' }]">
+        <a-radio value="">平铺</a-radio>
+        <a-radio value="select">下拉</a-radio>
+      </a-radio-group>
+    </a-form-item> -->
+    <condition ref="condition" :params="condition" @ok="getCondition" />
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    Condition: () => import('../Table/Condition'),
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    FastFilterPermissions: () => import('./FastFilterPermissions'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  props: {
+    fieldslist: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    treeSelectList: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    workflow: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    data: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    setting: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true,
+      deep: true
+    },
+    pageName: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 3 },
+      wrapperCol: { span: 10 },
+      form: this.$form.createForm(this),
+      visible: false,
+      loading: false,
+      timePartition: false,
+      timeRangeShow: false,
+      condition: {
+        data: {}
+      },
+      helpText: {},
+      settingFlag: false,
+      svg: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  watch: {
+    condition (val) {
+      this.$emit('update:setting', Object.assign(this.setting, { condition: val.data }))
+    },
+    setting (val) {
+      if (val.condition) {
+        if (val.condition.value) {
+          this.settingFlag = true
+          return
+        }
+      }
+      if (!val.drawerType) {
+        val.drawerType = '0'
+      }
+      this.settingFlag = false
+    }
+  },
+  mounted () {
+    this.svg = {
+      template: `<svg t="1639648071074" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5648" width="200" height="200"><path d="M758.560512 68.191078 265.439488 68.191078c-54.490032 0-98.130971 44.134173-98.130971 98.624205l-0.493234 788.993638L512 807.872614l345.184717 147.936307L857.184717 166.815283C857.184717 112.325251 813.04952 68.191078 758.560512 68.191078z" p-id="5649" fill="#1296db"></path></svg>`
+    }
+  },
+  methods: {
+    handleCondition () {
+      this.condition = { tableId: this.data.value, data: this.setting.condition || {} }
+      this.$refs.condition.show({ title: this.$t('条件设置') })
+    },
+    getCondition (val) {
+      this.condition = val
+      this.setting.condition = val.data
+      if (this.setting.condition) {
+        if (this.setting.condition.value) {
+          this.settingFlag = true
+          return
+        }
+      }
+      this.settingFlag = false
+    },
+    // 打开帮助说明编辑页面
+    getEditor () {
+      this.visible = true
+      this.loading = true
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: this.data.uid
+        }
+      }).then(res => {
+        this.loading = false
+        if (!res.code) {
+          this.helpText = res.result || {}
+        } else {
+          this.$message.warning(res.message)
+          this.visible = false
+        }
+      })
+    },
+    // 帮助说明内容提交
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loaidng = true
+          this.axios({
+            url: '/admin/document/edit',
+            data: Object.assign({
+              number: this.data.uid,
+              action: 'submit'
+            }, values)
+          }).then(res => {
+            this.loaidng = true
+            if (!res.code) {
+              this.visible = false
+            } else {
+              this.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

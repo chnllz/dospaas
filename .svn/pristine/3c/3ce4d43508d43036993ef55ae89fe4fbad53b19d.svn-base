@@ -1,0 +1,340 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button @click="Search" @keyup.enter="Search">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                inputTime = null
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('考试名称')">
+              <a-input v-model.trim="queryParam.title" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('试卷状态')">
+              <a-select v-model.trim="queryParam.status" :allowClear="true" show-search>
+                <a-select-option v-for="(item, key) in paperstatus" :key="key" :value="item.value">
+                  {{ item.type }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('开始时间')">
+              <a-range-picker
+                v-model="queryParam.startshowtime"
+                :ranges="{
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                :show-time="{ format: 'HH:mm:ss' }"
+                format="YYYY-MM-DD HH:mm:ss"
+                style="width: 100%"
+                @change="getSearchDate"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('结束时间')">
+              <a-range-picker
+                v-model="queryParam.endshowtime"
+                :ranges="{
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                :show-time="{ format: 'HH:mm:ss' }"
+                format="YYYY-MM-DD HH:mm:ss"
+                style="width: 100%"
+                @change="getSearchEndDate"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('创建人')">
+              <a-input v-model.trim="queryParam.inputUser" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('创建时间')">
+              <a-range-picker
+                v-model="inputTime"
+                :ranges="{
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                :show-time="{ format: 'HH:mm:ss' }"
+                format="YYYY-MM-DD HH:mm:ss"
+                style="width: 100%"
+                @change="getinputtime"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:add icon="plus" type="primary" @click="addPage">{{ $t('添加') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      class="table-fill"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="status" slot-scope="text">
+        <span v-for="value in paperstatus" v-show="value.value === text" :key="value.value">
+          {{ value.type }}
+        </span>
+      </div>
+      <div slot="action" slot-scope="text, record">
+        <a @click="editPage(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a @click="analysisPage(record, 'exam')">{{ $t('考试分析') }}</a>
+        <a-divider type="vertical" />
+        <a @click="analysisPage(record, 'paper')">{{ $t('试题分析') }}</a>
+        <a-divider type="vertical" />
+        <a @click="BrowsePage(record)">{{ $t('预览') }}</a>
+        <a-divider type="vertical" />
+        <a @click="closeTest(record)">{{ $t('关闭考试') }}</a>
+        <a-divider type="vertical" />
+        <a @click="examDelete(record)">{{ $t('删除') }}</a>
+      </div>
+    </s-table>
+    <exam-add ref="ExamAdd" @on-show="Search" />
+    <exam-analysis ref="ExamAnalysis" />
+    <browsing ref="Browsing" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('exam'),
+  components: {
+    ExamAdd: () => import('./ExamAdd'),
+    ExamAnalysis: () => import('./ExamAnalysis'),
+    Browsing: () => import('./Browsing')
+  },
+  data () {
+    return {
+      advanced: false,
+      visible: false,
+      loading: false,
+      inputTime: null,
+      // 搜索参数
+      queryParam: {},
+      // paperType: [{
+      //   type: '固定试卷'
+      // }, {
+      //   type: '随机试卷'
+      // }],
+      paperstatus: [{
+        type: this.$t('未开始'),
+        value: '0'
+      }, {
+        type: this.$t('进行中'),
+        value: '1'
+      }, {
+        type: this.$t('已结束'),
+        value: '2'
+      }],
+      config: {
+        data: {}
+      },
+      formdata: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 360,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 40,
+        sorter: true
+      }, {
+        title: this.$t('考试名称'),
+        dataIndex: 'title',
+        width: 160
+      }, {
+        title: this.$t('试卷状态'),
+        dataIndex: 'status',
+        scopedSlots: { customRender: 'status' },
+        width: 80
+      }, {
+        title: this.$t('已考/应考人数'),
+        dataIndex: 'userNum'
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'startTime',
+        width: 140
+      }, {
+        title: this.$t('结束时间'),
+        dataIndex: 'endTime',
+        width: 140
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser',
+        width: 80
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 140
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser'
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 140
+      }],
+      colLayout: {},
+      optionsList: {
+        list: [{
+          options: ''
+        }]
+      }
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  methods: {
+    // 页面渲染
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/exam/achievement/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 打开添加页面
+    addPage (type) {
+      this.$refs.ExamAdd.show({
+        action: 'add',
+        title: this.$t('添加'),
+        url: '/exam/exam/add',
+        data: {}
+      })
+    },
+    getinputtime (date, dateString) {
+      this.inputTime = date
+      this.queryParam.inputTime = dateString[0] ? dateString : null
+    },
+    // 打开分析页面
+    analysisPage (record, type) {
+      let title = ''
+      if (type === 'exam') {
+        title = this.$t('考试分析')
+      } else {
+        title = this.$t('试题分析')
+      }
+      this.$refs.ExamAnalysis.show({
+        action: type,
+        title: title,
+        url: '',
+        data: record
+      })
+    },
+    // 打开修改页面
+    editPage (record) {
+      this.$refs.ExamAdd.show({
+        action: 'edit',
+        title: this.$t('编辑'),
+        url: '/exam/exam/edit',
+        data: record
+      })
+    },
+    // 打开预览页面
+    BrowsePage (record) {
+      this.$refs.Browsing.show({
+        action: 'browsing',
+        title: this.$t('考试预览'),
+        url: '',
+        data: record,
+        answer: ''
+      })
+    },
+    // 搜索
+    Search () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    closeTest (record) {
+      const table = this.$refs.table
+      const self = this
+      this.$confirm({
+        title: this.$t('您确认要关闭该考试吗？'),
+        onOk () {
+          self.axios({
+            url: '/exam/achievement/endExam',
+            data: { paperId: record.id }
+          }).then(res => {
+            table.refresh()
+          })
+        }
+      })
+    },
+    // 删除
+    examDelete (record) {
+      const table = this.$refs.table
+      const id = record.id
+      const self = this
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          self.axios({
+            url: '/exam/achievement/action',
+            data: { id: id, action: 'delete' }
+          }).then(res => {
+            self.$message.success(res.message)
+            table.refresh()
+          })
+        }
+      })
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    getSearchDate (date, dateString) {
+      this.queryParam.startshowtime = date
+      this.queryParam.startTime = dateString[0] ? dateString : null
+    },
+    getSearchEndDate (date, dateString) {
+      this.queryParam.endtshowime = date
+      this.queryParam.endTime = dateString[0] ? dateString : null
+    }
+  }
+}
+</script>

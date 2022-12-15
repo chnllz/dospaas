@@ -1,0 +1,229 @@
+<template>
+  <a-modal :title="config.title" :destroyOnClose="true" :width="600" :visible="visible" @cancel="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('标签名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[tagName]',
+              {
+                rules: [
+                  { required: true, message: $t('请输入标签名称') },
+                  { min: 2, message: $t('请输入至少两个字符') },
+                  { max: 20, message: $t('请输入少于20个字符') },
+                  { validator: checkName }
+                ],
+                initialValue: data.tagName
+              }
+            ]"
+            @change="changeName"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :label="$t('标签编号')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[tagNumber]',
+              {
+                rules: [
+                  { required: true, message: $t('请输入标签编号') },
+                  {
+                    pattern: new RegExp(/^[a-z]+([A-Z][a-z]+)*$/),
+                    message: $t('仅支持输入大小写字母，且首字母小写，驼峰形式，禁止出现连续大写字母')
+                  }
+                ],
+                initialValue: data.tagNumber
+              }
+            ]"
+            :disabled="editable"
+          ></a-input>
+        </a-form-item>
+        <a-form-item :label="$t('所属分类')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'info[tagCategoryNumber]',
+              { rules: [{ required: true, message: $t('请选择所属分类') }], initialValue: data.tagCategoryNumber }
+            ]"
+            :disabled="true"
+            :placeholder="$t('请选择所属分类')"
+          >
+            <a-select-option v-for="cate in options" :key="cate.value" :value="cate.value">
+              {{ cate.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('分值')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input-number
+            v-decorator="[
+              'info[score]',
+              { rules: [{ required: true, message: $t('请输入分值') }], initialValue: data.score || 0 }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('标签状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group
+            v-decorator="[
+              'info[status]',
+              { rules: [{ required: true, message: $t('请选择标签状态') }], initialValue: data.status || 1 }
+            ]"
+          >
+            <a-radio style="width: 100px" :value="1">{{ $t('启用') }}</a-radio>
+            <a-radio style="width: 100px" :value="0">{{ $t('禁用') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea
+            v-decorator="['info[remarks]', { initialValue: data.remarks }]"
+            :autoSize="{ minRows: 2, maxRows: 6 }"
+          />
+        </a-form-item>
+      </a-form>
+    </a-spin>
+    <div slot="footer">
+      <a-spin :spinning="loading">
+        <span slot="indicator"></span>
+        <a-button type="primary" @click="handleSubmit(0)">{{ $t('保存') }}</a-button>
+        <a-button v-if="config.action === 'add'" @click="handleSubmit(1)">{{ $t('保存并添加') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </a-spin>
+    </div>
+  </a-modal>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    SetLang: () => import('@/components/SetLang')
+  },
+  props: {
+    tableId: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 800)
+    return {
+      config: {},
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      options: [],
+      data: {},
+      editable: false
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.options = this.config.option
+      this.data = this.config.record || {}
+      this.editable = config.action === 'edit'
+    },
+    // 自动生成标签编号 系统名称
+    changeName (e) {
+      if (!this.editable || this.config.action === 'add') {
+        const val = e.target.value
+        let valArr = val.split('\n')
+        const pinyin = require('js-pinyin')
+        valArr = valArr.map(item => {
+          const reg = new RegExp(/^(?![0-9])[a-zA-Z0-9]+$/)
+          const reg2 = new RegExp(/^[a-zA-Z0-9]+$/)
+          let val = ''
+          if (item.length <= 1) {
+            val = pinyin.getFullChars(item).toLowerCase()
+          } else {
+            const str1 = pinyin.getFullChars(item.substring(0, 1)).toLowerCase()
+            const latterStr = item.substring(1, item.length)
+            const str2Arr = latterStr.split('').map(item => {
+              const itemPinyin = pinyin.getFullChars(item).toLowerCase()
+              return itemPinyin[0].toUpperCase() + itemPinyin.substring(1, itemPinyin.length)
+            })
+            const str2 = str2Arr.join('')
+            val = str1 + str2
+          }
+          val = val.split('')
+          this.getVal(val, reg)
+          if (val[0]) {
+            val[0] = val[0].toLowerCase()
+          }
+          val = val.filter(item => {
+            return reg2.test(item)
+          })
+          return val.join('')
+        })
+        const { setFieldsValue, validateFields } = this.form
+        setFieldsValue({ 'info[tagNumber]': valArr.join('\n') })
+        this.$nextTick(() => {
+          validateFields(['info[tagNumber]'], { force: true })
+        })
+      }
+    },
+    // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    handleEdit () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要修改标签编号吗？'),
+        content: this.$t('修改标签编号会造成系统未知错误，强烈建议不要修改'),
+        onOk () {
+          that.editable = false
+        }
+      })
+    },
+    // 显示名称验证是否重复
+    checkName (rule, value, callback) {
+      this.axios({
+        url: '/admin/tag/checkNamesake',
+        data: {
+          tagName: value,
+          tagCategoryNumber: this.data.tagCategoryNumber,
+          id: this.data.id
+        }
+      }).then(res => {
+        if (res.code) {
+          callback(res.message)
+        } else {
+          callback()
+        }
+      })
+    },
+    handleSubmit (type) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { id: this.data.id })
+          }).then((res) => {
+            this.loading = false
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              if (type === 1) {
+                this.form.resetFields()
+              } else {
+                this.visible = false
+              }
+              this.$emit('ok', values)
+              this.$message.success(res.message)
+              this.form.resetFields()
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

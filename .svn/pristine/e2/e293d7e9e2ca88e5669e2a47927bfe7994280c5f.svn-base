@@ -1,0 +1,160 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {
+                  starttime: moment().startOf('day').format('YYYY-MM-DD'),
+                  endtime: moment().endOf('day').format('YYYY-MM-DD')
+                }
+                section = [moment().startOf('day'), moment().endOf('day')]
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('操作时间')">
+              <a-range-picker
+                v-model="section"
+                :ranges="{
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                showTime
+                :allowClear="false"
+                format="YYYY-MM-DD"
+                style="width: 100%"
+                @change="getSearchDate"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('坐席姓名')">
+              <a-input v-model="queryParam.username" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('分机号码')">
+              <a-input v-model="queryParam.extension" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:export icon="download" @click="handleExport()">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      class="table-fill"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="username"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="sorter"
+    ></s-table>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('callcenter'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      // 时间组件
+      section: [this.moment().startOf('day'), this.moment().endOf('day')],
+      advanced: false,
+      // 搜索参数
+      queryParam: {
+        username: '',
+        extension: '',
+        starttime: this.moment().startOf('day').format('YYYY-MM-DD'),
+        endtime: this.moment().endOf('day').format('YYYY-MM-DD')
+      },
+      // 排序
+      sorter: { field: 'username', order: 'ascend' },
+      // 表头
+      columns: [{
+        title: this.$t('坐席姓名'),
+        dataIndex: 'username'
+      }, {
+        title: this.$t('分机号码'),
+        dataIndex: 'extension'
+      }, {
+        title: this.$t('示忙总次数'),
+        dataIndex: 'sumTotal'
+      }, {
+        title: this.$t('示忙总时长'),
+        dataIndex: 'sumDuration'
+      }]
+    }
+  },
+  mounted () {
+    this.axios({
+      url: '/admin/dict/getChildren',
+      data: {
+        dictCategoryNumber: 'callcenter_dnd_type' // 所属字典编号
+      }
+    }).then(res => {
+      const list = res.result
+      list.forEach(childItem => {
+        const data = [{
+          title: childItem.name + this.$t('次数'),
+          dataIndex: 'total-' + childItem.number,
+          align: 'center',
+          width: 100
+        }, {
+          title: childItem.name + this.$t('时长'),
+          dataIndex: 'duration-' + childItem.number,
+          align: 'center',
+          width: 150
+        }]
+        this.columns.push({
+          title: childItem.name,
+          children: data
+        })
+      })
+    })
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/callcenter/dnd/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    getSearchDate (date, dateString) {
+      this.queryParam.starttime = dateString[0]
+      this.queryParam.endtime = dateString[1]
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportDndStatementTask',
+        parameter: {
+          condition: {
+            req: this.queryParam,
+            type: 'dndStats'
+          }
+        }
+      })
+    }
+  }
+}
+</script>

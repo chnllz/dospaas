@@ -1,0 +1,629 @@
+<template>
+  <a-drawer :title="title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-alert
+          v-if="action === 'add'"
+          showIcon
+          :message="$t('如果没有修改表格的默认排序方案（按{排序}升序），新建的数据会展现在最后一页。')"
+          type="info"
+          style="margin-bottom: 8px"
+        />
+        <a-alert
+          v-if="action === 'add'"
+          showIcon
+          :message="$t('如果需要新建的字典是‘开关’、‘是否’、‘启用禁用’等开关型，请直接使用‘开关’UI组件。')"
+          type="warning"
+          style="margin-bottom: 8px"
+        />
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('字典类型') }}
+            <a-tooltip v-if="action !== 'add'" placement="top">
+              <template slot="title">{{ $t('一旦创建，不允许修改。') }}</template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'dictType',
+              { initialValue: data.dictType, rules: [{ required: true, message: $t('请选择字典类型') }] }
+            ]"
+            :disabled="action !== 'add'"
+            @change="handleType"
+          >
+            <a-select-option value="basic">{{ $t('基础') }}</a-select-option>
+            <!-- <a-select-option value="table">{{ $t('数据表') }}</a-select-option> -->
+            <a-select-option value="general_table">{{ $t('普通数据表') }}</a-select-option>
+            <a-select-option value="grouping_table">{{ $t('分组数据表') }}</a-select-option>
+            <a-select-option value="sql">SQL</a-select-option>
+            <a-select-option value="callback">{{ $t('自定义') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('字典名称') }}
+            <a-tooltip :title="$t('不允许重复。')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input
+            v-if="data.dictType === 'basic' && action === 'add'"
+            v-decorator="[
+              'dictCategoryName',
+              {
+                initialValue: data.dictCategoryName,
+                rules: [{ required: true, message: $t('请输入字典名称') }, { validator: checkName }]
+              }
+            ]"
+            @change="changeName"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+          <a-input
+            v-else
+            v-decorator="[
+              'dictCategoryName',
+              {
+                initialValue: data.dictCategoryName,
+                rules: [{ required: true, message: $t('请输入字典名称') }, { validator: checkName }]
+              }
+            ]"
+            @change="changeName"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('字典编号') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>
+                  {{
+                    $t(
+                      '系统名称创建时由{显示名称}拼音全拼组成，使用小驼峰命名法。如：{显示名称}="我爱祖国"，自动生成的{系统名称}为"woAiZuGuo"。同一模块下，不允许重复。'
+                    )
+                  }}
+                </span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input
+            v-decorator="[
+              'dictCategoryNumber',
+              {
+                initialValue: data.dictCategoryNumber,
+                rules: [
+                  { required: true, message: $t('请输入字典系统名称') },
+                  {
+                    validator: (rule, value, callback) => {
+                      const reg = new RegExp(/^[_\-\w]{1,}$/)
+                      const reg1 = new RegExp(/(?<=[\_\-])([\-\_])/)
+                      if (!value) {
+                        callback()
+                      }
+                      if (!reg1.test(value) && reg.test(value)) {
+                        callback()
+                      } else {
+                        callback($t('请输入至少两位数，且不允许连续出现-或_'))
+                      }
+                    }
+                  }
+                ]
+              }
+            ]"
+            :disabled="editable"
+          >
+            <!-- <template v-if="action === 'edit'">
+              <a-icon v-if="editable" slot="addonAfter" type="edit" style="cursor: pointer" @click="handleEdit" />
+              <a-icon v-else slot="addonAfter" type="edit" style="cursor: pointer" @click="editable = true" />
+            </template> -->
+          </a-input>
+        </a-form-item>
+        <a-form-item
+          v-if="data.dictType === 'callback'"
+          :label="$t('自定义方法')"
+          :labelCol="labelCol"
+          :wrapperCol="wrapperCol"
+        >
+          <a-input
+            v-decorator="[
+              'setting[callback]',
+              { initialValue: data.setting.callback, rules: [{ required: true, message: $t('请输入字典名称') }] }
+            ]"
+            :placeholder="$t('请输入自定义方法')"
+          />
+        </a-form-item>
+        <a-form-item v-else-if="data.dictType === 'sql'" label="SQL" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea
+            v-decorator="[
+              'setting[sql]',
+              { initialValue: data.setting.sql, rules: [{ required: true, message: $t('请输入SQL语句') }] }
+            ]"
+            :autoSize="{ minRows: 6 }"
+            :placeholder="$t('请输入SQL语句')"
+          />
+        </a-form-item>
+        <template v-else-if="data.dictType === 'general_table'">
+          <a-form-item :label="$t('关联数据表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'table',
+                { initialValue: data.setting.table, rules: [{ required: true, message: $t('请选择名称字段') }] }
+              ]"
+              :placeholder="$t('请选择关联数据表')"
+              :showSearch="true"
+              :options="tableList"
+              @change="getData"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('名称字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'setting[nameField]',
+                {
+                  initialValue: data.setting.nameField ? [data.setting.nameField] : [],
+                  rules: [{ required: true, message: $t('请选择名称字段') }]
+                }
+              ]"
+              :placeholder="$t('请选择名称字段')"
+              :showSearch="true"
+              :options="fieldArr"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('编号字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'setting[numberField]',
+                {
+                  initialValue: data.setting.numberField ? [data.setting.numberField] : [],
+                  rules: [{ required: true, message: $t('请选择编号字段') }]
+                }
+              ]"
+              :placeholder="$t('请选择编号字段')"
+              :showSearch="true"
+              :options="fieldArr"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('父编号字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'setting[parentNumberField]',
+                { initialValue: data.setting.parentNumberField ? [data.setting.parentNumberField] : [] }
+              ]"
+              :placeholder="$t('请选择父编号字段')"
+              :showSearch="true"
+              :options="fieldArr"
+            />
+          </a-form-item>
+        </template>
+        <template v-else-if="data.dictType === 'grouping_table'">
+          <a-form-item :label="$t('关联数据表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'table',
+                { initialValue: data.setting.table, rules: [{ required: true, message: $t('请选择名称字段') }] }
+              ]"
+              :placeholder="$t('请选择关联数据表')"
+              :showSearch="true"
+              :options="tableList"
+              @change="getData"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('分组字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-row v-for="(item, index) in groupFields" :key="index">
+              <a-col :span="22">
+                <a-select
+                  v-decorator="[
+                    'setting[groupFields][' + item.key + ']',
+                    { initialValue: item.value, rules: [{ required: true, message: $t('请选择分组字段') }] }
+                  ]"
+                  :placeholder="$t('请选择分组字段')"
+                  :showSearch="true"
+                  option-filter-prop="children"
+                >
+                  <a-select-option
+                    v-for="field in fieldArr.filter((fieldItem) => filterField(fieldItem, item))"
+                    :key="field.value"
+                    :value="field.value"
+                  >
+                    {{ field.label }}
+                  </a-select-option>
+                </a-select>
+              </a-col>
+              <a-col :span="2">
+                <a-icon
+                  v-if="index === 0"
+                  :style="{
+                    fontSize: '24px',
+                    color: '#52c41a',
+                    'padding-left': '10px',
+                    'margin-top': '6px',
+                    cursor: 'pointer'
+                  }"
+                  type="plus-square"
+                  theme="filled"
+                  @click="addGroupFile"
+                />
+                <a-icon
+                  v-else
+                  :style="{
+                    fontSize: '24px',
+                    color: '#ff4d4f',
+                    'padding-left': '10px',
+                    'margin-top': '6px'
+                  }"
+                  type="minus-square"
+                  theme="filled"
+                  @click="
+                    () => {
+                      groupFields.splice(index, 1)
+                    }
+                  "
+                />
+              </a-col>
+            </a-row>
+          </a-form-item>
+        </template>
+        <a-form-item hidden :label="$t('字典类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['dictMode', { initialValue: data.dictMode }]">
+            <a-radio :value="0">{{ $t('平面字典') }}</a-radio>
+            <a-radio :value="1">{{ $t('树形字典') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="userInfo.superAdmin" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('访问级别') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>
+                  {{
+                    $t(
+                      '请慎重修改。访问级别是为了保护系统重要配置项而设计的，防止因修改系统必须的某些配置内容，而导致系统错误。'
+                    )
+                  }}
+                </span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select v-decorator="['accessLevel', { initialValue: data.accessLevel || 0 }]">
+            <a-select-option :key="0" :value="0">{{ $t('可见可编可删') }}</a-select-option>
+            <a-select-option :key="1" :value="1">{{ $t('可见可编不可删') }}</a-select-option>
+            <a-select-option :key="2" :value="2">{{ $t('可见不可编不可删') }}</a-select-option>
+            <a-select-option :key="3" :value="3">{{ $t('不可见不可编不可删') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('字典分类')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <!-- <a-input v-decorator="['category', { initialValue: data.category }]" /> -->
+          <a-auto-complete
+            v-decorator="['category', { initialValue: data.category }]"
+            @search="
+              (val) => {
+                categoryFilterList = categoryList.filter((item) => item.includes(val))
+              }
+            "
+          >
+            <template slot="dataSource">
+              <a-select-option v-for="(v, i) in categoryFilterList" :key="i" :value="v">{{ v }}</a-select-option>
+            </template>
+          </a-auto-complete>
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea v-decorator="['remarks', { initialValue: data.remarks }]" :autoSize="{ minRows: 6 }" />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 1000)
+    return {
+      url: '', // 表单提交地址
+      action: '', // 编辑/添加
+      title: '',
+      id: '', // 获取数据字典目录id
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      fieldList: {}, // 保存数据
+      fieldArr: [], // 根据数据表获取相应字段数组
+      tableList: [],
+      targetTable: [],
+      data: {},
+      editable: false,
+      categoryList: [],
+      categoryFilterList: [],
+      groupFields: [{
+        key: new Date().valueOf(),
+        value: undefined
+      }] // 分组字段
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    showAdd (config) {
+      this.visible = true
+      this.loading = true
+      this.title = this.$t('添加')
+      this.id = null
+      this.url = 'admin/dict/addCategory'
+      this.action = 'add'
+      this.axios({
+        url: 'admin/dict/getCategory'
+      }).then(res => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = {
+          accessLevel: 0,
+          dictMode: config.dictMode,
+          dictType: 'basic',
+          setting: {
+            table: []
+          }
+        }
+        this.categoryList = res.result.category
+        this.categoryFilterList = res.result.category
+        this.tableList = res.result.moduleTable
+        this.editable = false
+      })
+    },
+    showEdit (config) {
+      this.visible = true
+      this.loading = true
+      this.title = `${this.$t('编辑')}: ${config.record.dictCategoryName}`
+      this.id = config.record.id
+      this.url = 'admin/dict/editCategory'
+      this.action = 'edit'
+      this.axios({
+        url: 'admin/dict/getCategory',
+        params: {
+          id: this.id
+        }
+      }).then(res => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = res.result.data
+        if (!this.data.setting) {
+          this.data.setting = {}
+        }
+        this.tableList = res.result.moduleTable
+        this.categoryList = res.result.category
+        this.categoryFilterList = res.result.category
+        this.data.setting.table = this.data.setting.targetTable ? Object.values(this.data.setting.targetTable) : []
+        if (this.data.setting.groupFields) {
+          this.groupFields = []
+          this.data.setting.groupFields.forEach((item, index) => {
+            this.groupFields.push({
+              key: new Date().valueOf() + index,
+              value: item
+            })
+          })
+        }
+        this.editable = true
+        if (this.data.setting && this.data.setting.table.length > 0) {
+          this.getData(this.data.setting.table)
+        }
+      })
+    },
+    // 显示名称验证是否重复
+    checkName (rule, value, callback) {
+      if (value) {
+        this.axios({
+          url: '/admin/dict/checkCategory',
+          data: {
+            dictCategoryName: value,
+            id: this.id
+          }
+        }).then(res => {
+          if (res.code) {
+            callback(res.message)
+          } else {
+            callback()
+          }
+        })
+      } else {
+        callback()
+      }
+    },
+    // 加载级联菜单数据
+    loadDataCascader (params) {
+      return (selectedOptions) => {
+        const targetOption = selectedOptions[selectedOptions.length - 1]
+        targetOption.loading = true
+        this.axios({
+          url: params.url,
+          data: { parentNumber: targetOption.value }
+        }).then(res => {
+          targetOption.loading = false
+          targetOption.children = res.result
+          this.parentNumber = [...this.parentNumber]
+        })
+      }
+    },
+    // 修改字典类型
+    handleType (val) {
+      this.data.dictType = val
+      const { setFieldsValue } = this.form
+      setFieldsValue({ 'dictCategoryNumber': '' })
+      setFieldsValue({ 'dictCategoryName': '' })
+    },
+    // 自动生成系统名称
+    changeName (e) {
+      if (!this.editable || this.action === 'add') {
+        const val = e.target.value
+        let valArr = val.split('\n')
+        const pinyin = require('js-pinyin')
+        valArr = valArr.map(item => {
+          const reg = new RegExp(/^(?![0-9])[a-zA-Z0-9]+$/)
+          const reg2 = new RegExp(/^[a-zA-Z0-9]+$/)
+          let val = ''
+          if (item.length <= 1) {
+            val = pinyin.getFullChars(item).toLowerCase()
+          } else {
+            const str1 = pinyin.getFullChars(item.substring(0, 1)).toLowerCase()
+            const latterStr = item.substring(1, item.length)
+            const str2Arr = latterStr.split('').map(item => {
+              const itemPinyin = pinyin.getFullChars(item).toLowerCase()
+              return itemPinyin[0].toUpperCase() + itemPinyin.substring(1, itemPinyin.length)
+            })
+            const str2 = str2Arr.join('')
+            val = str1 + str2
+          }
+          val = val.split('')
+          this.getVal(val, reg)
+          if (val[0]) {
+            val[0] = val[0].toLowerCase()
+          }
+          val = val.filter(item => {
+            return reg2.test(item)
+          })
+          return val.join('')
+        })
+        const { setFieldsValue, validateFields } = this.form
+        setFieldsValue({ 'dictCategoryNumber': valArr.join('\n') })
+        this.$nextTick(() => {
+          validateFields(['dictCategoryNumber'], { force: true })
+        })
+      }
+    },
+    // // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    handleEdit () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要修改系统名称吗？'),
+        content: this.$t('修改系统名称会造成系统未知错误，强烈建议不要修改'),
+        onOk () {
+          that.editable = false
+        }
+      })
+    },
+    // 获取数据表
+    getData (val) {
+      this.targetTable = val
+      this.axios({
+        url: '/admin/field/getFieldOptions',
+        params: { tableId: val[1] }
+      }).then(res => {
+        const array = res.result
+        this.formatData(array)
+        this.fieldArr = array
+      })
+    },
+    formatData (array) {
+      array.forEach(item => {
+        if (!item.children) {
+          item.children = []
+        } else {
+          this.formatData(item.children)
+        }
+      })
+    },
+    // 表单提交
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          if (values.table) {
+            delete values.table
+            // 普通数据表
+            if (values.dictType === 'general_table') {
+              if (this.targetTable.length === 0) {
+                this.targetTable = this.data.setting.table
+              }
+              // values.setting.targetTable = [...this.targetTable]
+              values.setting.targetTable = {
+                module: this.targetTable[0],
+                tableId: this.targetTable[1]
+              }
+              values.setting.nameField = values.setting.nameField[0] || ''
+              values.setting.numberField = values.setting.numberField[0] || ''
+              values.setting.parentNumberField = values.setting.parentNumberField[0] || ''
+            }
+            // 分组数据表
+            if (values.dictType === 'grouping_table') {
+              if (this.targetTable.length === 0) {
+                this.targetTable = this.data.setting.table
+              }
+              values.setting.targetTable = {
+                module: this.targetTable[0],
+                tableId: this.targetTable[1]
+              }
+              if (values.setting.groupFields) {
+                const groupFields = []
+                for (const i in values.setting.groupFields) {
+                  groupFields.push(values.setting.groupFields[i])
+                }
+                values.setting.groupFields = groupFields
+              }
+            }
+            values.setting.type = values.dictType
+          }
+          values.accessLevel = values.accessLevel ? values.accessLevel : this.data.accessLevel
+          if (this.action === 'edit') {
+            values.id = this.id
+          }
+          this.loading = true
+          this.axios({
+            url: this.url,
+            data: values
+          }).then((res) => {
+            this.loading = false
+            if (res.code === 0) {
+              this.$emit('ok')
+              this.visible = false
+              this.$message.success(res.message)
+              this.form.resetFields()
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    },
+    addGroupFile () {
+      this.groupFields.push({
+        key: new Date().valueOf(),
+        value: undefined
+      })
+    },
+    // 分组字段数据源过滤，排除已被选择的字段
+    filterField (fieldItem, item) {
+      const fieldNames = this.form.getFieldValue('setting[groupFields]')
+      let flag = true
+      for (const i in fieldNames) {
+        if (fieldNames[i] === fieldItem.value && i !== String(item.key)) {
+          flag = false
+        }
+      }
+      return flag
+    }
+  }
+}
+</script>

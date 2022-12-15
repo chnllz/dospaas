@@ -1,0 +1,373 @@
+<template>
+  <div>
+    <a-tabs v-model="tbKey" size="small" type="card" @change="changeTab">
+      <a-tab-pane key="info" :tab="$t('报表信息')">
+        <a-spin :spinning="infoLoading" style="width: 100%; height: 100px">
+          <a-form>
+            <a-form-item
+              v-for="(item, index) of tableViceData"
+              :key="index"
+              :labelCol="{ span: 4 }"
+              :wrapperCol="{ span: 20 }"
+              :label="item.name"
+            >
+              {{ item.value }}
+            </a-form-item>
+          </a-form>
+        </a-spin>
+      </a-tab-pane>
+      <a-tab-pane v-for="item in config.tab" :key="item.key" :tab="$t(item.name)">
+        <a-button type="primary" style="margin-bottom: 8px" @click="handleExport('', tbKey)">{{ $t('导出') }}</a-button>
+        <template v-if="item.key !== 'queueCallDeatil'">
+          <a-table
+            rowKey="key"
+            :columns="item.head"
+            :data-source="item.tablesData"
+            size="small"
+            :expandedRowKeys="expandedFirstRowKeys"
+            :pagination="false"
+            :bordered="true"
+            @expand="expand"
+          >
+            <template slot="exportDetails" slot-scope="text, record1">
+              <a href="#" @click="handleExport(record1)">{{ $t('导出') }}</a>
+            </template>
+            <template slot="record" slot-scope="text1, recd">
+              <a href="#" style="margin-right: 10px" @click="handlePlay(recd)">
+                <a-icon type="play-circle" />
+              </a>
+              <a href="#" style="margin-right: 10px" @click="handleDownload(recd)">
+                <a-icon type="download" />
+              </a>
+            </template>
+            <template v-if="expandedFirstRowKeys[0] === text.key" slot="expandedRowRender" slot-scope="text">
+              <s-table
+                v-if="currentKey === 'answered'"
+                slot="expandedRowRender"
+                style="width: 100%"
+                rowKey="id"
+                :columns="item.headChild"
+                :data="loadData"
+                size="small"
+                :bordered="false"
+              >
+                <template slot="record" slot-scope="text1, recd">
+                  <a href="#" style="margin-right: 10px" @click="handlePlay(recd)">
+                    <a-icon type="play-circle" />
+                  </a>
+                  <a href="#" style="margin-right: 10px" @click="handleDownload(recd)">
+                    <a-icon type="download" />
+                  </a>
+                </template>
+              </s-table>
+            </template>
+          </a-table>
+        </template>
+        <template v-else>
+          <s-table
+            v-if="currentKey === 'answered'"
+            rowKey="id"
+            :columns="item.head"
+            :data="loadDataDetail"
+            :expandedRowKeys="expandedRowKeys"
+            size="small"
+            :bordered="true"
+            @expand="expandDetail"
+          >
+            <template slot="exportDetails" slot-scope="text, record1">
+              <a href="#" @click="handleExport(record1)">导出</a>
+            </template>
+            <template slot="record" slot-scope="text1, recd">
+              <a href="#" style="margin-right: 10px" @click="handlePlay(recd)">
+                <a-icon type="play-circle" />
+              </a>
+              <a href="#" style="margin-right: 10px" @click="handleDownload(recd)">
+                <a-icon type="download" />
+              </a>
+            </template>
+            <template v-if="expandedRowKeys[0] === text.id" slot="expandedRowRender" slot-scope="text">
+              <s-table
+                ref="detail"
+                style="width: 100%"
+                rowKey="id"
+                :columns="item.headChild"
+                :data="loadDatachild"
+                size="small"
+                :bordered="false"
+              >
+                <template slot="record" slot-scope="text1, recd">
+                  <a href="#" style="margin-right: 10px" @click="handlePlay(recd)">
+                    <a-icon type="play-circle" />
+                  </a>
+                  <a href="#" style="margin-right: 10px" @click="handleDownload(recd)">
+                    <a-icon type="download" />
+                  </a>
+                </template>
+              </s-table>
+            </template>
+          </s-table>
+        </template>
+      </a-tab-pane>
+    </a-tabs>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import * as info from './config'
+export default {
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    // 搜索条件
+    searchData: {
+      type: Object,
+      default: () => { }
+    },
+    currentKey: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    return {
+      // 子标签页双向绑定key
+      tbKey: 'info',
+      infoLoading: false,
+      // 后台返回的表格数据
+      allData: {},
+      // 报表信息
+      tableViceData: [],
+      config: {},
+      tableKey: {
+        qname: '队列'
+      },
+      record: {},
+      requestData: {},
+      audioUrl: '',
+      detailRecord: {},
+      expandedRowKeys: [],
+      expandedFirstRowKeys: [],
+      changeFlag: false
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  watch: {
+    searchData: {
+      handler () {
+        this.changeFlag = true
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  created () {
+    this.config = info.config.answered
+    this.requestUrl = '/queuestat/index/getdata'
+  },
+  methods: {
+    // 初始化请求数据
+    init () {
+      if (this.changeFlag) {
+        this.infoLoading = true
+        this.axios({
+          url: '/callcenter/queuestat/answered',
+          data: {
+            type: 'income_detail',
+            queue: this.searchData.queue,
+            agent: this.searchData.agent,
+            startTime: this.searchData.startTime,
+            endTime: this.searchData.endTime,
+            pageNo: 1,
+            pageSize: 20,
+            issession: 1
+          }
+        }).then(res => {
+          if (res.code === 0) {
+            this.infoLoading = false
+            const data = res.result.statementDataVO
+            const keyObj = this.config.reportInfo
+            const arr = []
+            for (const key in keyObj) {
+              if (key === 'periods') {
+                data[key] = data[key] + this.$t('天')
+              }
+              if (keyObj[key]) {
+                const obj = {}
+                obj.name = [keyObj[key]]
+                if (key === 'division') {
+                  obj.value = res.result.callDataVO.totalInboundTimes + '/' + data.totalTimes
+                } else if (key === 'allPercent') {
+                  let num = res.result.callDataVO.totalInboundTimes ? data.totalTimes / res.result.callDataVO.totalInboundTimes * 100 : 0
+                  num = num.toFixed(2)
+                  obj.value = num + '%'
+                } else {
+                  obj.value = data[key]
+                }
+                arr.push(obj)
+              }
+            }
+            this.tableViceData = arr
+            this.config.tab.forEach(item => {
+              item.tablesData = res.result.detailedDataVO[item.key]
+            })
+            this.changeFlag = false
+          }
+        })
+      }
+    },
+    changeTab (e) {
+      this.expandedFirstRowKeys = []
+      this.expandedRowKeys = []
+    },
+    expand (expanded, record) {
+      this.record = record
+      this.requestData = {
+        type: this.tbKey,
+        queue: this.searchData.queue,
+        agent: this.searchData.agent,
+        startTime: this.searchData.startTime,
+        endTime: this.searchData.endTime,
+        searchdata: record.key,
+        issession: 1
+      }
+      if (expanded) {
+        this.expandedFirstRowKeys = [record.key]
+      } else {
+        this.expandedFirstRowKeys = []
+      }
+    },
+    handleExport (record, key, alias) {
+      const data = {
+        type: this.tbKey,
+        queue: this.searchData.queue,
+        agent: this.searchData.agent,
+        startTime: this.searchData.startTime,
+        endTime: this.searchData.endTime,
+        searchdata: record.key,
+        issession: 1
+      }
+      const arr = ['queueThroughTheStatisticalVO', 'agentThroughTheStatisticalVO', 'queueWaitLevelVO', 'durationLevelVO', 'queueCauseHangupVO', 'queueCallDeatil']
+      const arrSub = ['queueConnectStatistics', 'agentConnectStatistics', 'queueWaitLevel', 'callDurationLevel', 'queueHangupCase', 'queueCallMinute']
+      const index = arr.findIndex(item => this.tbKey === item)
+      if (key) {
+        this.$refs.generalExport.show({
+          title: this.$t('导出'),
+          className: 'ExportQueueConnectTask',
+          setMenuName: true,
+          parameter: {
+            condition: {
+              req: data,
+              type: arrSub[index]
+            }
+          }
+        })
+      } else {
+        this.$refs.generalExport.show({
+          title: this.$t('导出'),
+          className: 'ExportQueueConnectTask',
+          setMenuName: true,
+          parameter: {
+            condition: {
+              req: data,
+              condition: this.tbKey === 'queueThroughTheStatisticalVO' ? record.qname : this.tbKey === 'agentThroughTheStatisticalVO' ? record.agent : this.tbKey === 'queueCauseHangupVO' ? record.causeHangup : record.key,
+              type: `${arrSub[index]}Detail`
+            }
+          }
+        })
+      }
+    },
+    urlEncode (param, key, encode) {
+      if (param == null) return ''
+      var paramStr = ''
+      var t = typeof (param)
+      if (t === 'string' || t === 'number' || t === 'boolean') {
+        paramStr += '&' + key + '=' + ((encode == null || encode) ? encodeURIComponent(param) : param)
+      } else {
+        for (var i in param) {
+          var k = key == null ? i : key + (param instanceof Array ? '[' + i + ']' : '.' + i)
+          paramStr += this.urlEncode(param[i], k, encode)
+        }
+      }
+      return paramStr
+    },
+    handlePlay (record) {
+      if (record.soundRecording) {
+        const sourceUrl = `${this.$store.state.env.VUE_APP_API_BASE_URL}callcenter/api/recordDownload?recordingFile=${record.soundRecording}`
+        this.$setSetting({ audioPlayData: { visible: true, sourceUrl: sourceUrl } })
+      } else {
+        this.$message.info('录音文件为空')
+      }
+    },
+    handleDownload (record) {
+      if (record.soundRecording) {
+        window.open(`${this.$store.state.env.VUE_APP_API_BASE_URL}callcenter/api/recordDownload?recordingFile=${record.soundRecording}`)
+      } else {
+        this.$message.info('录音文件为空')
+      }
+    },
+    loadData (parameter) {
+      return this.axios({
+        data: Object.assign(this.requestData, parameter, {
+          queue: this.searchData.queue,
+          agent: this.searchData.agent,
+          startTime: this.searchData.startTime,
+          endTime: this.searchData.endTime,
+          issession: 1
+        }),
+        url: '/callcenter/queuestat/getdata'
+      }).then((res) => {
+        return res.result
+      })
+    },
+    loadDataDetail (parameter) {
+      this.expandedRowKeys = []
+      return this.axios({
+        data: Object.assign(parameter, {
+          type: 'income_detail',
+          queue: this.searchData.queue,
+          agent: this.searchData.agent,
+          startTime: this.searchData.startTime,
+          endTime: this.searchData.endTime,
+          issession: 1
+        }),
+        url: '/callcenter/queuestat/getdata'
+      }).then((res) => {
+        res.result.data.forEach(item => {
+          item.key = item.id
+        })
+        return res.result
+      })
+    },
+    expandDetail (expanded, record) {
+      if (expanded) {
+        if (this.detailRecord.uniqueid !== record.uniqueid) {
+          this.detailRecord = record
+        }
+        this.expandedRowKeys = [record.key]
+      } else {
+        this.expandedRowKeys = []
+      }
+    },
+    loadDatachild (parameter) {
+      return this.axios({
+        url: '/callcenter/queuestat/getlinedata',
+        data: Object.assign(parameter, {
+          type: 'income_detail',
+          queue: this.searchData.queue,
+          agent: this.searchData.agent,
+          startTime: this.searchData.startTime,
+          endTime: this.searchData.endTime,
+          issession: 1,
+          uniqueid: this.detailRecord.uniqueid
+        })
+      }).then(res => {
+        return res.result
+      })
+    }
+  }
+}
+</script>

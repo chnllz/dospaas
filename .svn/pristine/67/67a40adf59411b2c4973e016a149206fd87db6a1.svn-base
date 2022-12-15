@@ -1,0 +1,247 @@
+<template>
+  <div>
+    <a-card size="small" class="table-search" :bordered="false">
+      <a-form :layout="advanced ? 'vertical' : 'inline'" :class="advanced ? 'advanced' : 'normal'">
+        <a-space>
+          <a-button icon="search" type="primary" @click="seatSearch" @keyup.enter="seatSearch">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            icon="sync"
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+        </a-space>
+        <a-row :gutter="16">
+          <a-col :span="6">
+            <a-form-item :label="$t('部门')">
+              <a-select v-model.trim="queryParam.department" :allowClear="true" show-search>
+                <a-select-option v-for="(item, key) in department" :key="key" :value="item.value">
+                  {{ item.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('坐席')">
+              <a-select v-model.trim="queryParam.agent" :allowClear="true" show-search>
+                <a-select-option v-for="(item, key) in agent" :key="key" :value="item.value">
+                  {{ item.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="9">
+            <a-form-item :label="$t('评分时间')">
+              <a-range-picker v-model="searchDate" showTime style="width: 100%" @change="getSearchDate" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-form>
+    </a-card>
+    <a-card size="small" :bordered="false">
+      <div class="table-operator">
+        <a-button icon="download" @click="handleExport()">{{ $t('导出') }}</a-button>
+      </div>
+      <s-table
+        ref="table"
+        size="small"
+        rowKey="id"
+        :columns="columns"
+        :data="loadDataTable"
+        :sorter="{ field: 'id', order: 'descend' }"
+      ></s-table>
+    </a-card>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+var Getdate = function () {
+  var now = new Date() // 当前日期
+  var nowDayOfWeek = now.getDay() // 今天本周的第几天
+  var nowDay = now.getDate() // 当前日
+  var nowMonth = now.getMonth() // 当前月
+  var nowYear = now.getYear() // 当前年
+  nowYear += (nowYear < 2000) ? 1900 : 0
+  // 格式化日期：yyyy-MM-dd
+  function formatDate (date) {
+    var myyear = date.getFullYear()
+    var mymonth = date.getMonth() + 1
+    var myweekday = date.getDate()
+    if (mymonth < 10) {
+      mymonth = '0' + mymonth
+    }
+    if (myweekday < 10) {
+      myweekday = '0' + myweekday
+    }
+    return (myyear + '-' + mymonth + '-' + myweekday)
+  }
+
+  // 获得某月的天数
+  function getMonthDays (myMonth) {
+    var monthStartDate = new Date(nowYear, myMonth, 1)
+    var monthEndDate = new Date(nowYear, myMonth + 1, 1)
+    var days = (monthEndDate - monthStartDate) / (1000 * 60 * 60 * 24)
+    return days
+  }
+
+  // 获得本周的开端日期
+  this.getWeekStartDate = function () {
+    var weekStartDate
+    if (nowDayOfWeek === 0) {
+      weekStartDate = new Date(nowYear, nowMonth, nowDay - nowDayOfWeek + 1 - 7)
+    } else {
+      weekStartDate = new Date(nowYear, nowMonth, nowDay - nowDayOfWeek + 1)
+    }
+    return formatDate(weekStartDate)
+  }
+  // 获得本周的停止日期
+  this.getWeekEndDate = function () {
+    var weekEndDate
+    if (nowDayOfWeek === 0) {
+      weekEndDate = new Date(nowYear, nowMonth, nowDay + (6 - nowDayOfWeek) + 1 - 7)
+    } else {
+      weekEndDate = new Date(nowYear, nowMonth, nowDay + (6 - nowDayOfWeek) + 1)
+    }
+    return formatDate(weekEndDate)
+  }
+  // 获得本月的开端日期
+  this.getMonthStartDate = function () {
+    var monthStartDate = new Date(nowYear, nowMonth, 1)
+    return formatDate(monthStartDate)
+  }
+  // 获得本月的停止日期
+  this.getMonthEndDate = function () {
+    var monthEndDate = new Date(nowYear, nowMonth, getMonthDays(nowMonth))
+    return formatDate(monthEndDate)
+  }
+}
+export default {
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      advanced: false,
+      loading: false,
+      searchDate: null,
+      // 搜索参数
+      queryParam: {
+        department: undefined,
+        agent: undefined
+      },
+      department: [],
+      agent: [],
+      begin_time: '',
+      endTime: '',
+      config: {
+        data: {}
+      },
+      // 表头
+      columns: [{
+        title: this.$t('部门'),
+        dataIndex: 'department_name',
+        sorter: true
+      }, {
+        title: this.$t('坐席'),
+        dataIndex: 'agent',
+        sorter: true
+      }, {
+        title: this.$t('已质检总数'),
+        dataIndex: 'quality_number',
+        sorter: true
+      }, {
+        title: this.$t('合格数'),
+        dataIndex: 'pass_number',
+        sorter: true
+      }, {
+        title: this.$t('不合格数'),
+        dataIndex: 'nopass_number',
+        sorter: true
+      }, {
+        title: this.$t('无效数'),
+        dataIndex: 'invalid_number',
+        sorter: true
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      }
+    }
+  },
+  mounted () {
+    this.gettime()
+    this.getDepartment()
+    this.getUserName()
+  },
+  methods: {
+    // 数据渲染
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/quality/statistics/agent',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        for (const i in res.result.data) {
+          res.result.data[i]['id'] = i
+        }
+        return res.result
+      })
+    },
+    // 获取用户信息
+    getUserName () {
+      return this.axios({
+        url: '/quality/data/getUsername'
+      }).then(res => {
+        this.agent = res.result.data
+        return res.result
+      })
+    },
+    // 搜索
+    seatSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 获取部门信息
+    getDepartment () {
+      return this.axios({
+        url: '/quality/statistics/getDepartment'
+      }).then(res => {
+        this.department = res.result.data
+      })
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict'
+      })
+    },
+    // 搜索时间
+    getSearchDate (date, dateString) {
+      this.queryParam.begin_time = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    // 获取当前月1号至今时间
+    gettime () {
+      const sTime = '00:00:00'
+      const eTime = '23:59:59'
+      var yestime = new Date()
+      yestime.setTime(yestime.getTime())
+      var yesterday = yestime.getFullYear() + '-' + (yestime.getMonth() + 1) + '-' + yestime.getDate()
+      this.begin_time = yesterday + ' ' + sTime
+      const mydate2 = new Getdate()
+      this.begin_time = mydate2.getMonthStartDate() + ' ' + sTime
+      this.endTime = yesterday + ' ' + eTime
+      this.searchDate = [this.begin_time ? this.moment(this.begin_time, 'YYYY-MM-DD HH:mm:ss') : '', this.endTime ? this.moment(this.endTime, 'YYYY-MM-DD HH:mm:ss') : '']
+    }
+  }
+}
+</script>

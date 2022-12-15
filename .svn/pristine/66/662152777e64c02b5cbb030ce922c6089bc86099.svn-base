@@ -1,0 +1,669 @@
+<template>
+  <div>
+    <a-form :form="cardForm">
+      <a-space direction="vertical" style="width: 100%">
+        <a-card size="small" :title="$t('排队位置提示语')" :bodyStyle="bodyStyle">
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('localTips')">{{ $t('添加') }}</a-button>
+            <a-button icon="sort-ascending" @click="handleSort('localTips')">{{ $t('排序') }}</a-button>
+          </div>
+          <a-table
+            ref="localTipsLists"
+            rowKey="id"
+            :columns="localTipsColumns"
+            :dataSource="localTipsLists"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'localTips')">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'localTips')">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+          </a-table>
+          <a-form-item
+            style="margin-top: 8px"
+            :label="$t('当排队位置≥50时，排队位置提示语统一设置为')"
+            :labelCol="{ style: 'width: 300px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 300px); display: inline-block' }"
+          >
+            <a-input
+              v-decorator="[
+                'queueWaitTips',
+                {
+                  initialValue: data.queueWaitTips || $t('当前排队人数较多，请耐心等待'),
+                  rules: [
+                    { required: true, message: $t('请输入排队位置提示语') },
+                    { min: 5, message: $t('请输入至少5个字符') },
+                    { max: 50, message: $t('请输入少于50个字符') }
+                  ]
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('排队提示语')" :bodyStyle="bodyStyle">
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('queueTips')">{{ $t('添加') }}</a-button>
+            <a-button icon="sort-ascending" @click="handleSort('queueTips')">{{ $t('排序') }}</a-button>
+          </div>
+          <a-table
+            ref="queueTipsLists"
+            rowKey="id"
+            :columns="queueTipsColumns"
+            :dataSource="queueTipsLists"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'queueTips')">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'queueTips')">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+          </a-table>
+        </a-card>
+        <a-card size="small" :title="$t('排队安抚语')" :bodyStyle="bodyStyle">
+          <a-form-item
+            :label="$t('是否启用')"
+            :labelCol="{ style: 'width: 70px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 70px); display: inline-block' }"
+          >
+            <a-switch
+              v-decorator="['calmEnable', { initialValue: data.calmEnable, valuePropName: 'checked' }]"
+              @change="(e) => (data.calmEnable = e)"
+            />
+          </a-form-item>
+          <template v-if="data.calmEnable">
+            <a-form-item style="margin-bottom: 8px">
+              {{ $t('排队中，访客每发送') }}
+              <a-input-number
+                v-decorator="['calmInterval', { initialValue: data.calmInterval || 2 }]"
+                style="margin: 0px 8px"
+                :min="1"
+                :max="50"
+              />
+              {{ $t('条消息，系统发送1次排队安抚语') }}
+            </a-form-item>
+            <div class="table-operator">
+              <a-button icon="plus" @click="handleAdd('calmTips')">{{ $t('添加') }}</a-button>
+              <a-button icon="sort-ascending" @click="handleSort('calmTips')">{{ $t('排序') }}</a-button>
+            </div>
+            <a-table
+              ref="calmTipsLists"
+              rowKey="id"
+              :columns="calmTipsColumns"
+              :dataSource="calmTipsLists"
+              size="small"
+              :pagination="false"
+            >
+              <div slot="action" slot-scope="text, record, index">
+                <a @click="handleEdit(record, 'calmTips')">{{ $t('编辑') }}</a>
+                <a-divider type="vertical" />
+                <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'calmTips')">
+                  <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+                </a-popconfirm>
+              </div>
+            </a-table>
+          </template>
+        </a-card>
+        <a-card size="small" :title="$t('排队转留言或放弃')" :bodyStyle="bodyStyle">
+          <a-form-item
+            :labelCol="{ style: 'width: 160px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 160px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('排队过多转留言') }}
+              <a-tooltip :title="$t('默认值50，设置范围10~500')"><a-icon type="question-circle" /></a-tooltip>
+            </span>
+            {{ $t('排队人数超过') }}
+            <a-input-number
+              v-decorator="['turnNumber', { initialValue: data.turnNumber || 50 }]"
+              style="margin: 0px 8px"
+              :min="10"
+              :max="500"
+            />
+            {{ $t('时，新进入访客不再进入排队，直接进入留言环节') }}
+          </a-form-item>
+          <a-form-item
+            :label="$t('排队过多转留言提示语')"
+            :labelCol="{ style: 'width: 160px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 160px); display: inline-block' }"
+          >
+            <a-input
+              v-decorator="[
+                'turnManyMessage',
+                {
+                  initialValue:
+                    data.turnManyMessage ||
+                    $t('当前排队人数过多，为了节省您的时间，请留下您的联系方式和遇到的问题，我们将尽快联系您')
+                }
+              ]"
+            />
+          </a-form-item>
+          <a-form-item
+            :labelCol="{ style: 'width: 160px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 160px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('排队主动放弃生成留言') }}
+              <a-tooltip>
+                <template slot="title">
+                  <div>
+                    {{
+                      $t(
+                        '开启后，排队中，因访客离开或主动结束的会话，排队过程中访客发送的全部消息将自动生成留言记录。访客实际并未进入留言，该功能与《留言设置》中的所有设置无关'
+                      )
+                    }}
+                  </div>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch v-decorator="['failTurn', { initialValue: false, valuePropName: 'checked' }]" :disabled="true" />
+          </a-form-item>
+        </a-card>
+        <!-- <a-card size="small" :bodyStyle="bodyStyle">
+          <span slot="title" >
+            {{ $t('访客未发言不请求客服') }}
+          </span>
+          <a-alert
+            :message="$t('启用后，访客进入咨询会触发询前引导语，引导访客说话。访客说话后才会请求客服发起会话，访客没有说话的会话不会进入客服工作台进行接待建议无效会话特别多的企业启用，以提升客服人效')"
+            type="info" />
+          <a-form-item style="margin: 8px 0px;" :label="$t('是否启用')" :labelCol="{style: 'width: 70px; display: inline-block'}" :wrapperCol="{style: 'width: calc(100% - 70px); display: inline-block'}">
+            <a-switch v-decorator="[ 'askEnable', { initialValue: data.askEnable, valuePropName: 'checked' }]"/>
+          </a-form-item>
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('askTips')">{{ $t('添加') }}</a-button>
+            <a-button icon="sort-ascending" @click="handleSort('askTips')">{{ $t('排序') }}</a-button>
+          </div>
+          <a-table
+            ref="askTipsLists"
+            rowKey="id"
+            :columns="askTipsColumns"
+            :dataSource="askTipsLists"
+            size="small"
+            :pagination="false">
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'askTips')">{{ $t('编辑')} }</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index,'askTips')">
+                <a :disabled="record.id ==1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+          </a-table>
+        </a-card> -->
+        <a-card size="small" :title="$t('其他设置')">
+          <a-form-item
+            :label="$t('黑名单提示语')"
+            :labelCol="{ style: 'width: 200px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 200px); display: inline-block' }"
+          >
+            <a-input
+              v-decorator="[
+                'blacklistTips',
+                {
+                  initialValue: data.blacklistTips || $t('当前所有客服都忙，请稍候再试……'),
+                  rules: [{ required: true, message: $t('请输入黑名单提示语') }]
+                }
+              ]"
+              :min="10"
+              :max="500"
+            />
+          </a-form-item>
+          <a-form-item
+            :labelCol="{ style: 'width: 200px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 200px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('排队中转机器人') }}
+              <a-tooltip
+                :title="$t('开启后，访客在排队中可以根据提示转接到机器人服务（不向访客发送机器人欢迎语和常见问题)')"
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="['transRobotTips', { initialValue: false, valuePropName: 'checked' }]"
+              :disabled="true"
+              :checked-children="$t('开')"
+              :un-checked-children="$t('关')"
+            />
+          </a-form-item>
+          <a-form-item
+            :labelCol="{ style: 'width: 200px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 200px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('人工服务时间') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '开启后，转人工服务时会判断技能组的“工作时间设置”，非工作时间发送{非人工服务时间提示语}。技能组没有设置工作时间的，视为24小时提供服务。'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="['worktimeMode', { initialValue: data.worktimeMode, valuePropName: 'checked' }]"
+              :checked-children="$t('开')"
+              :un-checked-children="$t('关')"
+              @change="(e) => (data.worktimeMode = e)"
+            />
+          </a-form-item>
+          <a-form-item
+            v-if="data.worktimeMode"
+            :labelCol="{ style: 'width: 200px; display: inline-block' }"
+            :wrapperCol="{ style: 'width: calc(100% - 200px); display: inline-block' }"
+          >
+            <span slot="label">
+              {{ $t('非人工服务时间留言提示语') }}
+              <a-tooltip
+                :title="$t('如果关闭，则表示人工24小时提供服务，技能组没有设置工作时间的时候也是24小时提供服务')"
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-textarea
+              v-decorator="[
+                'humanUnworkTips',
+                {
+                  initialValue: data.humanUnworkTips || $t('当前为非工作时间，请您在工作时间再次咨询，谢谢谅解。'),
+                  rules: [{ required: true, message: $t('请输入非人工服务时间留言提示语') }]
+                }
+              ]"
+              :autoSize="{ minRows: 4 }"
+            />
+          </a-form-item>
+        </a-card>
+      </a-space>
+    </a-form>
+    <a-button style="margin-top: 16px" type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+    <a-modal
+      :title="config.title"
+      :width="600"
+      :visible="visible"
+      :destroyOnClose="true"
+      :confirmLoading="loading"
+      @ok="modalSubmit"
+      @cancel="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <a-form :form="form">
+          <a-form-item :label="$t('模板名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              v-decorator="[
+                'name',
+                {
+                  initialValue: config.data && config.data.name ? config.data.name : '',
+                  rules: [{ required: true, message: $t('请输入模板名称') }]
+                }
+              ]"
+              :disabled="config.data && config.data.id === 1"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('适用技能组')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-decorator="[
+                'group',
+                {
+                  initialValue: config.data && config.data.group ? config.data.group : undefined,
+                  rules: [{ required: config.data && config.data.id !== 1, message: $t('请选择适用技能组') }]
+                }
+              ]"
+              :disabled="config.data && config.data.id === 1"
+              allowClear
+              mode="multiple"
+              show-search
+              :filter-option="filterOption"
+            >
+              <a-select-option v-for="group in groupList" :key="group.id" :value="group.id">
+                {{ group.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ config.contentTitle }}
+              <a-tooltip v-if="config.type === 'localTips'">
+                <div slot="title">
+                  <div>{{ $t('支持模板变量') }}</div>
+                  <div>{{ $t('${number}：排队位置') }}</div>
+                </div>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-textarea
+              v-decorator="[
+                'content',
+                {
+                  initialValue: config.data && config.data.content ? config.data.content : '',
+                  rules: [{ required: true, message: $t(`请输入${config.contentTitle}`) }]
+                }
+              ]"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-decorator="['remarks', { initialValue: config.data && config.data.remarks ? config.data.remarks : '' }]"
+              :disabled="config.data && config.data.id === 1"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </a-modal>
+    <drag-sort ref="dragSort" @ok="getList" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    DragSort: () => import('@/views/admin/Common/DragSort')
+  },
+  props: {
+    baseAll: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    groupList: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      data: {},
+      bodyStyle: { padding: '10px' },
+      localTipsColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('排队位置提示语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      queueTipsColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('排队提示语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      calmTipsColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('排队安抚语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      askTipsColumns: [{
+        title: this.$t('操作'),
+        width: 100,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('询问引导语'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      localTipsLists: [{ id: 1, name: '默认', group: [], content: '您当前排在${' + 'number}，请耐心等待', remarks: '系统默认文案，不可删除' }],
+      queueTipsLists: [{ id: 1, name: '默认', group: [], content: '您当前正在排队，请先描述您的问题，谢谢', remarks: '系统默认文案，不可删除' }],
+      calmTipsLists: [{ id: 1, name: '默认', group: [], content: '已经收到您的消息了，请耐心等待', remarks: '系统默认文案，不可删除' }],
+      askTipsLists: [{ id: 1, name: '默认', group: [], content: '您遇到什么问题啦？请描述您的问题，帮您找人工~', remarks: '系统默认文案，不可删除' }],
+      form: this.$form.createForm(this),
+      cardForm: this.$form.createForm(this),
+      visible: false,
+      loading: false,
+      config: {},
+      cardType: '',
+      sortListType: ''
+    }
+  },
+  watch: {
+    baseAll: {
+      handler (newVal) {
+        this.data = newVal
+        if (newVal.localTipsLists) {
+          this.localTipsLists = JSON.parse(newVal.localTipsLists)
+        }
+        if (newVal.queueTipsLists) {
+          this.queueTipsLists = JSON.parse(newVal.queueTipsLists)
+        }
+        if (newVal.calmTipsLists) {
+          this.calmTipsLists = JSON.parse(newVal.calmTipsLists)
+        }
+        if (newVal.askTipsLists) {
+          this.askTipsLists = JSON.parse(newVal.askTipsLists)
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    handleAdd (type) {
+      this.cardType = type
+      let contentTitle = ''
+      if (type === 'localTips') {
+        contentTitle = '排队位置提示语'
+      } else if (type === 'queueTips') {
+        contentTitle = '排队提示语'
+      } else if (type === 'calmTips') {
+        contentTitle = '排队安抚语'
+      } else if (type === 'askTips') {
+        contentTitle = '询前引导语'
+      }
+      this.config = {
+        title: this.$t('添加'),
+        type: type,
+        contentTitle: contentTitle,
+        data: {}
+      }
+      this.visible = true
+    },
+    handleEdit (record, type) {
+      this.cardType = type
+      let contentTitle = ''
+      if (type === 'localTips') {
+        contentTitle = '排队位置提示语'
+      } else if (type === 'queueTips') {
+        contentTitle = '排队提示语'
+      } else if (type === 'calmTips') {
+        contentTitle = '排队安抚语'
+      } else if (type === 'askTips') {
+        contentTitle = '询前引导语'
+      }
+      this.config = {
+        title: this.$t('编辑'),
+        type: type,
+        contentTitle: contentTitle,
+        data: record
+      }
+      this.visible = true
+    },
+    handleDelete (index, type) {
+      this[type + 'Lists'].splice(index, 1)
+    },
+    handleSort (type) {
+      this.cardType = type
+      this.$refs.dragSort.show({
+        sortData: this[type + 'Lists'],
+        width: 600,
+        placement: 'right'
+      })
+    },
+    getList (data) {
+      this[this.cardType + 'Lists'] = data
+    },
+    filterOption (input, option) {
+      return (
+        option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      )
+    },
+    modalSubmit () {
+      this.form.validateFields((error, values) => {
+        if (!error) {
+          if (this.config.data && this.config.data.id) {
+            values.id = this.config.data.id
+            this[this.cardType + 'Lists'].splice(this[this.cardType + 'Lists'].findIndex(item => item.id === this.config.data.id), 1, values)
+          } else {
+            values.id = new Date().valueOf()
+            this[this.cardType + 'Lists'].push(values)
+          }
+          this.$message.success(this.$t('操作成功'))
+          this.visible = false
+        }
+      })
+    },
+    handleSubmit () {
+      this.cardForm.validateFields((error, values) => {
+        if (!error) {
+          this.$emit('ok', true)
+          values.localTipsLists = JSON.stringify(this.localTipsLists)
+          values.queueTipsLists = JSON.stringify(this.queueTipsLists)
+          values.calmTipsLists = JSON.stringify(this.calmTipsLists)
+          values.askTipsLists = JSON.stringify(this.askTipsLists)
+          this.axios({
+            url: '/chat/setting/save',
+            data: { action: 'submit', info: values }
+          }).then(res => {
+            this.$emit('ok', false)
+            if (res.code === 0) {
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

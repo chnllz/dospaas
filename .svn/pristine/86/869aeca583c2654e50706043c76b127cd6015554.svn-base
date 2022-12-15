@@ -1,0 +1,1493 @@
+<template>
+  <!-- 表单组件 -->
+  <a-spin :spinning="pageLoading">
+    <a-form :form="form" :colon="false">
+      <buildBlocks
+        v-for="(item, keys) in template"
+        ref="buildBlocks"
+        :key="item.key"
+        :disabled="item.disabled"
+        :dynamicData="{}"
+        :record.sync="template[keys]"
+        :indexs="keys"
+        :formConfig="item.formConfig"
+        :config="{}"
+        :tableName="tableName"
+        :viewThis="viewThis"
+        :formdata="formdata"
+        :params="params"
+        :parentParams="parentParams"
+        :formThis="formThis"
+        :templateObj="templateObj"
+        :fieldRule="fieldRule"
+        :handleWayData="handleWayData"
+        :linkData="linkData"
+        :templateOther="templateOther"
+        @templateRule="templateRule"
+        @recoveryRule="recoveryRule"
+        @give="giveData"
+        @changeTem="changeTem"
+        @sendEvent="sendEvent"
+        @wayRule="wayRule"
+        @resetTem="resetTem"
+        @sentLinkData="sentLinkData"
+        @getRuleAlias="getRuleAlias"
+        @cardAdd="
+          (data, index) => {
+            template.splice(index + 1, 0, data)
+          }
+        "
+        @cardDel="
+          (index) => {
+            template.splice(index, 1)
+          }
+        "
+      />
+      <a-row v-if="params.page === 'workflow' && parentParams.viewType !== 'view' && !workExist && num > 0">
+        <h3 style="display: flex; align-items: center; margin-top: 4px">
+          <tag-icon />
+          <span style="padding-left: 5px">{{ $t('流程办理') }}</span>
+        </h3>
+        <a-card size="small">
+          <a-form-item
+            :label="$t('办理方式')"
+            :labelCol="
+              parentParams.labelWidth && parentParams.labelWidth !== '100'
+                ? { style: `width: ${parentParams.labelWidth}px; display: inline-block` }
+                : labelCol
+            "
+            :wrapperCol="
+              parentParams.labelWidth && parentParams.labelWidth !== '100'
+                ? { style: `width: calc(100% - ${parentParams.labelWidth}px); display: inline-block` }
+                : wrapperCol
+            "
+          >
+            <a-radio-group
+              v-decorator="[
+                'handleWay',
+                { initialValue: defaultWay, rules: [{ required: true, message: $t('请选择办理方式') }] }
+              ]"
+            >
+              <a-radio
+                v-for="(item, index) in params.handleWayData"
+                v-show="item.onOff && (item.display === 'v' || !item.display)"
+                :key="index"
+                :value="item.alias"
+                :checked="item.checked === '1'"
+                @change="handleWayChange"
+              >
+                {{ $t(item.way) }}
+              </a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item
+            v-if="params.remarksRule !== 'hidden' && !workRemarkExist"
+            :labelCol="
+              parentParams.labelWidth && parentParams.labelWidth !== '100'
+                ? { style: `width: ${parentParams.labelWidth}px; display: inline-block` }
+                : labelCol
+            "
+            :wrapperCol="
+              parentParams.labelWidth && parentParams.labelWidth !== '100'
+                ? { style: `width: calc(100% - ${parentParams.labelWidth}px); display: inline-block` }
+                : wrapperCol
+            "
+            :label="$t('办理备注')"
+          >
+            <a-textarea
+              v-decorator="[
+                'handleRemarks',
+                {
+                  initialValue: handleRemarks,
+                  rules: [
+                    { required: params.remarksRule === 'show_allow' ? true : false, message: $t('办理备注不能为空') }
+                  ]
+                }
+              ]"
+              :autoSize="{
+                minRows: params.remarksMinRows || 4,
+                maxRows: params.remarksMaxRows || params.remarksMinRows
+              }"
+            />
+          </a-form-item>
+        </a-card>
+      </a-row>
+      <a-row
+        v-if="
+          params.remarksRule !== 'hidden' &&
+          !workRemarkExist &&
+          workExist &&
+          params.page === 'workflow' &&
+          parentParams.viewType !== 'view' &&
+          num > 1
+        "
+      >
+        <a-form-item
+          :labelCol="
+            parentParams.labelWidth && parentParams.labelWidth !== '100'
+              ? { style: `width: ${parentParams.labelWidth}px; display: inline-block` }
+              : labelCol
+          "
+          :wrapperCol="
+            parentParams.labelWidth && parentParams.labelWidth !== '100'
+              ? { style: `width: calc(100% - ${parentParams.labelWidth}px); display: inline-block` }
+              : wrapperCol
+          "
+          :label="$t('办理备注')"
+        >
+          <a-textarea
+            v-decorator="[
+              'handleRemarks',
+              {
+                initialValue: handleRemarks,
+                rules: [{ required: params.remarksRule === 'show_allow', message: $t('办理备注不能为空') }]
+              }
+            ]"
+            :autoSize="{ minRows: params.remarksMinRows || 4, maxRows: params.remarksMaxRows || params.remarksMinRows }"
+          />
+        </a-form-item>
+      </a-row>
+    </a-form>
+    <!-- 自定义引入组件 -->
+    <user-table-components ref="userTableComponents" />
+  </a-spin>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import moment from 'moment'
+import UserTableComponents from './UserTableComponents'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    buildBlocks: () => import('./UserTableFormBuild'),
+    UserTableComponents
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {
+          tableName: '',
+          parentParams: {}, // 父级的params
+          template: [],
+          fileList: [],
+          page: '', // 传递来的页面，表单视图为'user', WorkflowHandleForm的页面可以传空值也可以传其他
+          handleWayData: [], // WorkflowHandleForm的waydata
+          templateOther: [],
+          remarksRule: '', // 办理方式show_no_allow可见选填，show_allow可见必填 hidden隐藏
+          remarksMaxRows: 4, // 办理备注 文本框行高
+          remarksMinRows: 1
+        }
+      },
+      required: true
+    },
+    formThis: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      action: 'edit',
+      form: this.$form.createForm(this),
+      labelCol: { style: 'width: 100px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 100px); display: inline-block' },
+      viewThis: this,
+      tableName: '',
+      template: [],
+      viewData: {},
+      // 用于定制开发作数据交换时使用，自定义组件时使用parent.$set(parent.data, 'mydata', 'hello')
+      linkData: {}, // 用于数据联动
+      linkDataEffect: {}, // 数据联动
+      copyAlias: [],
+      handleWayData: [],
+      handleFormRules: [],
+      handleWayDataOther: [],
+      templateObj: {},
+      templateOtherObj: {},
+      templateOther: [], // 用于恢复template数据
+      pageLoading: false,
+      values: {},
+      defaultWay: '',
+      handleRemarks: '',
+      alias: '', // 鼠标进入的字段
+      type: '', // 鼠标进入的字段的类型
+      actions: new Map([[
+        '', function (value, inputValue) {
+          return true
+        }], [
+        'contain', function (value, inputValue, allValue, all) {
+          if (all) {
+            if (all.indexOf(value) !== -1 && inputValue) {
+              return true
+            } else if (all.indexOf(value) === -1) {
+              return false
+            }
+          } else if (!inputValue || (inputValue && inputValue.indexOf(value) === -1)) {
+            return false
+          } else if (inputValue && inputValue.indexOf(value) !== -1) {
+            return true
+          }
+        }], [
+        'nc', function (value, inputValue, allValue, all) {
+          if (all) {
+            if (all.indexOf(allValue) === -1) {
+              return true
+            } else if (all.indexOf(allValue) !== -1) {
+              return false
+            }
+          } else if (inputValue.indexOf(value) !== -1) {
+            return false
+          } else if (inputValue.indexOf(value) === -1) {
+            return true
+          }
+        }], [
+        'equal', function (value, inputValue) {
+          return inputValue === value
+        }], [
+        'great', function (value, inputValue) {
+          return inputValue > value
+        }], [
+        'ne', function (value, inputValue) {
+          return inputValue && inputValue !== value
+        }], [
+        'lt', function (value, inputValue) {
+          return inputValue < value
+        }], [
+        'ge', function (value, inputValue) {
+          return inputValue > value || inputValue === value
+        }], [
+        'le', function (value, inputValue) {
+          return inputValue < value || inputValue === value
+        }], [
+        'bw', function (value, inputValue) {
+          return inputValue.indexOf(value) === 0
+        }], [
+        'ew', function (value, inputValue) {
+          const len = value.length
+          return inputValue.slice(-len) === value
+        }], [
+        'em', function (value, inputValue) {
+          return inputValue === null || inputValue === undefined || (Object.prototype.toString.call(inputValue) === '[object Array]' && inputValue.length === 0)
+        }], [
+        'nem', function (value, inputValue) {
+          return inputValue !== null || inputValue !== undefined || (Object.prototype.toString.call(inputValue) === '[object Array]' && inputValue.length > 0)
+        }]]),
+      data: [],
+      addressValue: {},
+      cascadeAllvalue: {}, // 级联选择allValue存储
+      workExist: false, // 判断表单视图中是否有配置办理流程
+      workRemarkExist: false, // 判断表单视图中是否有配置办理方式备注
+      cardKey: '',
+      aliasKey: '',
+      wayRuleAlias: [], // 转部门字段
+      templateAll: [],
+      formdata: {}, // 表单元素
+      fieldRule: [],
+      num: 0, // 初始化进入
+      defaultLinkData: {}, // 默认值关联数据调整
+      defaultLinkDataEffect: {},
+      debounceTimer: null,
+      nowHandleWay: ''// 当前选中的办理方式
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo', 'setting'])
+  },
+  watch: {
+    params: {
+      handler (newValue) {
+        const val = newValue
+        this.action = val.parentParams.action
+        this.tableName = val.tableName
+        this.template = newValue.template
+        this.templateOther = []
+        this.workExist = false
+        this.workRemarkExist = false
+        // const gridData = [{
+        //   'type': 'grid',
+        //   'label': '栅格布局',
+        //   'columns': [],
+        //   'options': {
+        //     'gutter': 5
+        //   },
+        //   'key': 'grid' + new Date().getTime()
+        // }]
+        // newValue.template.forEach(item => {
+        //   if (item.column) {
+        //     const items = []
+        //     items.push(item)
+        //     gridData[0].columns.push({
+        //       'span': item.column,
+        //       'list': items
+        //     })
+        //   } else {
+        //     gridData.push(item)
+        //   }
+        // })
+        // this.template = gridData
+        if (this.action === 'add') {
+          this.template = this.filterSubForm(this.template)
+        }
+        this.templateAll = []
+        this.getArray(this.template)
+        this.$nextTick(() => {
+          this.formdata = this.form.getFieldsValue()['record'] || {}
+        })
+        this.fieldRule = val.fieldRule
+        this.getRecoveryArray(JSON.parse(JSON.stringify(val.templateOther)))
+        // 判断办理方式在视图中是否有配置
+        this.templateOther.forEach((item, index) => {
+          if (item.field) {
+            this.templateObj[item.field.alias] = JSON.parse(JSON.stringify(item))
+            this.templateOtherObj[item.field.alias] = JSON.parse(JSON.stringify(item))
+            this.templateObj[item.field.alias].index = index
+            if (item.field.setting && item.field.setting.attribute && item.field.setting.attribute.dataSource === 'linkData') {
+              const obj = {}
+              const defaultValueLink = item.field.setting.form.defaultValueLink || {}
+              for (const key in defaultValueLink) {
+                obj[key] = defaultValueLink[key]
+              }
+              const alias = item.field.alias
+              obj.currentFieldEffect = alias
+              this.linkData[defaultValueLink.currentFieldCause] = obj
+              this.linkDataEffect[alias] = obj
+            }
+            if (item.field.setting.form.defaultTemplate === 'linkData') {
+              const obj = {}
+              const defaultValueLink = item.field.setting.form.defaultValueLink
+              for (const key in defaultValueLink) {
+                obj[key] = defaultValueLink[key]
+              }
+              const alias = item.field.alias
+              obj.currentFieldEffect = alias
+              this.defaultLinkData[defaultValueLink.currentFieldCause] = obj
+              this.defaultLinkDataEffect[alias] = obj
+            }
+          }
+          if (item.type === 'work') {
+            this.workExist = true
+          }
+          if (item.type === 'workRemark') {
+            this.workRemarkExist = true
+          }
+        })
+        const getTemplate = (array) => {
+          array.forEach((item, index) => {
+            if (item.columns) {
+              getTemplate(item.columns)
+            } else if (item.trs) {
+              getTemplate(item.trs)
+            } else if (item.tds) {
+              getTemplate(item.tds)
+            } else if (item.list) {
+              if (item.type === 'card' && item.addShow === '1') {
+                this.$set(this, 'cardKey', item.key)
+                this.$set(this, 'aliasKey', item.aliasKey)
+                if (!item.index) {
+                  item.index = 1
+                }
+              }
+              getTemplate(item.list)
+            } else {
+              if (item.field && item.field.formType === 'address' && item.field) {
+                const address = 'record' + '[' + item.field.alias + ']' + '[address]'
+                this.addressValue[address] = item.field.value
+              }
+              if (this.num < 2) {
+                if (item.field && item.field.value && this.linkData[item.field.alias]) {
+                  this.getLinkData(item.field.alias, item.field.value, 'edit')
+                }
+                if (item.field && item.field.value && this.defaultLinkData[item.field.alias]) {
+                  this.getLinkData(item.field.alias, item.field.value, 'edit', '', 'default')
+                }
+              }
+            }
+          })
+        }
+        getTemplate(this.template)
+        this.parentParams = val.parentParams
+        this.handleWayData = val.handleWayData
+        if (this.handleWayData) {
+          this.handleWayData.forEach(item => { item.display = 'v' })
+        }
+        this.handleFormRules = val.handleFormRules
+        this.defaultWay = ''
+        this.handleRemarks = ''
+        if (val.handleWayData && val.handleFormRules) {
+          val.handleWayData.forEach((item) => {
+            if (parseInt(item.checked) === 1 && item.onOff) {
+              this.defaultWay = item.alias
+              // 初始化执行表单流程规则
+              this.$nextTick(() => {
+                this.handleWayProRule(item.id)
+              })
+              return false
+            }
+          })
+          this.handleWayDataOther = JSON.parse(JSON.stringify(this.handleWayData))
+          // 初始化执行表单方式规则
+          this.handleWayRule()
+        }
+        if (this.fieldRule && this.num < 2) {
+          // 初始化执行表单规则
+          this.handleRule()
+        }
+        this.copyAlias = this.formThis.copyAlias || []
+        this.num++
+      },
+      immediate: true
+    }
+  },
+  inject: {
+    theme: {
+      default: () => {
+        return {
+          data: {
+            params: {}
+          }
+        }
+      }
+    }
+  },
+  mounted () {
+    this.num = 0
+  },
+  methods: {
+    debounce (fn, wait = 1000, immediate = false) {
+      const me = this
+      function debounced (...args) {
+        // 重置计时器
+        if (me.debounceTimer) clearTimeout(me.debounceTimer)
+        // 首次立即执行
+        if (immediate && !me.debounceTimer) {
+          fn.apply(this, ...args)
+          me.debounceTimer = setTimeout(() => {
+            me.debounceTimer = null
+          }, wait)
+
+          return
+        }
+        // 新计时器
+        me.debounceTimer = setTimeout(() => {
+          fn.apply(this, ...args)
+          me.debounceTimer = null
+        }, wait)
+      }
+
+      debounced.cancel = () => {
+        clearTimeout(me.debounceTimer)
+        me.debounceTimer = null
+      }
+
+      return debounced
+    },
+    // 改变表单赋值
+    giveData (obj, addressValue, alias) {
+      if (addressValue) {
+        this.addressValue[alias] = addressValue
+        this.form.setFieldsValue(obj)
+      } else {
+        const oldData = this.form.getFieldsValue()
+        const setObj = {}
+        for (const key in oldData.record) {
+          const name = 'record' + '[' + key + ']'
+          if (obj[key]) {
+            setObj[name] = obj[key]
+          } else if (obj[name]) {
+            setObj[name] = obj[name]
+          }
+        }
+        this.$nextTick(() => {
+          this.form.setFieldsValue(setObj)
+        })
+      }
+    },
+    // 改变表单组件对应内容
+    changeTem (tem) {
+      this.getTemplate(this.template, tem)
+    },
+    getRuleAlias (data) {
+      this.wayRuleAlias = data
+    },
+    getTemplate (array, tem) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.getTemplate(item.columns, tem)
+        } else if (item.trs) {
+          this.getTemplate(item.trs, tem)
+        } else if (item.tds) {
+          this.getTemplate(item.tds, tem)
+        } else if (item.list) {
+          this.getTemplate(item.list, tem)
+        } else {
+          if (item.value === tem.value) {
+            array.splice(index, 1, tem)
+          }
+        }
+      })
+    },
+    changeFieldValue (array, alias, value) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.changeFieldValue(item.columns, alias, value)
+        } else if (item.trs) {
+          this.changeFieldValue(item.trs, alias, value)
+        } else if (item.tds) {
+          this.changeFieldValue(item.tds, alias, value)
+        } else if (item.list) {
+          this.changeFieldValue(item.list, alias, value)
+        } else {
+          if (item.field && item.field.alias === alias) {
+            item.field.value = value
+          }
+        }
+      })
+    },
+    // 表单规则实现
+    templateRule (item) {
+      this.getRule(this.template, item)
+    },
+    getRule (array, eventItem) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.getRule(item.columns, eventItem)
+        } else if (item.trs) {
+          this.getRule(item.trs, eventItem)
+        } else if (item.tds) {
+          this.getRule(item.tds, eventItem)
+        } else if (item.list) {
+          this.getRule(item.list, eventItem)
+        } else {
+          if (item.field && item.field.alias === eventItem.field) {
+            if (eventItem.status === 'changeValue') {
+              const obj = {}
+              const name = 'record' + '[' + eventItem.field + ']'
+              obj[name] = eventItem.changeValue
+              if (eventItem.formType === 'address' || eventItem.formType === 'cascader' || eventItem.formType === 'treeselect') {
+                const getArray = (array) => {
+                  array.forEach((item, index) => {
+                    if (item.columns) {
+                      getArray(item.columns)
+                    } else if (item.trs) {
+                      getArray(item.trs)
+                    } else if (item.tds) {
+                      getArray(item.tds)
+                    } else if (item.list) {
+                      getArray(item.list)
+                    } else {
+                      if (item.field && item.field.alias === eventItem.field) {
+                        if (eventItem.formType === 'address') {
+                          this.form.setFieldsValue(obj)
+                          this.$set(item.field, 'value', { address: eventItem.changeValue, display: 'test' })
+                        } else if (eventItem.formType === 'treeselect') {
+                          if (item.field.setting.attribute.multiple === '1') {
+                            obj[name] = [eventItem.changeValue]
+                          } else {
+                            obj[name] = eventItem.changeValue
+                          }
+                          this.form.setFieldsValue(obj)
+                        } else {
+                          this.form.setFieldsValue(obj)
+                          this.$set(item.field, 'value', { value: eventItem.changeValue })
+                        }
+                      }
+                    }
+                  })
+                }
+                getArray(this.template)
+              } else {
+                this.form.setFieldsValue(obj)
+                this.changeFieldValue(this.template, eventItem.field, eventItem.changeValue)
+              }
+            } else if (eventItem.status === 'optionalRange') {
+              // 单选，下拉，多选，使用
+              if (['radio', 'checkbox', 'combobox'].includes(item.field.formType)) {
+                item.field.option = item.field.option.map(im => {
+                  let choiceOption = eventItem.choiceOption || []
+                  choiceOption = eventItem.choiceOption.map(choiceItem => choiceItem.value)
+                  im.disabled = !choiceOption.includes(im.value)
+                  return im
+                })
+              } else {
+                this.$set(item.field, 'optionalRange', eventItem.choiceOption)
+              }
+            } else if (eventItem.status === 'notOptionalRange') {
+              if (['radio', 'checkbox', 'combobox'].includes(item.field.formType)) {
+                item.field.option = item.field.option.filter(im => {
+                  let choiceOption = eventItem.choiceOption || []
+                  choiceOption = eventItem.choiceOption.map(choiceItem => choiceItem.value)
+                  im.disabled = choiceOption.includes(im.value)
+                  return im
+                })
+              } else {
+                this.$set(item.field, 'notOptionalRange', eventItem.choiceOption)
+              }
+            } else {
+              eventItem.mandatory = eventItem.status === 'hidden' ? false : eventItem.mandatory
+              item.field.setting.attribute.required = eventItem.mandatory === 'true'
+              if (eventItem.titleField) {
+                item.field.name = eventItem.changeTitle
+              }
+              item.fieldRule = eventItem.status
+            }
+          }
+        }
+      })
+    },
+    // 表单规则确认值
+    changeValue (array, tem, myitem) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.changeValue(item.columns, tem, myitem)
+        } else if (item.trs) {
+          this.changeValue(item.trs, tem, myitem)
+        } else if (item.tds) {
+          this.changeValue(item.tds, tem, myitem)
+        } else if (item.list) {
+          this.changeValue(item.list, tem, myitem)
+        } else {
+          let inputValue = ''
+          if (item.field && item.field.alias === tem.field) {
+            inputValue = item.field.value
+            if (item.field && item.field.formType === 'number') {
+              this.$set(myitem, 'value', Number(myitem.value))
+            } else if (item.field && item.field.formType === 'address') {
+              inputValue = item.field.value.address
+            } else if (item.field && item.field.formType === 'cascader') {
+              if (item.field.option && item.field.option[0]) {
+                inputValue = item.field.option[0].fullDictDataNumber
+              }
+            }
+            if (myitem && !myitem.value) {
+              myitem.value = ''
+            }
+            this.$set(myitem, 'flag', this.handleSimple(myitem.include, myitem.value, inputValue, myitem.allValue))
+          }
+        }
+      })
+    },
+    // 表单规则恢复
+    recoveryRule (item) {
+      this.getRecovery(this.template, item)
+    },
+    getRecovery (array, tem) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.getRecovery(item.columns, tem)
+        } else if (item.trs) {
+          this.getRecovery(item.trs, tem)
+        } else if (item.tds) {
+          this.getRecovery(item.tds, tem)
+        } else if (item.list) {
+          this.getRecovery(item.list, tem)
+        } else {
+          if (item.field && tem.indexOf(item.field.alias) === -1) {
+            const obj = this.templateOtherObj[item.field.alias]
+            if (obj) {
+              item.field.setting.attribute.required = obj.field.setting.attribute.required
+              item.fieldRule = obj.fieldRule
+              // item.field.name = obj.field.name
+            }
+          }
+        }
+      })
+    },
+    // 获取所有组件配置的二维数组
+    getArray (array) {
+      array.forEach(item => {
+        if (item.columns) {
+          this.getArray(item.columns)
+        } else if (item.trs) {
+          this.getArray(item.trs)
+        } else if (item.tds) {
+          this.getArray(item.tds)
+        } else if (item.list) {
+          this.getArray(item.list)
+        } else {
+          this.templateAll.push(item)
+        }
+      })
+    },
+    // 获取恢复表单的二维数组
+    getRecoveryArray (array) {
+      array.forEach(item => {
+        if (item.columns) {
+          this.getRecoveryArray(item.columns)
+        } else if (item.trs) {
+          this.getRecoveryArray(item.trs)
+        } else if (item.tds) {
+          this.getRecoveryArray(item.tds)
+        } else if (item.list) {
+          this.getRecoveryArray(item.list)
+        } else {
+          this.templateOther.push(item)
+        }
+      })
+    },
+    // 子表change事件触发
+    sendSubTableChange (record, val) {
+      const attribute = record.attribute
+      if (attribute) {
+        const str = 'return ' + attribute
+        // eslint-disable-next-line no-new-func
+        const func = new Function(str)
+        func()(this, val)
+      }
+    },
+    // 事件触发实现
+    sendEvent (eventName, alias, options1, options2) {
+      this.getEvent(this.template, eventName, alias, options1, options2)
+    },
+    getEvent (array, eventName, alias, options1, options2) {
+      const that = this
+      let attr = ''
+      array.forEach(item => {
+        if (item.columns) {
+          this.getEvent(item.columns, eventName, alias, options1, options2)
+        } else if (item.trs) {
+          this.getEvent(item.trs, eventName, alias, options1, options2)
+        } else if (item.tds) {
+          this.getEvent(item.tds, eventName, alias, options1, options2)
+        } else if (item.list) {
+          this.getEvent(item.list, eventName, alias, options1, options2)
+        } else {
+          if (item.field && item.field.alias === alias) {
+            attr = item.attribute
+            attr = item.attribute ? JSON.parse(attr) : {}
+            if (attr[eventName]) {
+              const str = 'return ' + attr[eventName]
+              // eslint-disable-next-line no-new-func
+              const func = new Function(str)
+              func()(that, options1, options2)
+            }
+          }
+        }
+      })
+    },
+    // 选择办理方式
+    handleWayChange (e) {
+      const value = e.target.value
+      var id = ''
+      this.nowHandleWay = value
+      this.handleWayData.forEach(item => {
+        if (item.alias === value) {
+          id = item.id
+        }
+      })
+      this.handleWayProRule(id)
+    },
+    wayRule (item) {
+      this.getWayRule(this.template, item)
+    },
+    getWayRule (array, tem) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.getWayRule(item.columns, tem)
+        } else if (item.trs) {
+          this.getWayRule(item.trs, tem)
+        } else if (item.tds) {
+          this.getWayRule(item.tds, tem)
+        } else if (item.list) {
+          this.getWayRule(item.list, tem)
+        } else {
+          if (item.field && item.field.alias === tem.field) {
+            this.wayRuleAlias.push(tem.field)
+            this.$nextTick(() => {
+              this.$set(item.field.setting.attribute, 'required', tem.mandatory === 'true')
+              this.$set(item, 'fieldRule', tem.status)
+            })
+          }
+        }
+      })
+    },
+    resetTem (resetTem) {
+      this.getResetTem(this.template, resetTem)
+    },
+    getResetTem (array, resetTem) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.getResetTem(item.columns, resetTem)
+        } else if (item.trs) {
+          this.getResetTem(item.trs, resetTem)
+        } else if (item.tds) {
+          this.getResetTem(item.tds, resetTem)
+        } else if (item.list) {
+          this.getResetTem(item.list, resetTem)
+        } else {
+          if (item.field && resetTem && resetTem.includes(item.field.alias)) {
+            this.templateOther.forEach(otherItem => {
+              if (item.field && otherItem.field && item.field.alias === otherItem.field.alias) {
+                item.fieldRule = otherItem.fieldRule
+                item.field.setting.attribute.required = otherItem.field.setting.attribute.required
+              }
+            })
+          }
+        }
+      })
+    },
+    // 办理方式表单规则
+    handleWayRule () {
+      const that = this
+      this.handleFormRules.forEach((dataItem, dataIndex) => {
+        dataItem.simpleCondition.forEach((item, index) => {
+          item.condition.forEach((myitem, myindex) => {
+            if (item.fieldUser === 'currentUser') {
+              myitem.flag = that.handleUserSimple(this.userInfo.username, myitem.value, item.include)
+            } else if (item.fieldUser === 'currentDepartment') {
+              myitem.flag = that.handleUserSimple(this.userInfo.departmentId, myitem.value, item.include)
+            } else if (item.fieldUser === 'currentRole') {
+              myitem.flag = that.handleUserSimple(this.userInfo.roleId, myitem.value, item.include)
+            } else if (item.fieldUser === 'notSet') {
+              myitem.flag = true
+            } else {
+              this.changeValue(this.template, item, myitem)
+            }
+          })
+          if (item.logic === 'and') {
+            item.flag = item.condition.every((myitem, myindex) => {
+              return myitem.flag
+            })
+          } else if (item.logic === 'or') {
+            item.flag = item.condition.some((myitem, myindex) => {
+              return myitem.flag
+            })
+          }
+        })
+        if (dataItem.logic === 'and') {
+          dataItem.flag = dataItem.simpleCondition.every((item, index) => {
+            return item.flag
+          })
+        } else if (dataItem.logic === 'or') {
+          dataItem.flag = dataItem.simpleCondition.some((item, index) => {
+            return item.flag
+          })
+        }
+        if (dataItem.flag) {
+          dataItem.event.forEach(eventItem => {
+            this.handleWayData.forEach(wayItem => {
+              if (wayItem.alias === eventItem.alias) {
+                wayItem.display = eventItem.status === 'hidden' ? 'h' : 'v'
+              }
+            })
+          })
+        }
+      })
+    },
+    // 办理流程方式配置规则
+    handleWayProRule (value) {
+      this.$set(this, 'wayRuleAlias', [])
+      const formData = this.form.getFieldsValue()['record'] || {}
+      this.handleWayData.forEach(item => {
+        if (item.id === value && this.handleFormRules) {
+          this.handleFormRules.forEach(wayItem => {
+            const simpleFlagArr = []
+            wayItem.simpleCondition.forEach(simItem => {
+              if (simItem.fieldUser === 'way') {
+                simItem.flag = simItem.way === item.alias
+              } else if (simItem.fieldUser === 'currentUser') {
+                const conditionFlagArr = []
+                simItem.condition.forEach(myitem => {
+                  const flag = this.handleUserSimple(this.userInfo.username, myitem.value, simItem.include)
+                  conditionFlagArr.push(flag)
+                })
+                simItem.flag = this.getConditionFlag(simItem.logic, conditionFlagArr)
+              } else if (simItem.fieldUser === 'currentDepartment') {
+                const conditionFlagArr = []
+                simItem.condition.forEach(myitem => {
+                  const flag = this.handleUserSimple(this.userInfo.departmentId, myitem.value, simItem.include)
+                  conditionFlagArr.push(flag)
+                })
+                simItem.flag = this.getConditionFlag(simItem.logic, conditionFlagArr)
+              } else if (simItem.fieldUser === 'currentRole') {
+                const conditionFlagArr = []
+                simItem.condition.forEach(myitem => {
+                  const flag = this.handleUserSimple(this.userInfo.roleId, myitem.value, simItem.include)
+                  conditionFlagArr.push(flag)
+                })
+                simItem.flag = this.getConditionFlag(simItem.logic, conditionFlagArr)
+              } else if (simItem.fieldUser === 'notSet') {
+                simItem.flag = true
+              } else {
+                const conditionFlagArr = []
+                simItem.condition.forEach(myitem => {
+                  if (simItem.formType === 'number') {
+                    myitem.value = Number(myitem.value)
+                  }
+                  const inputValue = formData[simItem.field]
+                  const allValue = ''
+                  const flag = this.handleSimple(myitem.include, myitem.value, inputValue, myitem.allValue, allValue)
+                  conditionFlagArr.push(flag)
+                })
+                simItem.flag = this.getConditionFlag(item.logic, conditionFlagArr)
+              }
+              simpleFlagArr.push(simItem.flag)
+            })
+            wayItem.flag = this.getConditionFlag(wayItem.logic, simpleFlagArr)
+            if (wayItem.flag) {
+              const rest = []
+              wayItem.event.forEach(eventItem => {
+                if (eventItem.type === 'field') {
+                  rest.push(eventItem.field)
+                  this.templateOther.forEach(otherItem => {
+                    if (otherItem.value === eventItem.field && this.wayRuleAlias.indexOf(eventItem.field) === -1) {
+                      this.wayRuleAlias.push(eventItem.field)
+                      this.wayRuleAlias = [...new Set(this.wayRuleAlias)]
+                    }
+                  })
+                  this.getWayRule(this.template, eventItem)
+                } else if (eventItem.type === 'way') {
+                  this.handleWayData.forEach(wayDataItem => {
+                    if (eventItem.alias === wayDataItem.alias) {
+                      if (eventItem.status === 'hidden') {
+                        if (this.defaultWay === wayDataItem.alias) {
+                          this.defaultWay = ''
+                        }
+                        this.$set(wayDataItem, 'display', 'h')
+                      } else {
+                        this.$set(wayDataItem, 'display', 'v')
+                      }
+                    }
+                  })
+                }
+              })
+              if (wayItem.event.some(someItem => someItem.type !== 'way')) {
+                this.$set(item, 'resetTem', rest)
+              }
+            }
+          })
+        } else {
+          if (item.resetTem) {
+            item.resetTem.forEach(resetItem => {
+              this.getResetTem(this.template, item.resetTem)
+            })
+          }
+        }
+      })
+    },
+    getConditionFlag (logic, conditionFlagArr) {
+      if (logic === 'and') {
+        return conditionFlagArr.every(item => {
+          return item
+        })
+      } else {
+        return conditionFlagArr.some(item => {
+          return item
+        })
+      }
+    },
+    sentLinkData (alias, option) {
+      this.getSentLinkData(this.template, alias, option)
+    },
+    getSentLinkData (array, alias, option) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.getSentLinkData(item.columns, alias, option)
+        } else if (item.trs) {
+          this.getSentLinkData(item.trs, alias, option)
+        } else if (item.tds) {
+          this.getSentLinkData(item.tds, alias, option)
+        } else if (item.list) {
+          this.getSentLinkData(item.list, alias, option)
+        } else {
+          if (item.field && item.field.alias === alias) {
+            this.$set(item.field, 'option', option)
+          }
+        }
+      })
+    },
+    // 页面创建时候判断当前用户、用户所在部门、所属角色执行的表单规则
+    handleRule () {
+      const that = this
+      // 为兼容以前不存在的conditionType情况
+      this.fieldRule.forEach(item => {
+        if (!item.conditionType) {
+          item.conditionType = 'if'
+        }
+      })
+      const indexArr = this.fieldRule.map((item, index) => {
+        if (item.conditionType === 'if') {
+          return String(index)
+        } else {
+          return null
+        }
+      }).filter(item => item)
+      indexArr.forEach((arrItem, arrIndex) => {
+        const data = this.fieldRule.slice(Number(arrItem), indexArr[arrIndex + 1] ? Number(indexArr[arrIndex + 1]) : this.fieldRule.length)
+        const getDataNext = (dataItem, dataIndex) => {
+          dataItem.simpleCondition.forEach((item, index) => {
+            item.condition.forEach((myitem, myindex) => {
+              if (item.fieldUser === 'currentUser') {
+                myitem.flag = that.handleUserSimple(this.userInfo.username, myitem.value, item.include)
+              } else if (item.fieldUser === 'currentDepartment') {
+                myitem.flag = that.handleUserSimple(this.userInfo.departmentId, myitem.value, item.include)
+              } else if (item.fieldUser === 'currentRole') {
+                myitem.flag = that.handleUserSimple(this.userInfo.roleId, myitem.value, item.include)
+              } else if (item.fieldUser === 'notSet') {
+                myitem.flag = true
+              } else {
+                this.changeValue(this.template, item, myitem)
+              }
+            })
+            if (item.logic === 'and') {
+              item.flag = item.condition.every((myitem, myindex) => {
+                return myitem.flag
+              })
+            } else if (item.logic === 'or') {
+              item.flag = item.condition.some((myitem, myindex) => {
+                return myitem.flag
+              })
+            }
+          })
+          if (dataItem.logic === 'and') {
+            dataItem.flag = dataItem.simpleCondition.every((item, index) => {
+              return item.flag
+            })
+          } else if (dataItem.logic === 'or') {
+            dataItem.flag = dataItem.simpleCondition.some((item, index) => {
+              return item.flag
+            })
+          }
+          if (dataItem.flag) {
+            dataItem.event.forEach(eventItem => {
+              this.getRule(that.template, eventItem)
+            })
+          } else if (data[dataIndex + 1]) {
+            getDataNext(data[dataIndex + 1], dataIndex + 1)
+          }
+        }
+        getDataNext(data[0], 0)
+      })
+    },
+    // 判断当前用户，用户所在部门，所属于角色
+    handleUserSimple (current, conditionValue, include) {
+      if (include === 'bl' || !include) {
+        if (conditionValue.indexOf(current) !== -1) {
+          return true
+        } else {
+          return false
+        }
+      } else {
+        if (conditionValue.indexOf(current) !== -1) {
+          return false
+        } else {
+          return true
+        }
+      }
+    },
+    // 数据联动
+    getLinkData (alias, inputValue, type, item, flag) {
+      if (inputValue) {
+        if (this.linkData[alias] && !this.linkData[alias].sourceFieldEffect) {
+          if (item) {
+            this.axios({
+              url: '/admin/search/dictSearch',
+              data: { dictCategoryNumber: item.src }
+            }).then(res => {
+              const effect = this.linkData[alias].currentFieldEffect
+              const effectIndex = this.templateObj[effect] ? this.templateObj[effect].index : -1
+              if (effectIndex !== -1) {
+                this.getSentLinkData(this.template, effect, res.result)
+              }
+            })
+          }
+        } else {
+          if (flag) {
+            const where = this.getWhere(this.defaultLinkData[alias].sourceFieldCause, inputValue, type)
+            const field = this.templateObj[this.defaultLinkData[alias].currentFieldEffect].field
+            if (field && !field.value) {
+              this.axios({
+                url: '/admin/general/getLinkageData',
+                data: {
+                  where: where,
+                  dataSource: false,
+                  field: this.defaultLinkData[alias].sourceFieldEffect,
+                  tableId: this.defaultLinkData[alias].dataSource[this.defaultLinkData[alias].dataSource.length - 1]
+                }
+              }).then(res => {
+                if (res.result.value) {
+                  this.changeFieldValue(this.template, field.alias, res.result.value)
+                }
+              })
+            }
+          } else {
+            const where = this.getWhere(this.linkData[alias].sourceFieldCause, inputValue, type)
+            this.axios({
+              url: '/admin/general/getLinkageData',
+              data: {
+                where: where,
+                dataSource: true,
+                field: this.linkData[alias].sourceFieldEffect,
+                tableId: this.linkData[alias].dataSource[this.linkData[alias].dataSource.length - 1]
+              }
+            }).then(res => {
+              // 结果
+              const effect = this.linkData[alias].currentFieldEffect
+              const effectIndex = this.templateObj[effect] ? this.templateObj[effect].index : -1
+              if (effectIndex !== -1) {
+                this.getSentLinkData(this.template, effect, res.result.option)
+              }
+            })
+          }
+        }
+      } else {
+        this.clearOption(alias)
+      }
+    },
+    // 数据联动获取where
+    getWhere (alias, value, type) {
+      const that = this
+      const result = {}
+      result[alias] = value
+      if (this.linkDataEffect[alias]) {
+        getRes(alias)
+      }
+      function getRes (alias) {
+        const causeAlias = that.linkDataEffect[alias].currentFieldCause
+        const value = type === 'change' ? that.form.getFieldValue('record' + '[' + causeAlias + ']') : that.templateObj[causeAlias].field.value
+        result[causeAlias] = value
+        if (that.linkDataEffect[causeAlias]) {
+          getRes(causeAlias)
+        }
+      }
+      return result
+    },
+    // cause字段清空数据时，清除effect字段的option
+    clearOption (alias) {
+      const effect = this.linkData[alias].currentFieldEffect
+      const effectIndex = this.templateObj[effect] ? this.templateObj[effect].index : -1
+      if (effectIndex !== -1) {
+        const effectItem = this.templateAll[effectIndex]
+        effectItem.field.option = []
+        const obj = {}
+        obj['record' + '[' + effectItem.field.alias + ']'] = undefined
+        this.form.setFieldsValue(obj)
+        this.getSentLinkData(this.template, effectItem.field.alias, [])
+        // this.template.splice(effectIndex, 1, effectItem)
+      }
+      if (this.linkData[effect]) {
+        this.clearOption(effect)
+      }
+    },
+    handleSimple (include, value, inputValue, allValue) {
+      inputValue = inputValue !== null ? inputValue : ''
+      const action = this.actions.get(`${include}`)
+      return action && action(value, inputValue, allValue)
+    },
+    // 数组对象排序
+    compare (property) {
+      return (obj1, obj2) => {
+        const val1 = obj1[property]
+        const val2 = obj2[property]
+        return val1 - val2
+      }
+    },
+    filterSubForm (array) {
+      array.forEach((item) => {
+        if (item.columns && item.columns.length) {
+          if (item.columns.every(chiItem => ['formmark', 'web_sub_data_window'].includes(chiItem.type) || chiItem.filterStatus)) {
+            item.filterStatus = true
+          }
+          this.filterSubForm(item.columns)
+        } else if (item.trs && item.trs.length) {
+          if (item.trs.every(chiItem => ['formmark', 'web_sub_data_window'].includes(chiItem.type) || chiItem.filterStatus)) {
+            item.filterStatus = true
+          }
+          this.filterSubForm(item.trs)
+        } else if (item.tds && item.tds.length) {
+          if (item.tds.every(chiItem => ['formmark', 'web_sub_data_window'].includes(chiItem.type) || chiItem.filterStatus)) {
+            item.filterStatus = true
+          }
+          this.filterSubForm(item.tds)
+        } else if (item.list && item.list.length) {
+          if (item.list.every(chiItem => ['formmark', 'web_sub_data_window'].includes(chiItem.type) || chiItem.filterStatus)) {
+            item.filterStatus = true
+          }
+          this.filterSubForm(item.list)
+        }
+      })
+      return array
+    },
+    handleSubmit (data = {}, page, jointable) {
+      const result = this.getValueData(data, page, jointable)
+      let values, valueData
+      return new Promise((resolve, reject) => {
+        if (result) {
+          values = result.values
+          valueData = result.valueData
+          if (page !== 'web_sub_data_window') {
+            this.$emit('start')
+            this.axios({
+              url: data.url || this.parentParams.submitUrl || this.parentParams.url,
+              data: valueData
+            }).then((res) => {
+              if (res.code === 0) {
+                if (res.message) {
+                  this.$message.success({
+                    content: h => { return <span domPropsInnerHTML={this.$t(res.message)}></span> }
+                  })
+                } else {
+                  this.$message.success(this.$t(res.message))
+                }
+                this.$emit('ok', values, '', res)
+                resolve(res.result)
+              } else {
+                this.$emit('ok', '', '', 'error')
+                if (res.message) {
+                  this.$message.error({
+                    content: h => { return <span domPropsInnerHTML={res.message}></span> }
+                  })
+                } else {
+                  this.$message.error(this.$t('操作失败'))
+                }
+                reject(res.message)
+              }
+            })
+          } else {
+            resolve(values)
+            this.$emit('ok', values, this.tableName)
+          }
+        } else {
+          const error = ''
+          reject(error)
+        }
+      })
+    },
+    valueTrim (data, objKey) {
+      for (const key in data) {
+        if (typeof data[key] === 'string') {
+          data[key] = data[key].trim()
+          if (objKey === 'record' && ['text', 'textarea'].includes(this.templateObj[key].formType)) {
+            const obj = {}
+            obj['record' + '[' + key + ']'] = data[key].trim()
+            this.form.setFieldsValue(obj)
+          }
+        } else if (typeof data[key] === 'object') {
+          this.valueTrim(data[key], key)
+        }
+      }
+    },
+
+    // 提交表单
+    getValueData (data = {}, page, jointable) {
+      // data = {
+      //   url: 'http://www.abc.com', //表单提交的额外指定地址
+      //   extFormData: {             //表单提交的额外指定数据
+      //     aa: 101,
+      //     bb: 102
+      //   }
+      // }
+      let result
+      const me = this
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          values.jointable = jointable
+          // 图片，附件只需要传fileName和filePath
+          const getTemplate = (array) => {
+            let bool
+            array.forEach((item, index) => {
+              if (item.columns) {
+                getTemplate(item.columns)
+              } else if (item.trs) {
+                getTemplate(item.trs)
+              } else if (item.tds) {
+                getTemplate(item.tds)
+              } else if (item.list) {
+                getTemplate(item.list)
+              } else {
+                if (item.field && (item.field.formType === 'file' || item.field.formType === 'image')) {
+                  if (item.field.beforeAlias) {
+                    const arr = []
+                    if (!item.field.initValue) {
+                      item.field.initValue = item.field.value
+                    }
+                    item.field.initValue.forEach(item1 => {
+                      if (item1.response && item1.response.code === 0) {
+                        arr.push(item1.response.result)
+                      }
+                    })
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias] = arr.length
+                      ? arr : values['record']['product_' + item.aliasKey][item.field.beforeAlias].map(valItem => {
+                        let dataobj = {}
+                        if (valItem.response && valItem.response.code === 0) {
+                          dataobj = valItem.response.result
+                        }
+                        return dataobj
+                      }).filter(filItem => filItem)
+                  } else {
+                    const arr = []
+                    if (!item.field.initValue) {
+                      item.field.initValue = item.field.value
+                    }
+                    item.field.initValue.forEach(item1 => {
+                      if (item1.response && item1.response.code === 0) {
+                        arr.push(item1.response.result)
+                      }
+                    })
+                    values['record'][item.field.alias] = arr.length ? arr : values['record'][item.field.alias] ? values['record'][item.field.alias].map(valItem => {
+                      let dataobj = {}
+                      if (valItem.response && valItem.response.code === 0) {
+                        dataobj = valItem.response.result
+                      }
+                      return dataobj
+                    }).filter(filItem => filItem) : []
+                  }
+                } else if (item.field && item.field.formType === 'datetime' && item.field.fieldType === 'TIME') {
+                  if (item.field.beforeAlias) {
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias] = item.field.value
+                  } else {
+                    values['record'][item.field.alias] = item.field.value
+                  }
+                } else if (item.field && item.field.formType === 'datetime') {
+                  if (item.field.beforeAlias) {
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias] = values['record']['product_' + item.aliasKey][item.field.beforeAlias] ? moment(values['record']['product_' + item.aliasKey][item.field.beforeAlias]).format('YYYY-MM-DD HH:mm:ss') : null
+                  } else {
+                    values['record'][item.field.alias] = values['record'][item.field.alias] ? moment(values['record'][item.field.alias]).format('YYYY-MM-DD HH:mm:ss') : null
+                  }
+                } else if (item.field && item.field.formType === 'switch') {
+                  if (item.field.beforeAlias) {
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias] = values['record']['product_' + item.aliasKey][item.field.beforeAlias] ? 1 : 0
+                  } else {
+                    values['record'][item.field.alias] = values['record'][item.field.alias] ? 1 : 0
+                  }
+                } else if (item.field && item.field.formType === 'autocomplete') {
+                  if (item.field.beforeAlias) {
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias] = values['record']['product_' + item.aliasKey][item.field.beforeAlias] ? values['record']['product_' + item.aliasKey][item.field.beforeAlias].replace(/\s*/g, '') : null
+                  } else {
+                    values['record'][item.field.alias] = values['record'][item.field.alias] ? values['record'][item.field.alias].replace(/\s*/g, '') : null
+                  }
+                } else if (item.field && item.field.formType === 'address') {
+                  if (item.field.beforeAlias) {
+                    if (!values['record']['product_' + item.aliasKey][item.field.beforeAlias]) {
+                      values['record']['product_' + item.aliasKey][item.field.beforeAlias] = {}
+                    }
+                    const address = 'record' + '[product_' + item.aliasKey + ']' + '[' + item.field.beforeAlias + ']' + '[address]'
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias]['address'] = this.addressValue[address] || ''
+                  } else {
+                    if (!values['record'][item.field.alias]) {
+                      values['record'][item.field.alias] = {}
+                    }
+                    const address = 'record' + '[' + item.field.alias + ']' + '[address]'
+                    values['record'][item.field.alias]['address'] = this.addressValue[address] || ''
+                  }
+                } else if (item.field && item.field.formType === 'treeselect' && values['record'][item.field.alias]) {
+                  if (item.field.beforeAlias) {
+                    values['record']['product_' + item.aliasKey][item.field.beforeAlias] = values['record']['product_' + item.aliasKey][item.field.beforeAlias].toString()
+                  } else {
+                    values['record'][item.field.alias] = values['record'][item.field.alias].toString()
+                  }
+                }
+                if (item.type === 'web_sub_form_view') {
+                  const getSubForm = (array) => {
+                    array.forEach(subItem => {
+                      if (subItem.currentRecord && subItem.currentRecord.key === item.key) {
+                        const value = subItem.handleSubmit()
+                        if (value === false) {
+                          throw new Error('请按要求填写子表单')
+                        }
+                        values.subformRecords.push(value)
+                      } else if (subItem.$refs && subItem.$refs.nestedComponents) {
+                        getSubForm(subItem.$refs.nestedComponents)
+                      } else if (subItem.$children.length !== 0) {
+                        getSubForm(subItem.$children)
+                      }
+                    })
+                  }
+                  getSubForm(this.$refs.buildBlocks)
+                }
+              }
+            })
+            unsubmitBool.push(bool)
+          }
+          values.subformRecords = []
+          let unsubmitBool = []
+          getTemplate(this.template)
+          unsubmitBool = unsubmitBool.every(boolItem => !boolItem)
+          if (!unsubmitBool) {
+            this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+            result = false
+            return false
+          }
+          // 主表关联信息
+          if (this.theme.data.params.relation && Object.keys(this.theme.data.params.relation).length > 0 && values['record']) {
+            values['record'][this.theme.data.params.relation.key] = this.theme.data.params.relation.val
+          }
+          for (const i in values.record) {
+            if (values.record[i] !== 0 && !values.record[i]) {
+              values.record[i] = null
+            }
+          }
+          if (page !== 'web_sub_data_window') {
+            let action = this.action
+            // 对工作流的action进行处理 start
+            // 流程创建 action 为 add
+            if (me.parentParams.viewType === 'create') {
+              action = 'add'
+            } else if (this.action === 'get') { // 弹出流程的表单视图时，params.parentParams.action 赋值为get，具体见 WorkflowHandleForm.vue的requestData方法
+              action = 'edit' // 非流程创建 action 为 edit
+            }
+            // 对工作流的action进行处理 end
+            const valueData = this.$deepmerge(values, {
+              action,
+              id: me.parentParams.record ? me.parentParams.record.id : 0
+            })
+            if (data.extFormData) {
+              for (const i in data.extFormData) {
+                if (i === 'record') {
+                  valueData['record'] = this.$deepmerge(valueData['record'], data.extFormData['record'])
+                } else {
+                  valueData[i] = data.extFormData[i]
+                }
+              }
+            }
+            if (me.parentParams.templateId) {
+              valueData.templateId = me.parentParams.templateId
+            }
+            if (me.parentParams.tableId) {
+              valueData.tableId = me.parentParams.tableId
+            }
+            if (me.parentParams.workflowId) {
+              valueData.workflowId = me.parentParams.workflowId
+            }
+            if (me.parentParams.caseId) {
+              valueData.caseId = me.parentParams.caseId
+            }
+            if (me.parentParams.operation) {
+              valueData.operation = me.parentParams.operation
+            }
+            if (me.parentParams.flowCondition) {
+              valueData.flowCondition = me.parentParams.flowCondition
+            }
+            if (me.formThis && me.formThis.listThis && me.formThis.listThis.interactiveType === 'tree') {
+              const obj = me.formThis.listThis
+              Object.assign(valueData.record, { [obj.interactiveAlias]: obj.interactiveObj[obj.interactiveAlias] ? obj.interactiveObj[obj.interactiveAlias][0] : null })
+            }
+            result = { values, valueData }
+            this.valueTrim(valueData)
+            this.form.validateFields((err, val) => {
+              if (!err) {
+                result = { values, valueData }
+              } else {
+                result = false
+                this.$emit('ok', '', '', 'error')
+                this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+              }
+            })
+          } else {
+            this.$emit('ok', values, this.tableName)
+            result = { values }
+          }
+        } else {
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+          this.$emit('ok', '', '', 'error')
+          result = false
+        }
+      })
+      return result
+    }
+
+  }
+}
+</script>

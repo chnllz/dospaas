@@ -1,0 +1,419 @@
+<template>
+  <div class="test">
+    <a-list
+      v-if="myType !== 'questions'"
+      item-layout="vertical"
+      size="large"
+      class="listStyle"
+      :style="{
+        height: page === 'myKnowledge' && params.type === 'myCreated' ? 'calc(100vh - 265px)' : 'calc(100vh - 215px)',
+        overflowY: 'auto'
+      }"
+      :pagination="listData.length > 0 ? pagination : false"
+      :data-source="listData"
+      :loading="loading"
+    >
+      <a-list-item slot="renderItem" key="item.title" slot-scope="item, index" style="position: relative">
+        <a-list-item-meta>
+          <span slot="title" class="input">
+            <a
+              v-dompurify-html="item.title"
+              :href="item.href"
+              :style="{
+                'text-decoration': item.stylechange ? 'underline' : 'none',
+                color: item.stylechange ? '' : 'rgba(0, 0, 0, 0.92)'
+              }"
+              @mouseenter="$set(item, 'stylechange', true)"
+              @mouseleave="$set(item, 'stylechange', false)"
+              @click="showDetail(item, index)"
+            ></a>
+          </span>
+        </a-list-item-meta>
+        <div
+          v-if="page === 'manageKnowledge' && parseInt(item.status) === 1"
+          style="position: absolute; right: 0; top: 10px"
+        >
+          <a-button type="primary" style="margin-right: 15px" @click="handleVerify('success', item)">
+            {{ $t('审核通过') }}
+          </a-button>
+          <a-button @click="handleVerify('error', item)">{{ $t('审核不通过') }}</a-button>
+        </div>
+        <div
+          v-if="page === 'manageKnowledge' && parseInt(item.status) === 2"
+          style="position: absolute; right: 0; top: 10px"
+        >
+          <a-tag color="red">{{ $t('审核不通过') }}</a-tag>
+        </div>
+        <div
+          v-if="page === 'manageKnowledge' && parseInt(item.status) === 3"
+          style="position: absolute; right: 0; top: 10px"
+        >
+          <a-tag color="green">{{ $t('审核通过') }}</a-tag>
+        </div>
+        <div
+          v-if="page === 'manageKnowledge' && parseInt(item.status) === 4"
+          style="position: absolute; right: 0; top: 10px"
+        >
+          <a-tag>{{ $t('无需审核') }}</a-tag>
+        </div>
+        <div style="margin-top: -20px; color: rgba(0, 0, 0, 0.45)">
+          <a-row>
+            <a-col :span="20">
+              <div class="one">
+                <span style="margin-right: 10px">
+                  <a-icon type="user" />
+                  {{ item.author }}
+                </span>
+                <a-tag v-for="(labelItem, labelIndex) in item.label" :key="labelIndex">
+                  <span v-if="labelItem.length > 20">{{ `${labelItem.slice(0, 20)}...` }}</span>
+                  <span v-else>{{ labelItem }}</span>
+                </a-tag>
+              </div>
+            </a-col>
+            <a-col :span="4" style="text-align: right">{{ item.inputTime }}</a-col>
+          </a-row>
+        </div>
+        <div v-dompurify-html="item.content" style="margin-top: 10px" class="three"></div>
+        <div
+          v-if="page !== 'manageKnowledge' || type == 'dealBug'"
+          style="margin-top: 20px; user-select: none; color: rgba(0, 0, 0, 0.45)"
+        >
+          <span>
+            <a-icon type="message" style="margin: 0 3px 0 0" />
+            {{ $t('评论') }} {{ item.commentNum }}
+          </span>
+          <span>
+            <a-icon type="star-o" style="margin: 0 3px 0 8px" />
+            {{ $t('收藏') }} {{ item.collectedNum }}
+          </span>
+          <span>
+            <a-icon type="eye" style="margin: 0 3px 0 8px" />
+            {{ $t('浏览') }} {{ item.browseNum }}
+          </span>
+        </div>
+      </a-list-item>
+    </a-list>
+    <a-table
+      v-else
+      :columns="columns"
+      rowKey="id"
+      :data-source="data"
+      :loading="loading"
+      :pagination="pagination"
+      :row-selection="{ selectedRowKeys: selectedRowKeys, onChange: onSelectChange }"
+    >
+      <div
+        slot="title1"
+        slot-scope="text, record, index"
+        style="cursor: pointer"
+        class="one"
+        @click="showDetail(record, index)"
+      >
+        {{ $t(text) }}
+      </div>
+      <div slot="overTimeStr" slot-scope="text">
+        <span :style="[text === '未过期' ? { color: 'green' } : { color: 'red' }]">{{ $t(text) }}</span>
+      </div>
+    </a-table>
+    <index-init-common-content
+      ref="indexInitCommonContent"
+      @read="handleRead"
+      @ok="handleDelete"
+      @error="handlerError"
+      @success="handleVerify"
+    />
+    <!-- 审核不通过的原因 -->
+    <index-my-knowledge-verify ref="indexMyKnowledgeVerify" @ok="handlerError" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('knowledge'),
+  components: {
+    IndexInitCommonContent: () => import('./IndexInitCommonContent'),
+    IndexMyKnowledgeVerify: () => import('./IndexMyKnowledgeVerify')
+  },
+  props: {
+    params: {
+      type: Object,
+      default: () => { }
+    },
+    page: {
+      type: String,
+      default: ''
+    },
+    type: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    return {
+      listData: [],
+      url: '',
+      pagination: {
+        onChange: page => {
+          var parameter = Object.assign(this.params, {
+            pageNo: page,
+            pageSize: 10,
+            start: 0,
+            sortOrder: this.params.sortField !== 'inputtimeold' ? 'descend' : 'ascend'
+          })
+          if (this.params.sortField === 'inputtimeold') {
+            parameter.sortField = 'inputTime'
+          }
+          if (this.myType === 'questions') {
+            parameter.auditStatus = '5'
+            parameter.dateStatus = '8'
+          }
+          this.fetch(parameter)
+        },
+        pageSize: 10,
+        size: 'small'
+        // showTotal: (total, range) => `显示第 ${range[0]} 条到 ${range[1]} 条记录, 一共 ${total} 条`
+      },
+      actions: [
+        { type1: 'message', text: '2' },
+        { type1: 'star-o', text: '156' },
+        { type1: 'eye', text: '156' },
+        { type1: 'file-text', text: '2' }
+      ],
+      parameter: {},
+      myType: '',
+      selectedRowKeys: [],
+      columns: [{
+        title: this.$t('标题'),
+        dataIndex: 'title',
+        scopedSlots: { customRender: 'title1' },
+        width: 350
+      }, {
+        title: this.$t('作者'),
+        dataIndex: 'author',
+        key: 'sortField',
+        width: 90
+      }, {
+        title: this.$t('审核状态'),
+        dataIndex: 'statusStr',
+        width: 110,
+        key: '2'
+      }, {
+        title: this.$t('是否过期'),
+        dataIndex: 'overTimeStr',
+        scopedSlots: { customRender: 'overTimeStr' },
+        width: 100,
+        key: '3'
+      }, {
+        title: this.$t('浏览量'),
+        dataIndex: 'browseNum',
+        key: '4'
+      }, {
+        title: this.$t('评论数'),
+        dataIndex: 'commentNum',
+        key: '5'
+      }, {
+        title: this.$t('点赞数'),
+        dataIndex: 'likedNum',
+        key: '6'
+      }, {
+        title: this.$t('报错量'),
+        dataIndex: 'bugNum',
+        key: '7'
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        key: '8'
+      }],
+      data: [],
+      loading: false
+    }
+  },
+  watch: {
+    params: {
+      handler (newValue) {
+        var parameter = Object.assign(newValue, {
+          pageNo: 1,
+          pageSize: 10,
+          start: 0,
+          sortOrder: newValue.sortField !== 'inputtimeold' ? 'descend' : 'ascend',
+          sortField: !newValue.sortField && newValue.type !== 'Hot' ? 'inputTime' : newValue.sortField
+        })
+        if (newValue.sortField === 'inputtimeold') {
+          parameter.sortField = 'inputTime'
+        }
+        parameter = JSON.parse(JSON.stringify(parameter))
+        if (newValue.type) {
+          this.myType = newValue.type
+          if (newValue.type === 'questions') {
+            this.url = '/knowledge/index/knowledgeList'
+            parameter.type = undefined
+            if (!newValue.auditStatus) {
+              parameter.auditStatus = '5'
+              parameter.dateStatus = '8'
+            }
+          }
+          this.selectedRowKeys = []
+        }
+        this.parameter = parameter
+        this.fetch(parameter)
+      }
+    },
+    page: {
+      handler (newValue) {
+        this.url = `/knowledge/index/${newValue}`
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    fetch (parameter = {}) {
+      this.loading = true
+      this.axios({
+        url: this.url,
+        data: parameter
+      }).then(res => {
+        this.loading = false
+        const pagination = { ...this.pagination }
+        pagination.total = Number(res.result.totalCount)
+        pagination.current = res.result.pageNo
+        this.pagination = pagination
+        if (this.params.type !== 'questions') {
+          this.listData = res.result.data
+          this.listData.forEach(item => {
+            if (item.label) {
+              item.label = item.label.split(',')
+            } else {
+              item.label = []
+            }
+            let string = item.content.replace(/<[^>]+>/g, '')
+            const arrEntities = { 'lt': '<', 'gt': '>', 'nbsp': ' ', 'amp': '&', 'quot': '"' }
+            string = string.replace(/&(lt|gt|nbsp|amp|quot);/ig, (all, t) => { return arrEntities[t] })
+            item.content = string
+          })
+        } else {
+          this.data = res.result.data
+          this.data.forEach(item => {
+            if (parseInt(item.status) === 1) {
+              item.statusStr = this.$t('待审核')
+            } else if (parseInt(item.status) === 2) {
+              item.statusStr = this.$t('审核不通过')
+            } else {
+              item.statusStr = this.$t('审核通过')
+            }
+            if (parseInt(item.overTime) === 1) {
+              item.overTimeStr = this.$t('未过期')
+            } else {
+              item.overTimeStr = this.$t('已过期')
+            }
+          })
+          this.data = JSON.parse(JSON.stringify(this.data))
+        }
+      })
+    },
+    // 查看详情
+    showDetail (record, index) {
+      const detailsShow = () => {
+        this.$refs.indexInitCommonContent.show({
+          record: record,
+          index: index,
+          type: this.params.type,
+          page: this.page
+        })
+      }
+      if (this.params.type !== 'myAudited') {
+        this.axios({
+          url: '/knowledge/index/updateBrowseNum',
+          data: { articleId: record.id }
+        }).then(res => {
+          detailsShow()
+        })
+      } else {
+        detailsShow()
+      }
+    },
+    // 审核
+    handleVerify (value, item) {
+      if (value === 'success') {
+        this.axios({
+          url: '/knowledge/index/audit',
+          data: { id: item.id }
+        }).then(res => {
+          if (!res.code) {
+            this.$message.success(res.message)
+            this.fetch(this.parameter)
+          }
+        })
+      } else if (value === 'error') {
+        this.$refs.indexMyKnowledgeVerify.show({
+          item: item,
+          url: '/knowledge/index/audit'
+        })
+      }
+    },
+    // 报错删除
+    handleDelete () {
+      this.fetch(this.parameter)
+    },
+    // 审核不通过
+    handlerError () {
+      this.fetch(this.parameter)
+    },
+    // 已读知识
+    handleRead () {
+      this.$emit('read')
+    },
+    // '批量删除'使用的函数
+    onSelectChange (selectedRowKeys) {
+      this.selectedRowKeys = selectedRowKeys
+      this.$emit('ok', selectedRowKeys)
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.test {
+  /deep/ .listStyle .ant-list-pagination {
+    position: fixed;
+    bottom: 20px;
+    right: 30px;
+  }
+}
+
+.label {
+  font-size: 12px;
+  border: 1px solid #dcdcdc;
+  text-align: center;
+  margin: 0 5px;
+  border-radius: 20px;
+  padding: 2px 4px;
+  background-color: #eeeeee;
+}
+em {
+  color: red;
+  font-style: normal;
+}
+.three {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3; /*超出3行部分显示省略号，去掉该属性 显示全部*/
+  -webkit-box-orient: vertical;
+}
+.one {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1; /*超出1行部分显示省略号，去掉该属性 显示全部*/
+  -webkit-box-orient: vertical;
+}
+.input {
+  width: calc(100% - 200px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1; /*超出1行部分显示省略号，去掉该属性 显示全部*/
+  -webkit-box-orient: vertical;
+  font-size: 16px;
+  font-weight: 500;
+}
+</style>

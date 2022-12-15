@@ -1,0 +1,424 @@
+<template>
+  <div>
+    <a-table
+      ref="table"
+      size="small"
+      rowKey="value"
+      :columns="columns"
+      :pagination="false"
+      :dataSource="workflowFilters"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="title">
+        <a-space>
+          <a-button @click="handleAdd('workflowFilters')">{{ $t('添加') }}</a-button>
+          <a-button @click="handleSort('workflowFilters')">{{ $t('排序') }}</a-button>
+        </a-space>
+        <a-alert
+          :message="$t('在所有“启用”的按钮中，默认选中排序最靠前的')"
+          type="info"
+          showIcon
+          style="margin-top: 8px"
+        ></a-alert>
+      </div>
+      <div slot="enable" slot-scope="text, record">
+        <a-switch
+          size="small"
+          :checked="record.enable === '1'"
+          @change="
+            (e) => {
+              enableChange(e, record, 'workflowFilters')
+            }
+          "
+        />
+      </div>
+      <div slot="action" slot-scope="text, record, index">
+        <a :disabled="record.searchType !== 'custom'" @click="handleAdd('workflowFilters', record, index)">
+          {{ $t('编辑') }}
+        </a>
+        <a-divider type="vertical" />
+        <a @click="handleSearchPriv(record, index)">
+          <a-badge v-if="record.searchPriv" status="success" />
+          <a-badge v-else status="default" />
+          {{ $t('授权') }}
+        </a>
+        <a-divider type="vertical" />
+        <a @click="copyPrivShow(record, 'workflowFilters')">{{ $t('复制权限给') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="record.searchType !== 'custom'" @click="handleDelete(record, index)">{{ $t('删除') }}</a>
+      </div>
+    </a-table>
+    <drag-sort ref="dragSort" @ok="getSort" />
+    <priv-visit-form ref="privVisitForm" :params="privData" @func="getPrivs" />
+    <a-modal v-model="visibleCopy" :title="$t('复制权限给')" @ok="getCopy" @cancel="visibleCopy = !visibleCopy">
+      <div :style="{ borderBottom: '1px solid #E9E9E9', marginBottom: '8px' }">
+        <a-checkbox :indeterminate="indeterminate" :checked="checkAll" @change="onCheckAllChange">
+          {{ $t('全选') }}
+        </a-checkbox>
+      </div>
+      <a-checkbox-group v-model="copyCheck" @change="onChange">
+        <a-row :gutter="[8, 8]">
+          <a-col v-for="data in plainOptions" :key="data.value" :span="6">
+            <a-checkbox :value="data.value">{{ data.label }}</a-checkbox>
+          </a-col>
+        </a-row>
+      </a-checkbox-group>
+    </a-modal>
+    <a-drawer
+      :destroyOnClose="true"
+      :title="configDrawer.title"
+      :width="800"
+      :visible="visibleDrawer"
+      @close="visibleDrawer = !visibleDrawer"
+    >
+      <a-spin :spinning="lodingDrawer">
+        <a-form :form="form">
+          <a-form-item :label="$t('按钮名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              v-decorator="[
+                'info[name]',
+                {
+                  initialValue: configDrawer.record ? configDrawer.record.name : '',
+                  rules: [{ required: true, message: '请输入按钮名称' }]
+                }
+              ]"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('按钮value值')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              v-decorator="[
+                'info[value]',
+                {
+                  initialValue: configDrawer.record ? configDrawer.record.value : '',
+                  rules: [{ required: true, message: '请输入按钮value值' }]
+                }
+              ]"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('条件设置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <editor ref="editorInit" :params="editorData" />
+          </a-form-item>
+          <a-form-item :label="$t('自定义帮助')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-decorator="['info[help]', { initialValue: configDrawer.record ? configDrawer.record.help : '' }]"
+              :autoSize="{ minRows: 2, maxRows: 6 }"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('启用禁用')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-decorator="['info[enable]', { initialValue: configDrawer.record ? configDrawer.record.enable : '1' }]"
+            >
+              <a-select-option value="1">{{ $t('启用') }}</a-select-option>
+              <a-select-option value="0">{{ $t('禁用') }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-decorator="['info[remark]', { initialValue: configDrawer.record ? configDrawer.record.remark : '' }]"
+              :autoSize="{ minRows: 2, maxRows: 6 }"
+            />
+          </a-form-item>
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+          <a-button @click="visibleDrawer = !visibleDrawer">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    PrivVisitForm: () => import('./PrivVisitForm'),
+    Editor: () => import('@/views/admin/Formula/Editor')
+  },
+  props: {
+    config: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      lodingDrawer: false,
+      visibleCopy: false,
+      visibleDrawer: false,
+      form: this.$form.createForm(this),
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      message: '',
+      privData: {},
+      copyCheck: [],
+      plainOptions: [{}],
+      copyType: '',
+      indeterminate: false,
+      checkAll: false,
+      configDrawer: {},
+      typeDrawer: '',
+      columns: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 240,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '#',
+        width: 40,
+        align: 'center',
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('按钮名称'),
+        dataIndex: 'name',
+        width: 100
+      }, {
+        title: this.$t('自定义名称'),
+        dataIndex: 'customName',
+        width: 100,
+        customRender: (text) => {
+          return text || '--'
+        }
+      }, {
+        title: this.$t('自定义帮助说明'),
+        dataIndex: 'help',
+        customRender: (text) => {
+          return text || '--'
+        }
+      }, {
+        title: this.$t('启用'),
+        dataIndex: 'enable',
+        scopedSlots: { customRender: 'enable' }
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remark'
+      }],
+      workflowFilters: [{
+        name: this.$t('我的待办'),
+        value: 'my_process',
+        enable: '1',
+        customName: '',
+        remark: this.$t('{当前办理人}包含当前登录用户的变迁'),
+        help: ''
+      }, {
+        name: this.$t('我的已办'),
+        value: 'my_handle',
+        enable: '1',
+        customName: '',
+        remark: this.$t('当前登录用户办理过的变迁'),
+        help: ''
+      }, {
+        name: this.$t('我的发起'),
+        value: 'my_create',
+        enable: '1',
+        customName: '',
+        remark: this.$t('当前登录用户发起的流程'),
+        help: ''
+      }, {
+        name: this.$t('我的挂起'),
+        value: 'my_suspend',
+        enable: '1',
+        customName: '',
+        remark: this.$t('当前登录用户挂起的流程'),
+        help: ''
+      }, {
+        name: this.$t('抄送给我'),
+        value: 'my_cc',
+        enable: '1',
+        customName: '',
+        remark: this.$t('抄送给当前登录用户的流程'),
+        help: ''
+      }, {
+        name: this.$t('委托给我'),
+        value: 'my_entrust',
+        enable: '1',
+        customName: '',
+        remark: this.$t('委托给当前登录用户的流程'),
+        help: ''
+      }, {
+        name: this.$t('所有挂起'),
+        value: 'all_suspend',
+        enable: '1',
+        customName: '',
+        remark: this.$t('所有挂起的流程'),
+        help: ''
+      }, {
+        name: this.$t('所有流程'),
+        value: 'all_flow',
+        enable: '1',
+        customName: '',
+        remark: this.$t('所有流程（遵循数据窗口的条件设置）'),
+        help: ''
+      }, {
+        name: this.$t('所有待办'),
+        value: 'all_process',
+        enable: '1',
+        customName: '',
+        remark: this.$t('流程的所有待办变迁（遵循数据窗口的条件设置）'),
+        help: ''
+      }],
+      editorData: {
+        value: ''
+      }
+    }
+  },
+  mounted () {
+    let workflowFiltersArray = []
+    this.message = (<div>
+      <div>{this.$t('1）流程快捷筛选按钮的排序、自定义名称、自定义帮助是全局设置，《流程中心》依照该设置，《数据窗口》默认加载该设置。')}</div>
+      <div>{this.$t('2）此处的【授权】控制《流程中心》的权限机制，没有授权时，所有人都有权限使用。授权后，仅有权限的人可以使用。')}</div></div>)
+    this.axios({
+      url: '/admin/workflow/flowSetting',
+      data: { action: 'get' }
+    }).then(res => {
+      this.loading = false
+      if (res.result) {
+        workflowFiltersArray = res.result.workflowFilters
+        if (this.config && this.config.workflowFilters) {
+          this.workflowFilters = this.workflowFilters.map(item => {
+            const obj = workflowFiltersArray.find(proItem => proItem.value === item.value)
+            if (obj) {
+              item.customName = obj.customName
+              item.help = obj.help
+              item.remark = obj.remark
+            }
+            return item
+          })
+        } else {
+          if (workflowFiltersArray) {
+            this.workflowFilters = workflowFiltersArray
+          }
+        }
+      }
+    })
+  },
+  methods: {
+    handleSort (type) {
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        placement: 'right',
+        width: 600,
+        sortId: 'value',
+        sortData: this.workflowFilters
+      })
+    },
+    getSort (data) {
+      this.workflowFilters = data
+    },
+    handleAdd (type, record, index) {
+      this.typeDrawer = type
+      if (record) {
+        this.editorData = {
+          value: record.queryParam
+        }
+        this.configDrawer = {
+          title: this.$t('编辑'),
+          record: record,
+          index: index,
+          action: 'edit'
+        }
+      } else {
+        this.editorData = {
+          value: ''
+        }
+        this.configDrawer = {
+          title: this.$t('添加'),
+          action: 'add'
+        }
+      }
+      this.visibleDrawer = true
+    },
+    enableChange (e, record) {
+      if (this.workflowFilters.filter(item => item.value !== record.value).every(item => item.enable === '0')) {
+        this.$message.warning(this.$t('请保持至少有一个处于启用状态'))
+      } else {
+        this.$set(record, 'enable', record.enable = e ? '1' : '0')
+        this.$forceUpdate()
+      }
+    },
+    copyPrivShow (record, type) {
+      this.copyPriv = record.searchPriv
+      this.copyCheck = []
+      this.copyType = type
+      this.indeterminate = false
+      this.checkAll = false
+      this.plainOptions = this.workflowFilters.map(item => {
+        const obj = {
+          label: item.name,
+          value: item.value
+        }
+        return obj
+      })
+      this.visibleCopy = true
+    },
+    onCheckAllChange (e) {
+      Object.assign(this, {
+        copyCheck: e.target.checked ? this.plainOptions.map(item => item.value) : [],
+        indeterminate: false,
+        checkAll: e.target.checked
+      })
+    },
+    onChange (checkedList) {
+      this.indeterminate = !!checkedList.length && checkedList.length < this.plainOptions.length
+      this.checkAll = checkedList.length === this.plainOptions.length
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          values.info.searchType = 'custom'
+          values.info.queryParam = this.$refs.editorInit.getValue()
+          if (this.configDrawer.action === 'add') {
+            this.workflowFilters.splice(this.workflowFilters.length, 0, values.info)
+          } else {
+            Object.assign(this.workflowFilters[this.configDrawer.index], values.info)
+          }
+          this.visibleDrawer = false
+        }
+      })
+    },
+    handleDelete (record, index) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.workflowFilters.splice(index, 1)
+        }
+      })
+    },
+    handleSearchPriv (record, index) {
+      this.privData = record
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: this.$t('授权'),
+        record: record,
+        index: index,
+        key: 'searchPriv',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    getPrivs (all, data) {
+      this.$forceUpdate()
+    },
+    getCopy () {
+      this.workflowFilters.forEach(item => {
+        if (this.copyCheck.includes(item.value)) {
+          item.searchPriv = this.copyPriv
+        }
+      })
+      this.visibleCopy = false
+      this.$forceUpdate()
+    }
+  }
+}
+</script>

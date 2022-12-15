@@ -1,0 +1,637 @@
+<template>
+  <a-spin :spinning="loading" style="height: 100%">
+    <div class="page" style="height: 100%">
+      <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" :colon="false" class="search">
+        <a-card size="small" :title="$t('搜索')">
+          <a-space slot="extra">
+            <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+            <a-button
+              @click="
+                () => {
+                  queryParam = {}
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+          </a-space>
+          <a-row :class="advanced ? 'advanced' : 'normal'" class="form">
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('显示名称')">
+                <a-input v-model="queryParam.name" />
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('系统名称')">
+                <a-input v-model="queryParam.alias" allowClear />
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('分类名称')">
+                <a-select v-model="queryParam.category" allowClear>
+                  <a-select-option v-for="item1 in typeList" :key="item1">
+                    {{ item1 }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('UI组件')">
+                <a-select v-model="queryParam.formType" show-search option-filter-prop="children" allowClear>
+                  <a-select-option v-for="(item, key, index) in formtypes" :key="index" :value="item.value">
+                    {{ item.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('备注')">
+                <a-input v-model="queryParam.remarks" allowClear />
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('字段状态')">
+                <a-select v-model="queryParam.status" allowClear>
+                  <a-select-option value="1">{{ $t('启用') }}</a-select-option>
+                  <a-select-option value="0">{{ $t('禁用') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('索引唯一')">
+                <a-select v-model="queryParam.fieldKey" allowClear>
+                  <a-select-option value="">{{ $t('无') }}</a-select-option>
+                  <a-select-option value="unique_key">{{ $t('唯一') }}</a-select-option>
+                  <a-select-option value="key">{{ $t('索引') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('留痕')">
+                <a-select v-model="queryParam.trace" allowClear>
+                  <a-select-option :value="1">{{ $t('启用') }}</a-select-option>
+                  <a-select-option :value="0">{{ $t('禁用') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-card>
+      </a-form>
+      <a-space>
+        <a-button v-action:add icon="plus" type="primary" @click="handleAdd">{{ $t('添加') }}</a-button>
+        <a-button v-action:import icon="upload" @click="handImport">{{ $t('导入') }}</a-button>
+        <a-button icon="sort-descending" @click="handleSort">{{ $t('排序') }}</a-button>
+        <a-button @click="tableEvent">{{ $t('数据表事件') }}</a-button>
+        <a-dropdown>
+          <a-button>
+            <a-icon type="menu" />
+            {{ $t('更多操作') }}
+          </a-button>
+          <a-menu slot="overlay" @click="handMenu">
+            <a-menu-item key="plus">
+              <a-icon type="plus-circle" />
+              {{ $t('从其他数据表中添加字段') }}
+            </a-menu-item>
+            <a-menu-item key="flow">
+              <a-icon type="plus-circle" />
+              {{ $t('一键添加流程字段') }}
+            </a-menu-item>
+            <a-menu-item key="sync">
+              <a-icon type="sync" />
+              {{ $t('字段同步') }}
+            </a-menu-item>
+          </a-menu>
+        </a-dropdown>
+      </a-space>
+      <s-table
+        ref="table"
+        style="flex-grow: 1; margin: 8px"
+        class="table-fill"
+        size="small"
+        rowKey="id"
+        :scroll="{ y: true }"
+        :columns="columns"
+        :data="loadDataTable"
+        :sorter="sorter"
+      >
+        <span slot="fieldKey" slot-scope="text">
+          <template v-if="text == 'unique_key'">
+            <a-badge status="success" />
+            {{ $t('唯一') }}
+          </template>
+          <template v-else-if="text == 'key'">
+            <a-badge status="processing" />
+            {{ $t('索引') }}
+          </template>
+          <template v-else>
+            <a-badge status="default" />
+            {{ $t('无') }}
+          </template>
+        </span>
+        <template slot="width" slot-scope="text">
+          <template v-if="text">{{ text }}</template>
+          <template v-else>--</template>
+        </template>
+        <template slot="status" slot-scope="text">
+          <template v-if="text == 1">
+            <a-badge status="success" />
+            {{ $t('启用') }}
+          </template>
+          <template v-else>
+            <a-badge status="default" />
+            {{ $t('禁用') }}
+          </template>
+        </template>
+        <div slot="action" slot-scope="text, record">
+          <a
+            :disabled="
+              ['input_user', 'input_time', 'update_user', 'update_time'].includes(record.alias) ||
+              record.accessLevel === 2
+            "
+            @click="handleEdit(record)"
+          >
+            {{ $t('编辑') }}
+          </a>
+          <a-divider type="vertical" />
+          <a
+            :disabled="
+              ['input_user', 'input_time', 'update_user', 'update_time'].includes(record.alias) || !!record.accessLevel
+            "
+            @click="handleDelete(record)"
+          >
+            {{ $t('删除') }}
+          </a>
+        </div>
+      </s-table>
+      <field-form ref="fieldForm" :key="refreshKey" @ok="handleOk" />
+      <!-- <field-import ref="fieldImport" @ok="handleOk" /> -->
+      <drag-sort ref="dragSort" @ok="handleOk" />
+      <field-opreation ref="fieldOpreation" @ok="handleOk" />
+      <data-table-event ref="dataTableEvent" :tableId="tableId" />
+    </div>
+    <general-export ref="generalExport">
+      <a-form-item :label="$t('模板下载')">
+        <a-button icon="download" @click="handleDownloadTemplate">{{ $t('模板下载') }}</a-button>
+      </a-form-item>
+    </general-export>
+  </a-spin>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    FieldForm: () => import('./FieldForm'),
+    FieldOpreation: () => import('./FieldOpreation'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    DataTableEvent: () => import('./DataTableEvent'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    tableId: {
+      type: [String, Number],
+      default: ''
+    }
+  },
+
+  data () {
+    return {
+      refreshKey: 0,
+      loading: false,
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        scopedSlots: { customRender: 'action' },
+        align: 'center'
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        sorter: true,
+        width: 80
+      }, {
+        title: this.$t('排序'),
+        dataIndex: 'listOrder',
+        sorter: true,
+        width: 60
+      }, {
+        title: this.$t('显示名称'),
+        dataIndex: 'name',
+        width: 120,
+        sorter: true
+      }, {
+        title: this.$t('系统名称'),
+        dataIndex: 'alias',
+        width: 240,
+        sorter: true
+      }, {
+        title: this.$t('UI组件'),
+        width: 100,
+        sorter: true,
+        dataIndex: 'formType',
+        customRender: (text, record) => {
+          return this.formtypes[text].text
+        }
+      }, {
+        title: this.$t('字段类型'),
+        dataIndex: 'fieldType',
+        width: 100,
+        sorter: true
+      }, {
+        title: this.$t('字段长度'),
+        dataIndex: 'fieldLength',
+        width: 80,
+        sorter: true
+      }, {
+        title: this.$t('字段状态'),
+        dataIndex: 'status',
+        width: 100,
+        sorter: true,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('索引唯一'),
+        dataIndex: 'fieldKey',
+        width: 100,
+        scopedSlots: { customRender: 'fieldKey' },
+        sorter: true
+      }, {
+        title: this.$t('分类名称'),
+        dataIndex: 'category',
+        width: 100,
+        sorter: true
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 120,
+        sorter: true
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 150,
+        sorter: true
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks'
+      }],
+      colLayout: {},
+      sorter: { field: 'listOrder', order: 'ascend' },
+      formtypes: {
+        text: {
+          value: 'text',
+          text: this.$t('单行文本'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        textarea: {
+          value: 'textarea',
+          text: this.$t('多行文本'),
+          fieldtypes: [
+            { value: 'TEXT', text: 'TEXT' },
+            { value: 'MEDIUMTEXT', text: 'MEDIUMTEXT' },
+            { value: 'LONGTEXT', text: 'LONGTEXT' }
+          ]
+        },
+        datetime: {
+          value: 'datetime',
+          text: this.$t('日期时间'),
+          fieldtypes: [
+            { value: 'DATETIME', text: this.$t('DATETIME-日期时间') },
+            { value: 'DATE', text: this.$t('DATE-日期') },
+            { value: 'TIME', text: this.$t('TIME-时间') }
+          ]
+        },
+        combobox: {
+          value: 'combobox',
+          text: this.$t('下拉框'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        radio: {
+          value: 'radio',
+          text: this.$t('单选框'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        checkbox: {
+          value: 'checkbox',
+          text: this.$t('复选框'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        editor: {
+          value: 'editor',
+          text: this.$t('编辑器'),
+          fieldtypes: [
+            { value: 'TEXT', text: 'TEXT' },
+            { value: 'MEDIUMTEXT', text: 'MEDIUMTEXT' },
+            { value: 'LONGTEXT', text: 'LONGTEXT' }
+          ]
+        },
+        image: {
+          value: 'image',
+          text: this.$t('图片'),
+          fieldtypes: [
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        file: {
+          value: 'file',
+          text: this.$t('附件'),
+          fieldtypes: [
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        number: {
+          value: 'number',
+          text: this.$t('数字'),
+          fieldtypes: [
+            { value: 'INT', text: this.$t('INT-整数') },
+            { value: 'DECIMAL', text: this.$t('DECIMAL-小数') }
+          ]
+        },
+        cascader: {
+          value: 'cascader',
+          text: this.$t('级联选择'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        switch: {
+          value: 'switch',
+          text: this.$t('开关'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        score: {
+          value: 'score',
+          text: this.$t('评分'),
+          fieldtypes: [
+            { value: 'TINYINT', text: 'TINYINT' }
+          ]
+        },
+        serialnumber: {
+          value: 'serialnumber',
+          text: this.$t('流水号'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        organization: {
+          value: 'organization',
+          text: this.$t('组织结构'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        address: {
+          value: 'address',
+          text: this.$t('地址选择'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        treeselect: {
+          value: 'treeselect',
+          text: this.$t('树选择'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        associated: {
+          value: 'associated',
+          text: this.$t('关联数据'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        autocomplete: {
+          value: 'autocomplete',
+          text: this.$t('自动完成'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        },
+        tag: {
+          value: 'tag',
+          text: this.$t('标签'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' },
+            { value: 'TEXT', text: 'TEXT' }
+          ]
+        },
+        location: {
+          value: 'location',
+          text: this.$t('地图选点'),
+          fieldtypes: [
+            { value: 'VARCHAR', text: 'VARCHAR' }
+          ]
+        }
+      },
+      // 更多操作功能key
+      opreationKey: '',
+      typeList: [],
+      timeoutId: null,
+      advanced: false
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+    this.getCategory()
+  },
+  methods: {
+    loadDataTable (parameter) {
+      let params = Object.assign(parameter, this.queryParam, { tableId: this.tableId })
+      params = JSON.parse(JSON.stringify(params))
+      return this.axios({
+        url: '/admin/field/init',
+        data: params
+      }).then(res => {
+        res.result.data.forEach(item => {
+          item.setting = JSON.parse(item.setting)
+        })
+        return res.result
+      })
+    },
+    getCategory () {
+      this.axios({
+        url: '/admin/field/getFieldOptions',
+        params: {
+          tableId: this.tableId
+        }
+      }).then(res => {
+        this.typeList = res.result.data
+      })
+    },
+    handleAdd () {
+      this.refreshKey = this.refreshKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.fieldForm.show({
+          action: 'add',
+          title: this.$t('添加'),
+          url: '/admin/field/add',
+          tableId: this.tableId
+        })
+      })
+    },
+    // 导入
+    handImport () {
+      this.$refs.generalExport.show({
+        slotScoped: true, // 是否启用插槽
+        title: this.$t('导入'),
+        type: 'import',
+        className: 'FieldTask',
+        parameter: {
+          tableId: this.tableId
+        }
+      })
+    },
+    // 模板下载
+    handleDownloadTemplate () {
+      const filePath = encodeURIComponent('static/template/字段导入模板.xlsx')
+      window.open(`${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}`)
+    },
+    handleSort () {
+      this.$refs.dragSort.show({
+        tableName: 'admin_field',
+        where: `table_id = '${this.tableId}'`
+      })
+    },
+    handleEdit (record) {
+      this.refreshKey = this.refreshKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.fieldForm.show({
+          action: 'edit',
+          title: `${this.$t('编辑')}: ${record.name}`,
+          url: '/admin/field/edit',
+          record: record,
+          tableId: this.tableId || record.tableId
+        })
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    tableEvent () {
+      this.$refs.dataTableEvent.show({
+        title: this.$t('数据表事件')
+      })
+    },
+    handleDelete (record) {
+      const that = this
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/field/delete',
+            data: { id: record.fieldId }
+          }).then(res => {
+            if (res.code) {
+              that.$message.warning(res.message)
+            } else {
+              that.$refs.table.refresh()
+            }
+          })
+        }
+      })
+    },
+    handleReal (record, type) {
+      this.loading = true
+      if (type === 'edit') {
+        record.editreal = true
+        this.loading = false
+      } else {
+        this.handleSubmit(record)
+        record.editreal = false
+        this.loading = false
+      }
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    // 更多操作
+    handMenu (e) {
+      const key = e.key
+      const that = this
+      switch (key) {
+        case 'plus':
+          this.$refs.fieldOpreation.show({
+            action: 'add',
+            title: this.$t('添加'),
+            url: '/admin/field/add',
+            tableId: that.tableId
+          })
+          break
+        case 'sync':
+          this.$confirm({
+            content: this.$t('您确认要同步字段吗？'),
+            onOk () {
+              that.loading = true
+              that.axios({
+                url: '/admin/field/syncTableFields',
+                params: { tableId: that.tableId }
+              }).then(res => {
+                that.loading = false
+                that.$refs.table.refresh()
+                that.$message.success(res.message)
+              })
+            }
+          })
+          break
+        case 'flow':
+          this.$confirm({
+            content: this.$t('您确认要添加流程字段吗？'),
+            onOk () {
+              that.loading = true
+              that.axios({
+                url: '/admin/field/syncWorkflowFields',
+                data: { tableId: that.tableId }
+              }).then(res => {
+                that.loading = false
+                if (res.code) {
+                  that.$message.error(res.message)
+                } else {
+                  that.$refs.table.refresh()
+                  const msgList = res.message.split('%s')
+                  const numList = [res.result.total, res.result.exist, res.result.add]
+                  let msg = ''
+                  msgList.forEach((item, index) => {
+                    if (numList[index]) {
+                      msg = msg + item + numList[index]
+                    } else {
+                      msg = msg + item
+                    }
+                  })
+                  that.$message.success(msg)
+                }
+              })
+            }
+          })
+          break
+        default:
+          break
+      }
+    }
+  }
+}
+</script>

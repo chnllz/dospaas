@@ -1,0 +1,103 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('短信平台')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[alias]',
+              { rules: [{ required: true, message: $t('请输入短信平台') }], initialValue: data.alias }
+            ]"
+            :disabled="true"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('短信签名')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input v-decorator="['info[signName]', { initialValue: data.signName }]" />
+        </a-form-item>
+        <a-form-item :label="$t('模板CODE')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select v-decorator="['info[codeNumber]', { initialValue: data.codeNumber }]">
+            <a-select-option value="">--</a-select-option>
+            <a-select-option value="code1">CODE1</a-select-option>
+            <a-select-option value="code2">CODE2</a-select-option>
+            <a-select-option value="code3">CODE3</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('单价/元')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input-number
+            v-decorator="['info[unitPrice]', { initialValue: data.unitPrice }]"
+            :min="0"
+            style="width: 100%"
+            :step="0.001"
+          />
+        </a-form-item>
+        <div v-for="(info, index) in data" :key="index">
+          <a-form-item
+            v-if="!['alias', 'signName', 'codeNumber', 'unitPrice', 'status'].includes(index)"
+            :label="index"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+          >
+            <a-input v-decorator="['info[' + index + ']', { initialValue: data[index] }]" />
+          </a-form-item>
+        </div>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('sms'),
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      visible: false,
+      loading: false,
+      data: {},
+      form: this.$form.createForm(this)
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', alias: config.record.alias })
+      }).then((res) => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = res.result.data
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          values.info.status = this.data.status
+          this.axios({
+            url: this.config.url,
+            data: Object.assign({ action: 'submit', alias: this.data.alias }, values)
+          }).then((res) => {
+            this.loading = false
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.visible = false
+              this.$emit('ok', values)
+              this.$message.success(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

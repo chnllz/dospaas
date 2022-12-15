@@ -1,0 +1,85 @@
+<!DOCTYPE html><html lang="zh-cmn-Hans"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/web/favicon.ico"><title>客户服务系统</title><style>#loading-mask {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 100%;
+        background: #fff;
+        user-select: none;
+        z-index: 9999;
+        overflow: hidden;
+      }
+      .loading-wrapper {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -100%);
+      }
+      .loading-dot {
+        animation: antRotate 1.2s infinite linear;
+        transform: rotate(45deg);
+        position: relative;
+        display: inline-block;
+        font-size: 64px;
+        width: 64px;
+        height: 64px;
+        box-sizing: border-box;
+      }
+      .loading-dot i {
+        width: 22px;
+        height: 22px;
+        position: absolute;
+        display: block;
+        background-color: #1890ff;
+        border-radius: 100%;
+        transform: scale(0.75);
+        transform-origin: 50% 50%;
+        opacity: 0.3;
+        animation: antSpinMove 1s infinite linear alternate;
+      }
+      .loading-dot i:nth-child(1) {
+        top: 0;
+        left: 0;
+      }
+      .loading-dot i:nth-child(2) {
+        top: 0;
+        right: 0;
+        -webkit-animation-delay: 0.4s;
+        animation-delay: 0.4s;
+      }
+      .loading-dot i:nth-child(3) {
+        right: 0;
+        bottom: 0;
+        -webkit-animation-delay: 0.8s;
+        animation-delay: 0.8s;
+      }
+      .loading-dot i:nth-child(4) {
+        bottom: 0;
+        left: 0;
+        -webkit-animation-delay: 1.2s;
+        animation-delay: 1.2s;
+      }
+      @keyframes antRotate {
+        to {
+          -webkit-transform: rotate(405deg);
+          transform: rotate(405deg);
+        }
+      }
+      @-webkit-keyframes antRotate {
+        to {
+          -webkit-transform: rotate(405deg);
+          transform: rotate(405deg);
+        }
+      }
+      @keyframes antSpinMove {
+        to {
+          opacity: 1;
+        }
+      }
+      @-webkit-keyframes antSpinMove {
+        to {
+          opacity: 1;
+        }
+      }</style><script src="/web/tinymce/tinymce.min.js"></script><link href="/web/css/app.d62cfea9.css" rel="preload" as="style"><link href="/web/css/chunk-vendors.a240fe01.css" rel="preload" as="style"><link href="/web/css/npm.ant-design-vue.4d82645a.css" rel="preload" as="style"><link href="/web/css/npm.codemirror.02b2664d.css" rel="preload" as="style"><link href="/web/css/npm.viewerjs.5e2bf23f.css" rel="preload" as="style"><link href="/web/js/app.f91e276ccc51272732c4.1662469443138.js" rel="preload" as="script"><link href="/web/js/chunk-vendors.92c8951c7c1edd476d82.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.ant-design-vue.edfe24a631ca49d11859.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.ant-design.2b7d6fb838f2e0590d77.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.antv.ec964ecd0989102ce0c6.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.async-validator.242dca3af8773da6c847.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.axios.00fe74685116b6558043.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.babel-runtime.f3d74af3e038ed3d9b01.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.buffer.19af85ebb0a422632fb8.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.clipboard.c8826e1cf65707f0f8fa.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.codemirror.7c9cc08526a654e0cd03.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.core-js.21971493fe5f4d859537.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.dom-align.fdcd5ed077d9f13af2be.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.dompurify.812ae812094490f77ad1.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.echarts.37cf7d0e64784f77acc8.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.fortawesome.42c2aa83dd642e961c58.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.js-pinyin.4ba997248654d152dbc7.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.lodash.307903fdac4435348b4b.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.lodash.clonedeep.f7212606912612d2ebf2.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.lodash.get.0d4dc04cc6af29f9ad53.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.mockjs2.e1e5e108bf755b7a8467.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.moment.db10d21fe3c03491eb0b.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.regenerator-runtime.0ed9158ec90c8143bacb.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.resize-observer-polyfill.060349b0c5c018fd0671.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.sockjs-client.a2128a6efa08725ff5c4.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.sortablejs.b2a58bab2c72850f3ac8.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.store.c42d086275fa1ea82e45.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.tinycolor2.64ef9551303393a086e1.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.v-viewer.f9960868d81180228af9.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vconsole.756b348515bfb28344fe.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.viewerjs.65e52b28f7f859c9371d.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.viser.eac31565c126d1458f8c.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-baidu-map.a73012d04ace539b058f.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-color.30fccbc33004c10970d9.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-cropper.0d6485d7e33ab5feb667.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-draggable-resizable.65e0b11fa6aa223d6d73.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-grid-layout.0d7aee01fb9097685efc.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-i18n.4e350d244c7a55d895ff.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-json-viewer.77876a3580633f421e61.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue-router.a181289022bf23dbee53.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vue.78fc8eb321e6e63beb13.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vuedraggable.c9ca26da7a1a6d44fe0f.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.vuex.cb3cd69ab2001ab4baa2.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.webstomp-client.f36a14548c185381cceb.1662469443138.js" rel="preload" as="script"><link href="/web/js/npm.zrender.74960335fa34ba64b575.1662469443138.js" rel="preload" as="script"><link href="/web/js/runtime.34f77e061fceca32f04b.1662469443138.js" rel="preload" as="script"><link href="/web/css/npm.ant-design-vue.4d82645a.css" rel="stylesheet"><link href="/web/css/npm.codemirror.02b2664d.css" rel="stylesheet"><link href="/web/css/npm.viewerjs.5e2bf23f.css" rel="stylesheet"><link href="/web/css/chunk-vendors.a240fe01.css" rel="stylesheet"><link href="/web/css/app.d62cfea9.css" rel="stylesheet"></head><body><noscript><strong>We're sorry but vue-antd-pro doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"><div id="loading-mask"><div class="loading-wrapper" style="text-align: center;"><span class="loading-dot loading-dot-spin"><i></i> <i></i> <i></i> <i></i></span><div style="margin-top: 32px;"><script>document.write(
+                location.search.indexOf('?view=crm%2FQuestionnaire') === 0 ? 'Loading……' : '加载中，请稍候……'
+              )</script></div></div></div></div><script src="/web/js/runtime.34f77e061fceca32f04b.1662469443138.js"></script><script src="/web/js/npm.ant-design-vue.edfe24a631ca49d11859.1662469443138.js"></script><script src="/web/js/npm.echarts.37cf7d0e64784f77acc8.1662469443138.js"></script><script src="/web/js/npm.core-js.21971493fe5f4d859537.1662469443138.js"></script><script src="/web/js/npm.lodash.307903fdac4435348b4b.1662469443138.js"></script><script src="/web/js/npm.babel-runtime.f3d74af3e038ed3d9b01.1662469443138.js"></script><script src="/web/js/npm.zrender.74960335fa34ba64b575.1662469443138.js"></script><script src="/web/js/npm.sockjs-client.a2128a6efa08725ff5c4.1662469443138.js"></script><script src="/web/js/npm.axios.00fe74685116b6558043.1662469443138.js"></script><script src="/web/js/npm.codemirror.7c9cc08526a654e0cd03.1662469443138.js"></script><script src="/web/js/npm.viser.eac31565c126d1458f8c.1662469443138.js"></script><script src="/web/js/npm.store.c42d086275fa1ea82e45.1662469443138.js"></script><script src="/web/js/npm.ant-design.2b7d6fb838f2e0590d77.1662469443138.js"></script><script src="/web/js/npm.antv.ec964ecd0989102ce0c6.1662469443138.js"></script><script src="/web/js/npm.fortawesome.42c2aa83dd642e961c58.1662469443138.js"></script><script src="/web/js/npm.viewerjs.65e52b28f7f859c9371d.1662469443138.js"></script><script src="/web/js/npm.vue.78fc8eb321e6e63beb13.1662469443138.js"></script><script src="/web/js/npm.clipboard.c8826e1cf65707f0f8fa.1662469443138.js"></script><script src="/web/js/npm.js-pinyin.4ba997248654d152dbc7.1662469443138.js"></script><script src="/web/js/npm.moment.db10d21fe3c03491eb0b.1662469443138.js"></script><script src="/web/js/npm.async-validator.242dca3af8773da6c847.1662469443138.js"></script><script src="/web/js/npm.buffer.19af85ebb0a422632fb8.1662469443138.js"></script><script src="/web/js/npm.dom-align.fdcd5ed077d9f13af2be.1662469443138.js"></script><script src="/web/js/npm.dompurify.812ae812094490f77ad1.1662469443138.js"></script><script src="/web/js/npm.lodash.clonedeep.f7212606912612d2ebf2.1662469443138.js"></script><script src="/web/js/npm.lodash.get.0d4dc04cc6af29f9ad53.1662469443138.js"></script><script src="/web/js/npm.mockjs2.e1e5e108bf755b7a8467.1662469443138.js"></script><script src="/web/js/npm.regenerator-runtime.0ed9158ec90c8143bacb.1662469443138.js"></script><script src="/web/js/npm.resize-observer-polyfill.060349b0c5c018fd0671.1662469443138.js"></script><script src="/web/js/npm.sortablejs.b2a58bab2c72850f3ac8.1662469443138.js"></script><script src="/web/js/npm.tinycolor2.64ef9551303393a086e1.1662469443138.js"></script><script src="/web/js/npm.v-viewer.f9960868d81180228af9.1662469443138.js"></script><script src="/web/js/npm.vconsole.756b348515bfb28344fe.1662469443138.js"></script><script src="/web/js/npm.vue-baidu-map.a73012d04ace539b058f.1662469443138.js"></script><script src="/web/js/npm.vue-color.30fccbc33004c10970d9.1662469443138.js"></script><script src="/web/js/npm.vue-cropper.0d6485d7e33ab5feb667.1662469443138.js"></script><script src="/web/js/npm.vue-draggable-resizable.65e0b11fa6aa223d6d73.1662469443138.js"></script><script src="/web/js/npm.vue-grid-layout.0d7aee01fb9097685efc.1662469443138.js"></script><script src="/web/js/npm.vue-i18n.4e350d244c7a55d895ff.1662469443138.js"></script><script src="/web/js/npm.vue-json-viewer.77876a3580633f421e61.1662469443138.js"></script><script src="/web/js/npm.vue-router.a181289022bf23dbee53.1662469443138.js"></script><script src="/web/js/npm.vuedraggable.c9ca26da7a1a6d44fe0f.1662469443138.js"></script><script src="/web/js/npm.vuex.cb3cd69ab2001ab4baa2.1662469443138.js"></script><script src="/web/js/npm.webstomp-client.f36a14548c185381cceb.1662469443138.js"></script><script src="/web/js/chunk-vendors.92c8951c7c1edd476d82.1662469443138.js"></script><script src="/web/js/app.f91e276ccc51272732c4.1662469443138.js"></script></body></html>

@@ -1,0 +1,103 @@
+<template>
+  <div class="box">
+    <div class="wrapper" :style="{ color: data.color }">
+      <a-icon :type="data.iconType" :style="{ fontSize: '100px' }" />
+      <span class="message">{{ data.message }}</span>
+    </div>
+    <div class="warn">{{ timeOut }}s后系统将自动关闭</div>
+  </div>
+</template>
+<script>
+export default {
+  name: 'ThirdPartyResult',
+  data () {
+    return {
+      data: {
+        iconType: 'check-circle'
+      },
+      timeId: null,
+      timeOut: 5
+    }
+  },
+  mounted () {
+    if (this.$route.query) {
+      const code = this.$route.query.code
+      const codeArr = [{
+        code: '4000',
+        message: '绑定成功',
+        iconType: 'check-circle',
+        color: '#52c41a'
+      }, {
+        code: '4001',
+        message: '您已绑定，请勿重复绑定',
+        iconType: 'exclamation-circle',
+        color: '#faad14'
+      }, {
+        code: '4002',
+        message: '非法用户，不是内部人员无法绑定',
+        iconType: 'close-circle',
+        color: '#f5222d'
+      }, {
+        code: '4003',
+        message: '绑定失败',
+        iconType: 'close-circle',
+        color: '#f5222d'
+      }, {
+        code: '4004',
+        message: '您已取消绑定授权',
+        iconType: 'exclamation-circle',
+        color: '#faad14'
+      }]
+      codeArr.forEach(item => {
+        if (item.code === code) {
+          this.data = item
+        }
+      })
+      if (code === '4000') {
+        window.opener.top.thirdPartyRefresh()
+      }
+    }
+
+    this.timeId = setInterval(() => {
+      this.timeOut--
+      if (this.timeOut === 1) {
+        clearInterval(this.timeId)
+        var userAgent = navigator.userAgent
+        if (userAgent.indexOf('Firefox') !== -1 || userAgent.indexOf('Chrome') !== -1) {
+          window.location.replace('about:blank')
+        } else {
+          window.opener = null
+          window.open('', '_self')
+        }
+        window.close()
+      }
+    }, 1000)
+  }
+}
+</script>
+<style lang="less" scoped>
+.box {
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.wrapper {
+  height: 200px;
+  margin-top: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-weight: 550;
+  font-size: 40px;
+}
+.message {
+  margin-top: 20px;
+}
+.warn {
+  color: #aaa;
+  font-size: 18px;
+}
+</style>

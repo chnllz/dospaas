@@ -1,0 +1,443 @@
+<template>
+  <a-spin :spinning="loading" class="container">
+    <a-form :form="form">
+      <a-tabs
+        v-model="activeKey"
+        tabPosition="left"
+        style="height: calc(100vh - 210px); overflow: auto"
+        class="tplviewDataFormEdit"
+      >
+        <a-tab-pane key="1" :tab="$t('基础设置')" force-render>
+          <Setting
+            :fieldslist="fieldslist"
+            :treeSelectList="treeSelectList"
+            :workflow="workflow"
+            :data="data"
+            :setting.sync="setting"
+            :pageName="configdata.variable"
+          />
+        </a-tab-pane>
+        <a-tab-pane
+          key="2"
+          :tab="$t('列属性')"
+          :style="{ overflow: configdata.variable !== 'table_card_list' ? 'auto' : 'hidden' }"
+          force-render
+        >
+          <Column
+            v-if="configdata.variable !== 'table_card_list'"
+            ref="column"
+            :fieldDataList="fieldDataList"
+            :fieldslist="allList"
+            :setting="setting"
+            :action="configdata.action"
+            :variable="configdata.variable"
+            :fieldCategory="fieldCategory"
+          />
+          <k-form-design
+            v-else
+            ref="kFormDesign"
+            tableType="window"
+            :fieldDataList="fieldDataList"
+            :myTemplate="cardTemplate"
+            :formdata="{}"
+            :setting="{}"
+          />
+        </a-tab-pane>
+        <a-tab-pane v-if="configdata.variable !== 'table_subform_list'" key="3" :tab="$t('搜索器')" force-render>
+          <TplviewDataQuerier
+            ref="tplviewdataquerier"
+            :fieldDataList="querierFieldsarr"
+            :fieldslist="allList"
+            :myTemplate="myTemplate"
+            :tableId="config.tableId"
+            :tabThis="tabThis"
+            :setting="setting"
+            :fieldCategory="fieldCategory"
+          />
+        </a-tab-pane>
+        <a-tab-pane key="4" :tab="$t('按钮')" force-render>
+          <Tool
+            ref="tool"
+            :barMenu="barMenu"
+            :tableidAll="tableId"
+            :fieldDataList="fieldDataList"
+            :fieldslist="allList"
+            :active="active"
+            :tabThis="tabThis"
+            :config="configdata"
+            @func="getBarMenus"
+          />
+        </a-tab-pane>
+        <a-tab-pane key="5" :tab="$t('表单应用')" force-render>
+          <!-- <a-space direction="vertical" style="width: 100%" size="middle"> -->
+          <h3>
+            <tag-icon />
+            {{ $t('①选择表单视图') }}
+          </h3>
+          <a-card size="small" style="margin-bottom: 16px">
+            <FormApply
+              ref="formapply"
+              :params="{ tplviewArr: tplviewViewArr, tableId: configdata.tableId }"
+              :formViewData="formView"
+            />
+          </a-card>
+          <h3>
+            <tag-icon />
+            {{ $t('②设置表单视图按钮') }}
+          </h3>
+          <a-card size="small" style="margin-bottom: 16px">
+            <ExtendButton ref="extendbutton" :extendBarMenuData="extendBarMenu" />
+          </a-card>
+          <h3>
+            <tag-icon />
+            {{ $t('③表单打开方式') }}
+          </h3>
+          <a-card size="small">
+            <a-form-item
+              v-if="configdata.variable !== 'table_subform_list'"
+              :labelCol="labelCol"
+              :wrapperCol="wrapperCol"
+            >
+              <span slot="label">
+                {{ $t('抽屉宽度') }}
+                <a-tooltip
+                  placement="top"
+                  :title="
+                    $t(
+                      '设置数据窗口打开表单视图时抽屉的宽度。固定宽度: 打开的表单视图使用固定宽度。百分比: 打开的表单视图使用分辨率百分比。'
+                    )
+                  "
+                >
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-row :gutter="8">
+                <a-col :span="4">
+                  <a-form-item>
+                    <a-select
+                      v-decorator="['setting[drawerType]', { initialValue: setting.drawerType || '0' }]"
+                      @change="
+                        (e) => {
+                          setting.drawerType = e
+                        }
+                      "
+                    >
+                      <a-select-option value="0">{{ $t('固定宽度') }}</a-select-option>
+                      <a-select-option value="1">{{ $t('百分比') }}</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="20">
+                  <a-input-number
+                    v-if="setting.drawerType === '0'"
+                    v-decorator="['setting[drawerWidth]', { initialValue: setting.drawerWidth || 1200 }]"
+                    :min="100"
+                  />
+                  <a-input-number
+                    v-else
+                    v-decorator="['setting[drawerPercentage]', { initialValue: setting.drawerPercentage || 80 }]"
+                    :min="10"
+                    :max="100"
+                  />
+                  <span>{{ setting.drawerType === '0' ? 'px' : '%' }}</span>
+                </a-col>
+              </a-row>
+            </a-form-item>
+            <a-form-item
+              v-if="configdata.variable !== 'table_subform_list'"
+              :label="$t('表单Label宽度')"
+              :labelCol="labelCol"
+              :wrapperCol="wrapperCol"
+            >
+              <a-input-number
+                v-decorator="['setting[labelWidth]', { initialValue: setting.labelWidth || 100 }]"
+                :min="50"
+              />
+            </a-form-item>
+          </a-card>
+        </a-tab-pane>
+        <!-- <a-tab-pane tab="视图自定义" key="6" >
+        </a-tab-pane> -->
+      </a-tabs>
+    </a-form>
+  </a-spin>
+</template>
+<script>
+import Vue from 'vue'
+import KFormDesign from '@/views/admin/FormDesign/packages/index'
+Vue.use(KFormDesign)
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    Setting: () => import('./Table/Setting'),
+    Column: () => import('./Table/Column'),
+    Tool: () => import('./Table/Tool'),
+    FormApply: () => import('./Table/FormApply'),
+    ExtendButton: () => import('./Table/ExtendButton'),
+    TplviewDataQuerier: () => import('./Table/TplviewDataQuerier'),
+    PacketFilter: () => import('@/views/admin/Table/PacketFilter')
+  },
+  props: {
+    configdata: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    tableId: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    active: {
+      type: String,
+      default () {
+        return ''
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      config: {},
+      loading: false,
+      activeKey: '1',
+      labelCol: { span: 3 },
+      wrapperCol: { span: 21 },
+      data: {},
+      setting: {
+        formView: []
+      },
+      tabThis: this,
+      allList: [],
+      formView: [],
+      myTemplate: [],
+      cardTemplate: [],
+      fieldDataList: [],
+      querierFieldsarr: [],
+      fieldCategory: [],
+      fieldslist: [],
+      treeSelectList: [],
+      barMenu: [],
+      tplviewViewArr: [],
+      extendBarMenu: [],
+      form: this.$form.createForm(this),
+      workflow: []
+    }
+  },
+  watch: {
+    fieldDataList (newValue) {
+      this.querierFieldsarr = this.getQuerier(newValue)
+      const id = this.querierFieldsarr.filter(item => item.alias === 'id')
+      this.querierFieldsarr = this.querierFieldsarr.filter(item => item.alias !== 'id')
+      this.querierFieldsarr = this.querierFieldsarr.sort(this.compare('data_id'))
+      this.querierFieldsarr.unshift(id[0])
+    }
+  },
+  // 祖先级组件数据传递，以及被子孙级组件动态修改
+  provide () {
+    this.theme = Vue.observable({
+      viewData: {}
+    })
+    return {
+      theme: this.theme
+    }
+  },
+  mounted () {
+    this.show()
+  },
+  methods: {
+    show () {
+      if (this.configdata.action === 'edit') {
+        this.activeKey = '2'
+      } else {
+        this.activeKey = '1'
+      }
+      this.loading = true
+      this.config = this.configdata
+      this.theme.item = this.configdata.item || {}
+      this.axios({
+        url: this.config.action === 'add' ? this.config.submitUrl : this.config.url,
+        data: Object.assign({ action: 'get', tableId: this.configdata.tableId ? this.config.tableId : 0, variable: this.configdata.variable, id: this.configdata.record ? this.configdata.record.id : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.form.resetFields()
+        this.theme.viewData = res.result
+        this.data = res.result.data
+        this.fieldslist = res.result.fieldslist
+        this.fieldDataList = res.result.fieldDataList
+        this.treeSelectList = res.result.fieldDataList.filter(item => item.formType === 'treeselect')
+        this.allList = this.fieldslist.map(item => { const obj = this.fieldDataList.find(arrItem => arrItem.alias === item.value); return obj }).filter(item => item)
+        this.fieldCategory = res.result.fieldCategory
+        this.barMenu = res.result.barMenu
+        this.barMenu = this.barMenu.sort(this.compare('listOrder'))
+        this.setting = res.result.setting
+        if (this.setting.fieldDataList.every(item => item.alias !== 'id')) {
+          this.setting.fieldDataList.unshift({
+            alias: 'id',
+            align: 'right',
+            attribute: '',
+            category: '',
+            customTitle: null,
+            display: 'v',
+            edit: null,
+            fieldId: 'id',
+            formType: 'text',
+            id: 'id',
+            index: '1',
+            listOrder: '20',
+            name: 'ID',
+            rule: 'readonly',
+            sorter: '1',
+            sortId: '20',
+            value: 'id',
+            width: '60'
+          })
+        }
+        if (!this.setting.actionColumnSetting) {
+          this.setting.actionColumnSetting = {
+            alias: 'action',
+            align: 'center',
+            display: 'v',
+            dataIndex: 'action',
+            rowAction: [],
+            fieldId: 'action',
+            actionShow: 3,
+            actionType: '2',
+            attribute: '',
+            name: this.$t('操作'),
+            sorter: '0',
+            sortId: '10',
+            listOrder: '10',
+            type: 'action',
+            id: 'action',
+            value: 'action',
+            width: '160'
+          }
+        }
+        this.setting.fieldDataList.unshift(this.setting.actionColumnSetting)
+        this.formView = res.result.setting.formView || []
+        this.tplviewViewArr = res.result.tplviewViewArr
+        this.extendBarMenu = res.result.extendBarMenu || []
+        this.myTemplate = res.result.setting.myTemplate
+        this.cardTemplate = res.result.setting.cardTemplate || []
+        this.workflow = res.result.workflow
+        if (this.config.action === 'copy') {
+          this.data.name = ''
+        }
+      })
+    },
+    // 数组对象排序
+    compare (property) {
+      return (obj1, obj2) => {
+        const val1 = obj1[property]
+        const val2 = obj2[property]
+        return val1 - val2
+      }
+    },
+    getBarMenus (data) {
+      this.barMenu = data.sort(this.compare('listOrder'))
+    },
+    handleSubmit (action) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          values.setting.fieldDataList = this.$refs.column ? this.$refs.column.dataSource : (this.setting.fieldDataList || [])
+          values.setting.actionColumnSetting = values.setting.fieldDataList.filter(item => item.alias === 'action')[0]
+          values.setting.fieldDataList = values.setting.fieldDataList.filter(item => item.alias !== 'action')
+          values.setting.fieldDataList.sort(function (a, b) {
+            return parseInt(a.sortId) - parseInt(b.sortId)
+          })
+          let errKey
+          if (this.$refs.column) {
+            this.$refs.column.searchValue = ''
+            this.$refs.column.formTable.validateFields((err, value) => {
+              errKey = err
+            })
+          }
+          if (errKey) {
+            this.activeKey = '2'
+            return
+          }
+          values.setting.fieldDataList.forEach(item => { delete item.unshow })
+          values.setting.formView = this.$refs.formapply ? JSON.parse(JSON.stringify(this.$refs.formapply.formView)) : this.setting.formView
+          if (this.$refs.formapply) {
+            values.setting.formView.forEach(item => {
+              item.nameFlag = undefined
+              item.condiFlag = undefined
+              item.privFlag = undefined
+            })
+          }
+          values.setting.formView = values.setting.formView.filter(item => item.tplview)
+          values.setting.barMenu = this.$refs.tool ? this.$refs.tool.myBarMenus : this.barMenu
+          values.setting.extendBarMenu = this.$refs.extendbutton ? this.$refs.extendbutton.extendBarMenu : this.extendBarMenu
+          values.setting.myTemplate = this.$refs.tplviewdataquerier ? this.$refs.tplviewdataquerier.data : this.myTemplate
+          values.setting.condition = this.setting.condition
+          values.setting.searchPriv = this.$refs.packetFilter ? { proceed: this.$refs.packetFilter.proceed, finish: this.$refs.packetFilter.finish } : this.setting.searchPriv
+          values.setting.searchSection = this.$refs.tplviewdataquerier.searchSection
+          values.setting.helpIllustrate = this.setting.helpIllustrate
+          values.info.value = this.config.tableId
+          values.info.module = this.config.module
+          values.info.variable = this.config.variable
+          if (this.config.action === 'edit') {
+            values.id = this.data.id
+            values.uid = this.data.uid
+          }
+          if (this.config.variable === 'table_card_list' && this.$refs.kFormDesign) {
+            values.setting.cardTemplate = this.$refs.kFormDesign.data.list
+            values.setting.fieldDataList.forEach(item => {
+              item.display = 'v'
+            })
+          }
+          this.axios({
+            url: '/admin/tplview/checkRepeat',
+            data: { id: this.config.action === 'edit' ? this.data.id : 0, name: values.info.name, type: this.config.variable, tableId: this.config.tableId }
+          }).then((res) => {
+            if (res.code) {
+              this.$message.error(res.message)
+              this.loading = false
+            } else {
+              this.loading = true
+              this.axios({
+                url: this.config.submitUrl || this.config.url,
+                data: Object.assign(values, { action: 'submit' })
+              }).then((res) => {
+                this.loading = false
+                if (res.result) {
+                  this.$emit('ok', values, res.result.uid)
+                  this.$emit('refresh', values, res.result.id)
+                } else {
+                  this.$emit('ok', values)
+                  this.$emit('refresh', values, this.data.id)
+                }
+                if (res.code) {
+                  this.$message.warning(res.message)
+                } else {
+                  this.$message.success(res.message)
+                  if (this.config.action !== 'edit') {
+                    this.config.action = 'edit'
+                    this.config.submitUrl = ''
+                    this.data.id = res.result.id
+                    this.data.uid = res.result.uid
+                  }
+                }
+              })
+            }
+          })
+        } else {
+          this.activeKey = '1'
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+        }
+      })
+    },
+    getQuerier (fieldDataList) {
+      return fieldDataList.filter(item => {
+        return ['image', 'file', 'editor', 'subform'].indexOf(item.formType) === -1
+      })
+    }
+  }
+}
+</script>

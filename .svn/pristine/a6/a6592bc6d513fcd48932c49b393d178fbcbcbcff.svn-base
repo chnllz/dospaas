@@ -1,0 +1,207 @@
+<template>
+  <div>
+    <div class="table-operator">
+      <a-button v-action:add icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+      <a-button icon="import" @click="darwerOpen">{{ $t('从模板中添加') }}</a-button>
+      <a-button icon="sort-ascending" @click="handleSort">{{ $t('排序') }}</a-button>
+    </div>
+    <a-table ref="table" rowKey="id" :columns="columns" :dataSource="formViewButtons" size="small" :pagination="false">
+      <span slot="buttonType" slot-scope="text">
+        <template v-if="text == '1'">{{ $t('系统默认') }}</template>
+        <template v-else>{{ $t('自定义') }}</template>
+      </span>
+      <span slot="display" slot-scope="text">
+        <template v-if="text == '1'">{{ $t('是') }}</template>
+        <template v-else>{{ $t('否') }}</template>
+      </span>
+      <span slot="style" slot-scope="text">
+        <template v-if="text == 'primary'">Primary</template>
+        <template v-else-if="text == 'default'">Default</template>
+        <template v-else-if="text == 'dashed'">Dashed</template>
+        <template v-else-if="text == 'danger'">Danger</template>
+        <template v-else-if="text == 'link'">Link</template>
+      </span>
+      <span slot="priv" slot-scope="text, record, index">
+        <a @click="handlePriv(record, index)">
+          <a-badge :status="text != '' ? 'success' : 'default'" />
+          {{ $t('设置') }}
+        </a>
+        <a-divider type="vertical" />
+        <a @click="copyPrivShow(record)">{{ $t('复制权限给') }}</a>
+      </span>
+      <div slot="action" slot-scope="text, record, index">
+        <a @click="handleEdit(record, index)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a @click="handleDelete(record)">{{ $t('删除') }}</a>
+      </div>
+    </a-table>
+    <!-- 设置附加属性 -->
+    <extend-button-form ref="extendButtonForm" @func="getExtendBarMenus" />
+    <!-- 访问权限 -->
+    <priv-visit-form ref="privVisitForm" :params="{ formView: formViewButtons }" @func="getPrivExtendBarMenus" />
+    <drag-sort ref="dragSort" @ok="getSort" />
+    <tool-button-choose ref="toolButtonChoose" @ok="getButtonData" />
+    <!-- 权限复制 -->
+    <priv-copy ref="privCopy" @ok="getCopy" />
+  </div>
+</template>
+<script>
+import { extendButton } from './DefaultButton'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    ExtendButtonForm: () => import('./ExtendButtonForm'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    PrivVisitForm: () => import('./PrivVisitForm'),
+    ToolButtonChoose: () => import('@/views/admin/Table/ToolButtonChoose'),
+    PrivCopy: () => import('@/views/admin/Table/PrivCopy')
+  },
+  props: {
+    extendBarMenuData: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      advanced: false,
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('排序'),
+        dataIndex: 'listOrder'
+      }, {
+        title: this.$t('按钮名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('显示'),
+        dataIndex: 'display',
+        scopedSlots: { customRender: 'display' }
+      }, {
+        title: this.$t('按钮类型'),
+        dataIndex: 'buttonType',
+        scopedSlots: { customRender: 'buttonType' }
+      }, {
+        title: this.$t('按钮样式'),
+        dataIndex: 'style',
+        scopedSlots: { customRender: 'style' }
+      }, {
+        title: this.$t('授权'),
+        dataIndex: 'usePermissions',
+        scopedSlots: { customRender: 'priv' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 200,
+        scopedSlots: { customRender: 'action' }
+      }],
+      formViewButtons: []
+    }
+  },
+  computed: {
+    listArray () {
+      return extendButton
+    }
+  },
+  watch: {
+    extendBarMenuData (newValue) {
+      this.formViewButtons = newValue || []
+    }
+  },
+  created () {
+    this.formViewButtons = this.extendBarMenuData || []
+  },
+  methods: {
+    handleAdd () {
+      this.$refs.extendButtonForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        record: {
+          id: (new Date()).valueOf(),
+          listOrder: this.formViewButtons.length * 10 + 10,
+          name: '',
+          buttonType: 0,
+          display: 1,
+          usePermissions: '',
+          attribute: ''
+        }
+      })
+    },
+    handleEdit (record, index) {
+      this.$refs.extendButtonForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}: ` + record.name,
+        record: record,
+        index: index
+      })
+    },
+    darwerOpen () {
+      this.$refs.toolButtonChoose.show({
+        listArray: this.listArray,
+        unCheckBar: this.listArray.filter(item => this.formViewButtons.findIndex(barItem => barItem.usage === item.usage) === -1)
+      })
+    },
+    getButtonData (data) {
+      this.formViewButtons = [...this.formViewButtons, ...data]
+    },
+    copyPrivShow (record) {
+      this.$refs.privCopy.show({
+        title: this.$t('复制权限'),
+        name: record.name,
+        priv: record.usePermissions,
+        dataIndex: 'name',
+        record: record,
+        data: this.formViewButtons.filter(item => item.id !== record.id)
+      })
+    },
+    getCopy (selectedRowKeys, priv) {
+      this.formViewButtons.forEach(item => {
+        if (selectedRowKeys.includes(item.id)) {
+          item.usePermissions = priv
+        }
+      })
+    },
+    handleDelete (record) {
+      const dataSource = [...this.formViewButtons]
+      this.formViewButtons = dataSource.filter(item => item.id !== record.id)
+    },
+    handleSort () {
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        sortData: this.formViewButtons
+      })
+    },
+    getSort (data) {
+      this.formViewButtons = data
+    },
+    getPrivExtendBarMenus (e) {
+      this.formViewButtons = e
+    },
+    getExtendBarMenus (action, value, index) {
+      if (action !== 'edit') {
+        this.formViewButtons.push(value)
+      } else {
+        this.formViewButtons.splice(index, 1, value)
+      }
+    },
+    handlePriv (record, index) {
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: `${this.$t('授权')}: ${record.name}`,
+        record: record,
+        index: index,
+        key: 'usePermissions',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    }
+  }
+}
+</script>

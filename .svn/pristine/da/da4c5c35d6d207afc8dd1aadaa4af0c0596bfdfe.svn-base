@@ -1,0 +1,298 @@
+<template>
+  <a-spin :spinning="loading">
+    <a-form :form="form" @submit="handleSubmit">
+      <a-space direction="vertical" style="width: 100%">
+        <a-card size="small" :title="$t('一次性解决率')">
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('分类判断') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '开启后，一次性解决率增加对访客二次来访的咨询分类是否与第一次一致的判断。若不一致，则计为一次性解决'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="['info[solveGroup]', { initialValue: parent.solveGroup, valuePropName: 'checked' }]"
+              :checked-children="$t('开')"
+              :un-checked-children="$t('关')"
+            />
+            &nbsp;
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('会话有效判断') }}
+              <a-tooltip
+                :title="
+                  $t('开启后，一次性解决率增加对访客二次来访的咨询分类是否有效进行判断。若为无效会话，则计为一次性解决')
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="['info[solveValid]', { initialValue: parent.solveValid, valuePropName: 'checked' }]"
+              :checked-children="$t('开')"
+              :un-checked-children="$t('关')"
+            />
+            &nbsp;
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('统计周期') }}
+              <a-tooltip :title="$t('一次性解决率的统计周期，默认值24，设置范围12~120')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="['info[solveCycle]', { initialValue: parent.solveCycle || 24 }]"
+              :min="12"
+              :max="120"
+              style="width: 80px"
+            />
+            &nbsp;{{ $t('小时') }}
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('有效咨询设置')">
+          <a-form-item :labelCol="{ span: 2 }" :wrapperCol="wrapperCol" label=" " :colon="false">
+            {{ $t('访客发送消息数不小于') }}
+            <a-input-number
+              v-decorator="[
+                'info[validVisiterMessages]',
+                { initialValue: parent.validVisiterMessages || 3, rules: [{ required: true, message: $t('请输入') }] }
+              ]"
+              :min="0"
+              :max="10"
+              style="width: 80px; margin: 0px 8px"
+            />
+            &nbsp;{{ $t('条， 且客服发送消息数不少于') }}
+            <a-input-number
+              v-decorator="[
+                'info[validServiceMessages]',
+                { initialValue: parent.validServiceMessages || 3, rules: [{ required: true, message: $t('请输入') }] }
+              ]"
+              :min="0"
+              :max="10"
+              style="width: 80px; margin: 0px 8px"
+            />
+            &nbsp;{{ $t('条') }}
+            <a-tooltip :title="$t('发送消息数达到设定值时，系统记录为有效咨询。默认值：3，设置范围：0~10')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('统计报表设置')">
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('首响合格时长') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '设置首响合格时长标准。默认：30秒，设置范围：0-60。首次响应时长：访客被客服接起，访客发送首条消息后，客服第一次回复的时间间隔。'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="[
+                'info[firstResponseQualifiedTime]',
+                {
+                  initialValue: parent.firstResponseQualifiedTime || 30,
+                  rules: [
+                    {
+                      required: true,
+                      message: $t('首响合格时长不能为空')
+                    }
+                  ]
+                }
+              ]"
+              :min="0"
+              :max="60"
+              style="width: 80px"
+            />
+            &nbsp;{{ $t('秒') }}
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('平均响应合格时长') }}
+              <a-tooltip
+                :title="
+                  $t(
+                    '设置平均响应的合格时长。默认值：30，设置范围：0-60。平均响应时长：指客服每次手动输入消息（除自动欢迎语外）回复访客问题的总平均时长，客户有多轮个问题，从第一个问题发起时间开始计算。'
+                  )
+                "
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="[
+                'info[averageResponseQualifiedTime]',
+                {
+                  initialValue: parent.averageResponseQualifiedTime || 30,
+                  rules: [
+                    {
+                      required: true,
+                      message: $t('平均响应合格时长不能为空')
+                    }
+                  ]
+                }
+              ]"
+              :min="0"
+              :max="60"
+              style="width: 80px"
+            />
+            &nbsp;{{ $t('秒') }}
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('超长会话时长') }}
+              <a-tooltip :title="$t('设置判定会话为超长会话的标准。默认值：5，设置范围：3-120。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="[
+                'info[longSessionTime]',
+                {
+                  initialValue: parent.longSessionTime || 5,
+                  rules: [
+                    {
+                      required: true,
+                      message: $t('超长会话时长不能为空')
+                    }
+                  ]
+                }
+              ]"
+              :min="3"
+              :max="120"
+              style="width: 80px"
+            />
+            &nbsp;{{ $t('分钟') }}
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('超时响应时长') }}
+              <a-tooltip :title="$t('设置判定会话中响应时长为超时响应的标准。默认值：60，设置范围：30-600。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-input-number
+              v-decorator="[
+                'info[timeoutResponseTime]',
+                {
+                  initialValue: parent.timeoutResponseTime || 60,
+                  rules: [
+                    {
+                      required: true,
+                      message: $t('超时响应时长不能为空')
+                    }
+                  ]
+                }
+              ]"
+              :min="30"
+              :max="600"
+              style="width: 80px"
+            />
+            &nbsp;{{ $t('秒') }}
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('非人工时间计入请求') }}
+              <a-tooltip :title="$t('默认为“否”。非人工服务时间进入的访客，不计入“请求人工量”、“放弃量”。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'info[workTimeService]',
+                { initialValue: parent.workTimeService, valuePropName: 'checked' }
+              ]"
+              :checked-children="$t('是')"
+              :un-checked-children="$t('否')"
+            />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('黑名单计入请求') }}
+              <a-tooltip :title="$t('默认为“否”。黑名单访客产生的会话，不计入“请求人工量”、“放弃量”。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                'info[blacklistService]',
+                { initialValue: parent.blacklistService, valuePropName: 'checked' }
+              ]"
+              :checked-children="$t('是')"
+              :un-checked-children="$t('否')"
+            />
+          </a-form-item>
+        </a-card>
+        <a-button type="primary" class="chatSettingSubmit" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      </a-space>
+    </a-form>
+  </a-spin>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  props: {
+    parent: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      labelCol: { span: 3 },
+      wrapperCol: { span: 15 },
+      form: this.$form.createForm(this),
+      loading: false
+    }
+  },
+  methods: {
+    handleSubmit () {
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          this.loading = true
+          this.axios({
+            url: '/chat/setting/save',
+            data: Object.assign(values, { action: 'submit' })
+          }).then(res => {
+            this.loading = false
+            if (res.code === 0) {
+              this.$emit('ok')
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.chatSettingTitle {
+  padding-left: 10px;
+  border-left: 4px solid @primary-color;
+  margin: 10px 0;
+  font-size: 16px;
+  font-weight: bold;
+}
+.chatSettingSubmit {
+  margin: 20px 0 10px 0;
+}
+</style>

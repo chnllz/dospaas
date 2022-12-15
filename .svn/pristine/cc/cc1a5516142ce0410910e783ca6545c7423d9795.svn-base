@@ -1,0 +1,67 @@
+<template>
+  <a-drawer
+    :title="$t(`使用帮助`) + (showDocument.number ? ` - ${showDocument.number}` : '')"
+    :width="showDocument.width"
+    :visible="visible"
+    :destroyOnClose="true"
+    style="z-index: 99999"
+    placement="left"
+    @close="close"
+  >
+    <a-spin :spinning="loading">
+      <a-row type="flex" justify="center">
+        <a-col flex="864px">
+          <a-row type="flex" justify="center">
+            <a-col flex="752px">
+              <div v-dompurify-html="data"></div>
+            </a-col>
+          </a-row>
+        </a-col>
+      </a-row>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      loading: false,
+      data: ''
+    }
+  },
+  computed: {
+    showDocument () {
+      return this.$store.state.app.showDocument
+    },
+    visible () {
+      return this.$store.state.app.showDocument.visible
+    },
+    content () {
+      return this.$store.state.app.showDocument.content
+    }
+  },
+  watch: {
+    visible (newVal, oldVal) {
+      if (this.content) {
+        this.loading = false
+        this.data = this.content
+      } else {
+        this.loading = true
+        this.axios({
+          url: '/admin/index/document',
+          data: { number: this.$store.state.app.showDocument.number }
+        }).then((res) => {
+          this.loading = false
+          this.data = res.result
+        })
+      }
+    }
+  },
+  methods: {
+    close () {
+      this.$showDocument({ visible: false, content: null })
+    }
+  }
+}
+</script>

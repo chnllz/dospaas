@@ -1,0 +1,197 @@
+<template>
+  <div class="box">
+    <div class="content">
+      <div class="color-fff gloTime font-12">
+        <div>{{ nowTime }}</div>
+        <div>信息化系统解决方案提供商</div>
+      </div>
+      <!-- 头部 -->
+      <div class="globalClass">
+        <div class="topLogo topLogoImg">
+          <img src="./assets/image/doscs_logo.png" alt="" />
+        </div>
+        <div class="centerTitleHeight centerTitleImg">
+          <div class="centerTitle">今日客服活动</div>
+        </div>
+      </div>
+      <!-- 说明 -->
+      <div
+        class="gloExplainClass"
+        @click="
+          () => {
+            openExplain = true
+          }
+        "
+      >
+        <img src="./assets/image/explain.png" class="explainImage" alt="" />
+        <div class="color-ffc font-12">帮助说明</div>
+      </div>
+      <!-- 中间 -->
+      <div class="activeBox tableBox">
+        <subTable style="height: 100%">
+          <div slot="body" class="tableBoxBody">
+            <a-table
+              ref="table"
+              size="small"
+              rowKey="id"
+              :pagination="paginationOpt"
+              :columns="columns"
+              :data-source="tableData"
+              @change="changeTableData"
+            >
+              <template slot="status" slot-scope="text">
+                <img :src="require(`./assets/image/${text}.png`)" style="margin: 0 3px 3px 0" />
+                <span>{{ text === 'jx' ? '就绪' : text === 'sm' ? '示忙' : text === 'lk' ? '离开' : '登出' }}</span>
+              </template>
+            </a-table>
+          </div>
+        </subTable>
+      </div>
+    </div>
+    <a-modal
+      title="说明"
+      :visible="openExplain"
+      :bodyStyle="{ maxHeight: '500px', overflowY: 'height' > 500 ? 'scroll' : 'auto' }"
+      @ok="() => (openExplain = false)"
+      @cancel="() => (openExplain = false)"
+    >
+      <div>今日客服活动</div>
+    </a-modal>
+  </div>
+</template>
+<script>
+import './assets/css/chartframe.css'
+export default {
+  components: {
+    subTable: () => import('./components/subTable')
+  },
+  data () {
+    return {
+      nowTime: null,
+      // 时间定时器
+      timeid: null,
+      monitor: {},
+      openExplain: false,
+      columns: [{
+        title: '客服名称',
+        dataIndex: 'service_name',
+        width: 150
+      }, {
+        title: '状态',
+        dataIndex: 'status',
+        align: 'right',
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: '状态持续时间',
+        dataIndex: 'ztcxsj',
+        align: 'center'
+      }, {
+        title: '当前会话数',
+        dataIndex: 'dqhhs',
+        align: 'center'
+      }, {
+        title: '累计会话数',
+        dataIndex: 'ljhhs',
+        align: 'center'
+      }, {
+        title: '累计消息数',
+        dataIndex: 'ljxxs',
+        align: 'center'
+      }, {
+        title: '平均会话时长',
+        dataIndex: 'pjhhsc',
+        align: 'center'
+      }, {
+        title: '平均首次响应时长',
+        dataIndex: 'pjsxsc',
+        align: 'center'
+      }, {
+        title: '平均响应时长',
+        dataIndex: 'pjxysc',
+        align: 'center'
+      }, {
+        title: '满意度',
+        dataIndex: 'myd',
+        align: 'center'
+      }, {
+        title: '首次就绪时间',
+        dataIndex: 'scjxsj',
+        align: 'center'
+      }],
+      tableData: [],
+      // 改变页数定时器
+      timeOutCurrent: null,
+      paginationOpt: {
+        current: 1,
+        defaultCurrent: 1, // 默认当前页数
+        defaultPageSize: 20, // 默认当前页显示数据的大小
+        showSizeChanger: true,
+        pageSizeOptions: ['10', '20', '30', '40', '50'],
+        showTotal: (total, range) => `显示第 ${range[0]} 条到 ${range[1]} 条记录, 共 ${total} 条`,
+        onShowSizeChange: (current, pageSize) => {
+          this.paginationOpt.current = 1
+          this.paginationOpt.defaultCurrent = 1
+          this.paginationOpt.defaultPageSize = pageSize
+        },
+        // 改变每页数量时更新显示
+        onChange: (current, size) => {
+          this.paginationOpt.defaultCurrent = current
+          this.paginationOpt.defaultPageSize = size
+        }
+      }
+    }
+  },
+
+  activated () {
+    this.changeTime()
+    this.changePageCurrent()
+    this.getData()
+  },
+  mounted () {
+    this.getData()
+    this.changeTime()
+    this.changePageCurrent()
+  },
+  // 销毁循环
+  deactivated () {
+    clearInterval(this.timeid)
+    clearInterval(this.timeOutCurrent)
+  },
+  methods: {
+    changePageCurrent () {
+      this.timeOutCurrent = setInterval(() => {
+        const len = Math.ceil(this.tableData.length / this.paginationOpt.defaultPageSize)
+        this.paginationOpt.current = len !== this.paginationOpt.current ? this.paginationOpt.current += 1 : 1
+      }, 5000)
+    },
+    // 自动改变页数
+    changeTableData (pagination, filters, sorter, { currentDataSource }) {
+      this.paginationOpt.current = pagination.current
+    },
+    // 改变左上角时间定时器
+    changeTime () {
+      this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      this.timeid = setInterval(() => {
+        this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      }, 1000)
+    },
+    // 获取数据
+    getData () {
+      this.axios({ url: '/monitor/ServiceActivities/mockInit' }).then(res => {
+        this.tableData = res.result.data
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/.ant-pagination-total-text {
+  color: #fff;
+}
+/deep/.ant-pagination.mini .ant-pagination-prev .ant-pagination-item-link,
+/deep/.ant-pagination-item:not(.ant-pagination-item-active) a,
+/deep/.ant-pagination-disabled .ant-pagination-item-link,
+/deep/.ant-pagination-next a {
+  color: #fff;
+}
+</style>

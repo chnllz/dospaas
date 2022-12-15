@@ -1,0 +1,312 @@
+<template>
+  <div class="page">
+    <a-tabs>
+      <a-tab-pane key="1" :tab="$t('模板设置')">
+        <a-form :form="form" :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+          <a-card size="small" :title="$t('搜索')">
+            <a-space slot="extra">
+              <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParam = {}
+                    $refs.table.refresh(true)
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+            <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+              <a-col :span="6">
+                <a-form-item :label="$t('模板名称')">
+                  <a-input v-model="queryParam.name" placeholder="" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="6">
+                <a-form-item :label="$t('模板内容')">
+                  <a-input v-model="queryParam.content" placeholder="" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-card>
+        </a-form>
+        <a-space>
+          <a-button v-action:template_add @click="handleAdd">{{ $t('添加') }}</a-button>
+          <a-button
+            v-action:template_delete
+            icon="delete"
+            type="danger"
+            :disabled="selectedRowKeys.length == 0"
+            @click="handleBulkDelete()"
+          >
+            {{ $t('批量删除') }}
+          </a-button>
+          <a-button v-action:import @click="handleImport">{{ $t('导入') }}</a-button>
+          <a-button v-action:template_add @click="handleExport">{{ $t('导出') }}</a-button>
+        </a-space>
+        <s-table
+          ref="table"
+          style="height: calc(100vh - 320px)"
+          class="table-fill"
+          :scroll="{ y: true }"
+          size="small"
+          rowKey="id"
+          :columns="columns"
+          :data="loadDataTable"
+          :rowSelection="rowSelection"
+          :sorter="sorter"
+        >
+          <div slot="action" slot-scope="text, record">
+            <a v-action:template_edit @click="handleEdit(record)">{{ $t('编辑') }}</a>
+            <a-divider type="vertical" />
+            <a v-action:template_edit @click="handleBulkDelete(record)">{{ $t('删除') }}</a>
+          </div>
+        </s-table>
+      </a-tab-pane>
+      <a-tab-pane v-if="$auth('setting')" key="2" :tab="$t('参数设置')">
+        <s-table
+          ref="table2"
+          style="height: calc(100vh - 190px)"
+          class="table-fill"
+          :scroll="{ y: true }"
+          size="small"
+          rowKey="alias"
+          :columns="columns2"
+          :data="loadDataTable2"
+        >
+          <span slot="status" slot-scope="text">
+            <a-badge v-if="text == '1'" status="success" :text="$t('启用')" />
+            <a-badge v-else status="error" :text="$t('禁用')" />
+          </span>
+          <div slot="action2" slot-scope="text, record, index">
+            <a v-action:template_edit @click="handleEdit2(record)">{{ $t('编辑') }}</a>
+            <a-divider type="vertical" />
+            <a-dropdown>
+              <a>
+                {{ $t('更多') }}
+                <a-icon type="down" />
+              </a>
+              <a-menu slot="overlay">
+                <a-menu-item>
+                  <a-popconfirm
+                    placement="top"
+                    :ok-text="$t('是')"
+                    :cancel-text="$t('否')"
+                    @confirm="handleOpen(record)"
+                  >
+                    <template slot="title">
+                      {{ $t('请确认是否启用') }}
+                    </template>
+                    <a :disabled="record.status == '1'">{{ $t('启用') }}</a>
+                  </a-popconfirm>
+                </a-menu-item>
+                <a-menu-item>
+                  <a :disabled="index == '0'" @click="handleTop(record)">{{ $t('置顶') }}</a>
+                </a-menu-item>
+              </a-menu>
+            </a-dropdown>
+          </div>
+        </s-table>
+      </a-tab-pane>
+    </a-tabs>
+    <setting-template-form ref="settingForm" @ok="handleOk" />
+    <setting-param-form ref="settingParamForm" @ok="handleOk2" />
+    <general-export ref="generalExport" @ok="handleOk" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('sms'),
+  components: {
+    SettingTemplateForm: () => import('./SettingTemplateForm'),
+    SettingParamForm: () => import('./SettingParamForm'),
+    SettingTemplateImport: () => import('./SettingTemplateImport'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      advanced: false,
+      // 搜索参数
+      queryParam: {},
+      // 模板设置表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60
+      }, {
+        title: this.$t('模板名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('模板编号'),
+        dataIndex: 'number'
+      }, {
+        title: 'CODE1',
+        dataIndex: 'code1'
+      }, {
+        title: 'CODE2',
+        dataIndex: 'code2'
+      }, {
+        title: 'CODE3',
+        dataIndex: 'code3'
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser'
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime'
+      }, {
+        title: this.$t('模板内容'),
+        dataIndex: 'content'
+      }],
+      // 参数设置表头
+      columns2: [{
+        title: this.$t('操作'),
+        dataIndex: 'action2',
+        width: 100,
+        align: 'center',
+        scopedSlots: { customRender: 'action2' }
+      }, {
+        title: this.$t('短信平台'),
+        dataIndex: 'alias'
+      }, {
+        title: this.$t('短信签名'),
+        dataIndex: 'signName'
+      }, {
+        title: this.$t('单价/元'),
+        dataIndex: 'unitPrice'
+      }, {
+        title: this.$t('状态'),
+        dataIndex: 'status',
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('模板CODE'),
+        dataIndex: 'codeNumberDisplay'
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      loading: false,
+      form: this.$form.createForm(this),
+      data: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      sorter: { field: 'id', order: 'descend' }
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/sms/template/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    loadDataTable2 (parameter) {
+      return this.axios({
+        url: '/sms/setting/config',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    handleOk2 () {
+      this.$refs.table2.refresh()
+    },
+    handleAdd () {
+      this.$refs.settingForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        url: '/sms/template/add'
+      })
+    },
+    handleEdit (record) {
+      this.$refs.settingForm.show({
+        action: 'edit',
+        title: this.$t('编辑') + '：' + record.name,
+        url: '/sms/template/edit',
+        record: record
+      })
+    },
+    handleEdit2 (record) {
+      this.$refs.settingParamForm.show({
+        action: 'edit',
+        title: this.$t('编辑') + '：' + record.alias,
+        url: '/sms/setting/edit',
+        record: record
+      })
+    },
+    handleOpen (record) {
+      const table = this.$refs.table2
+      return this.axios({
+        url: '/sms/setting/open',
+        data: Object.assign({ alias: record.alias })
+      }).then(res => {
+        this.$message.success(res.message)
+        table.refresh()
+      })
+    },
+    handleTop (record) {
+      const table = this.$refs.table2
+      return this.axios({
+        url: '/sms/setting/top',
+        data: Object.assign({ alias: record.alias })
+      }).then(res => {
+        table.refresh()
+      })
+    },
+    handleBulkDelete (record) {
+      const table = this.$refs.table
+      const id = record ? record.id : this.selectedRowKeys
+      const me = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          me.axios({
+            url: '/sms/template/bulkDelete',
+            data: Object.assign({ id: id })
+          }).then(res => {
+            table.refresh()
+          })
+        }
+      })
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportSmsTemplateTask',
+        parameter: {
+          condition: this.queryParam
+        }
+      })
+    },
+    handleImport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导入'),
+        type: 'import',
+        className: 'ImportSmsTemplateTask',
+        filePath: 'static/template/短信模板导入模板.xlsx'
+      })
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.ant-form-inline .ant-form-item {
+  margin-right: 8px;
+}
+</style>

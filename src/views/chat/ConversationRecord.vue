@@ -1,0 +1,943 @@
+<template>
+  <a-drawer :width="1500" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-row style="overflow: hidden">
+        <a-col :span="5">
+          <a-card
+            size="small"
+            :title="$t('会话记录：') + (config.record && config.record.visitorId ? config.record.visitorId : '')"
+          >
+            <a-space direction="vertical" style="width: 100%">
+              <div style="display: flex; flex-direction: column; height: calc(100vh - 100px)">
+                <div v-if="currentData && currentData.id">
+                  <div>
+                    <a-icon type="clock-circle" />
+                    {{ $t('当前会话') }}
+                  </div>
+                  <a-row
+                    style="padding: 8px 16px; cursor: pointer"
+                    :class="nowCheck === currentData.id ? 'nowCheck' : 'unCheck'"
+                    class="hoveyStyle"
+                  >
+                    <div @click="getChatRecords(currentData, 'current')">
+                      <a-col :span="24">{{ $t('开始时间：') }}{{ currentData.startTime || '--' }}</a-col>
+                      <a-col :span="12">{{ $t('客服：') }}{{ currentData.serviceId || '--' }}</a-col>
+                      <a-col :span="12">{{ $t('消息数：') }}{{ currentData.messageAll || '--' }}</a-col>
+                    </div>
+                  </a-row>
+                  <a-divider style="margin: 0px" />
+                </div>
+                <div>
+                  <a-icon type="history" />
+                  {{ $t('所有会话') }}
+                </div>
+                <div style="overflow-y: auto; flex: 1">
+                  <a-divider style="margin: 0px" />
+                  <div
+                    v-for="historyItem in historyList"
+                    :key="historyItem.id"
+                    style="padding: 8px 16px; cursor: pointer"
+                    :style="{ borderBottom: '1px solid #e8e8e8' }"
+                    class="hoveyStyle"
+                    :class="nowCheck === historyItem.id ? 'nowCheck' : 'unCheck'"
+                    @click="getChatRecords(historyItem)"
+                  >
+                    <a-row>
+                      <a-col :span="24">{{ $t('开始时间：') }}{{ historyItem.startTime || '--' }}</a-col>
+                      <a-col :span="12">{{ $t('客服：') }}{{ historyItem.serviceId || '--' }}</a-col>
+                      <a-col :span="12">{{ $t('消息数：') }}{{ historyItem.messageAll || '--' }}</a-col>
+                    </a-row>
+                  </div>
+                </div>
+                <a-pagination
+                  :default-current="1"
+                  :total="totalCount"
+                  :defaultPageSize="20"
+                  :showTotal="
+                    (total, range) =>
+                      $t('显示第 {0} 条到 {1} 条记录, 一共 {2} 条', { 0: range[0], 1: range[1], 2: total })
+                  "
+                  style="width: 100%; margin: 16px 0px; padding-right: 8px"
+                  size="small"
+                  @change="
+                    (current) => {
+                      listPage.pageNo = current
+                      getChatList()
+                    }
+                  "
+                />
+              </div>
+            </a-space>
+          </a-card>
+        </a-col>
+        <a-col :span="12">
+          <a-card size="small" :title="$t('会话消息')">
+            <div ref="chats" class="chatContentList" style="height: calc(100vh - 100px)" @scroll="popupScroll">
+              <a-spin v-if="contentList.length != total" :spinning="loadingTop">
+                <div style="margin: 0 auto; width: 100%; height: 20px"></div>
+              </a-spin>
+              <div
+                v-if="Object.keys(chatObj).length && contentList.length > 0 && contentList.length === total"
+                style="text-align: center; font-size: 12px; color: rgb(220, 220, 220)"
+              >
+                {{ $t('--没有更多数据--') }}
+              </div>
+              <div v-for="(item, i) in contentList" :key="i" style="padding-bottom: 20px">
+                <!-- 系统消息 -->
+                <div
+                  v-if="
+                    [
+                      '2011',
+                      '1027',
+                      '1028',
+                      '1030',
+                      '1044',
+                      '1002',
+                      '1031',
+                      '1033',
+                      '1049',
+                      '1050',
+                      '1051',
+                      '1052',
+                      '1054',
+                      '1055',
+                      '1056',
+                      '1057',
+                      '1058',
+                      '1059',
+                      '1060',
+                      '1061',
+                      '1003',
+                      '1018',
+                      '1064',
+                      '1029',
+                      '1065',
+                      '1041',
+                      '1066',
+                      '1062',
+                      '1063'
+                    ].includes(item.chatsCode) && item.content
+                  "
+                  class="systemReminder"
+                >
+                  <span
+                    v-if="['1030', '1002'].includes(item.chatsCode)"
+                    style="
+                      padding: 14px 32px;
+                      background: #cbc8c8;
+                      border-radius: 5px;
+                      color: #f5f5f5;
+                      line-height: 40px;
+                    "
+                  >
+                    {{ item.content }}
+                  </span>
+                  <span v-else-if="['1018', '1003'].includes(item.chatsCode)">
+                    <span style="padding: 2px 20px; background: #d0d1d6; border-radius: 10px; color: #f5f5f5">
+                      {{ item.content }}
+                    </span>
+                  </span>
+                  <span v-else>{{ item.content }}</span>
+                </div>
+                <!-- 客服消息 -->
+                <div
+                  v-else-if="
+                    ['1009', '1011', '1013', '1023', '1019', '1015', '1016'].includes(item.chatsCode) && item.content
+                  "
+                  style="display: flex; flex-direction: column; align-items: flex-end; margin-right: 16px"
+                >
+                  <div style="padding-bottom: 8px">
+                    <a-space>
+                      <span>{{ item.serviceName }}</span>
+                      <span>{{ item.inputTime }}</span>
+                    </a-space>
+                  </div>
+                  <div v-if="['1013'].includes(item.chats_code)" style="max-width: 300px; width: 100vw">
+                    <a-card v-if="item.contentObj.status === '取件'" size="small" style="margin: 0">
+                      <div slot="title" style="display: flex; justify-content: space-between">
+                        <div>{{ item.contentObj.staffCompanyName }} {{ item.contentObj.expressid }}</div>
+                        <div style="color: rgba(0, 0, 0, 0.35)">{{ item.contentObj.pickType }}</div>
+                      </div>
+                      <div style="padding: 8px">
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">保管服务费：</span>
+                          <span>￥{{ item.contentObj.custodyMoney }}</span>
+                        </div>
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">收派员：</span>
+                          <span>{{ item.contentObj.staffMobile || '--' }}</span>
+                        </div>
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">柜机地址：</span>
+                          <span>{{ item.contentObj.edAdress || '--' }}</span>
+                        </div>
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">入柜时间：</span>
+                          <span>{{ item.contentObj.sendTm || '--' }}</span>
+                        </div>
+                        <div>
+                          <span style="color: rgba(0, 0, 0, 0.35)">取件时间：</span>
+                          <span>{{ item.contentObj.pickTm || '--' }}</span>
+                        </div>
+                      </div>
+                    </a-card>
+                    <a-card v-else-if="item.contentObj.status === '存包'" size="small" style="margin: 0">
+                      <div slot="title" style="display: flex; justify-content: space-between">
+                        <div>
+                          {{ item.contentObj.orderTypeName }}
+                        </div>
+                        <a-tag color="blue">{{ item.contentObj.orderStatusName }}</a-tag>
+                      </div>
+                      <div style="padding: 8px">
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">订单编号：</span>
+                          <span>{{ item.contentObj.orderId }}</span>
+                        </div>
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">到期时间：</span>
+                          <span>{{ item.contentObj.expiredTime || '--' }}</span>
+                        </div>
+                        <div style="margin-bottom: 8px">
+                          <span style="color: rgba(0, 0, 0, 0.35)">格口编号：</span>
+                          <span>{{ item.contentObj.boxId || '--' }}</span>
+                        </div>
+                        <div>
+                          <span style="color: rgba(0, 0, 0, 0.35)">柜机地址：</span>
+                          <span>{{ item.contentObj.cabinetAddress || '--' }}</span>
+                        </div>
+                      </div>
+                    </a-card>
+                    <a-card
+                      v-else-if="item.contentObj.status === '寄件'"
+                      size="small"
+                      :title="`${item.contentObj.expressCompanyName} ${item.contentObj.expressNo}`"
+                      style="margin: 0"
+                    >
+                      <div style="padding: 8px">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px">
+                          <div style="text-align: center">
+                            <div style="font-size: 18px; font-weight: 600">
+                              {{ item.contentObj.senderCityName }}
+                            </div>
+                            <div style="color: rgba(0, 0, 0, 0.35)">
+                              {{ item.contentObj.senderName }}
+                            </div>
+                          </div>
+                          <div style="display: inline-block; text-align: center">
+                            <img style="width: 100%; max-width: 120px" src="./visitorImg/right.png" mode="" />
+                            <div style="color: rgba(0, 0, 0, 0.35)">
+                              {{ sendStatus[item.contentObj.sendStatus] }}
+                            </div>
+                          </div>
+                          <div style="text-align: center">
+                            <div style="font-size: 18px; font-weight: 600">
+                              {{ item.contentObj.receiverCityName }}
+                            </div>
+                            <div style="color: rgba(0, 0, 0, 0.35)">
+                              {{ item.contentObj.receiverName }}
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <span style="color: rgba(0, 0, 0, 0.35)">寄出时间：</span>
+                          <span>{{ item.contentObj.orderCreateTime || '--' }}</span>
+                        </div>
+                      </div>
+                    </a-card>
+                  </div>
+                  <div v-else class="replyBox">
+                    <span
+                      :ref="`replyContentRef${item.id}`"
+                      v-viewer
+                      v-dompurify-html="item.content"
+                      class="replyContent"
+                    ></span>
+                  </div>
+                </div>
+                <div
+                  v-else-if="['1008', '1010'].includes(item.chatsCode)"
+                  style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 16px"
+                >
+                  <div style="padding-bottom: 8px">
+                    <a-space>
+                      <span>{{ item.visitorName }}</span>
+                      <span>{{ item.inputTime }}</span>
+                    </a-space>
+                  </div>
+                  <div class="chatBox">
+                    <span v-viewer v-dompurify-html="item.content" class="chatContent"></span>
+                  </div>
+                </div>
+                <a-modal
+                  v-if="item.content.search('img') != -1 && item.content.search('s-news-img') == -1"
+                  :visible="imgPreviewVisible"
+                  :footer="null"
+                  @cancel="imgPreviewCancel"
+                >
+                  <div v-dompurify-html="imagePreviewItem" class="imgPreview"></div>
+                </a-modal>
+              </div>
+              <a-empty v-if="!contentList.length > 0" style="text-align: center" />
+            </div>
+          </a-card>
+        </a-col>
+        <a-col :span="7">
+          <a-tabs size="small" @change="tabsChange">
+            <a-tab-pane
+              key="base"
+              :tab="$t('基础信息')"
+              style="padding: 8px; height: calc(100vh - 100px); overflow: auto"
+            >
+              <a-card size="small" :title="$t('会话信息')" style="margin-bottom: 8px">
+                <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                  <a-form-item :label="$t('会话开始时间')">
+                    <a-input v-model="allInfo.startTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服接待时间')">
+                    <a-input v-model="allInfo.serviceReceptionTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('会话结束时间')">
+                    <a-input v-model="allInfo.endTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('渠道')">
+                    <a-input v-model="allInfo.channel" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('会话结束原因')">
+                    <a-input v-model="allInfo.endType" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('访客ID')">
+                    <a-input v-model="allInfo.visitorId" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('访客名称')">
+                    <a-input v-model="allInfo.visitorName" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服账号')">
+                    <a-input v-model="allInfo.serviceId" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服昵称')">
+                    <a-input v-model="allInfo.serviceName" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('是否有效咨询')">
+                    <a-input v-model="allInfo.isvalid" :disabled="true" />
+                  </a-form-item>
+                </a-form>
+              </a-card>
+              <a-card size="small" :title="$t('访客资料')" style="margin-bottom: 8px">
+                <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                  <a-form-item :label="$t('业务类型')">{{ allInfo.businessType || '--' }}</a-form-item>
+                  <a-form-item :label="$t('存包订单编号')">
+                    {{ allInfo.storageOrderNumber || '--' }}
+                  </a-form-item>
+                  <a-form-item :label="$t('三方订单编号')">
+                    {{ allInfo.thirdPartiesOrderNumber || '--' }}
+                  </a-form-item>
+                  <a-form-item :label="$t('服务订单号')">
+                    {{ allInfo.serviceOrderNumber || '--' }}
+                  </a-form-item>
+                  <a-form-item :label="$t('运单号')">{{ allInfo.waybillNumber || '--' }}</a-form-item>
+                  <a-form-item :label="$t('角色')">{{ allInfo.role || '--' }}</a-form-item>
+                  <a-form-item :label="$t('柜机编码')">{{ allInfo.cabinetCode || '--' }}</a-form-item>
+                  <a-form-item :label="$t('格口编码')">{{ allInfo.gridCode || '--' }}</a-form-item>
+                  <a-form-item :label="$t('手机号')">{{ allInfo.telephoneNumber || '--' }}</a-form-item>
+                  <a-form-item :label="$t('访客IP')">{{ allInfo.ip || '--' }}</a-form-item>
+                </a-form>
+              </a-card>
+              <template>
+                <user-table-form-view
+                  ref="userTableFormView"
+                  class="userTable"
+                  :params="{
+                    tableName,
+                    template,
+                    fieldRule,
+                    remarksRule,
+                    handleFormRules,
+                    parentParams: params,
+                    handleWayData,
+                    remarksMaxRows,
+                    remarksMinRows,
+                    templateOther: template,
+                    action: 'edit',
+                    page: 'over'
+                  }"
+                  :formThis="formThis"
+                />
+              </template>
+              <a-card size="small" :title="$t('满意度评价')">
+                <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                  <a-form-item :label="$t('评价结果')">
+                    <a-input v-model="allInfo.comment" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('评价标签')">
+                    <a-input v-model="allInfo.commentTags" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('评价备注')">
+                    <a-textarea
+                      v-model="allInfo.commentRemarks"
+                      :auto-size="{ minRows: 3, maxRows: 5 }"
+                      :disabled="true"
+                    />
+                  </a-form-item>
+                </a-form>
+              </a-card>
+            </a-tab-pane>
+            <a-tab-pane
+              key="analysis"
+              :tab="$t('会话分析')"
+              style="padding: 8px; height: calc(100vh - 100px); overflow: auto"
+            >
+              <a-card size="small" :title="$t('会话消息')">
+                <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                  <a-form-item :label="$t('消息总数')">
+                    <a-input v-model="allInfo.messageAll" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('系统消息数')">
+                    <a-input v-model="allInfo.messageSystem" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服消息数')">
+                    <a-input v-model="allInfo.messageService" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('访客信息数')">
+                    <a-input v-model="allInfo.messageVisitor" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('交互轮次')">
+                    <a-input v-model="allInfo.questionAnswerCount" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服平均消息间隔')">
+                    <a-input v-model="allInfo.serviceAverageReplyInterval" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('访客平均消息间隔')">
+                    <a-input v-model="allInfo.visitorAverageReplyInterval" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服撤回消息数')">
+                    <a-input v-model="allInfo.serviceWithdraw" :disabled="true" />
+                  </a-form-item>
+                </a-form>
+              </a-card>
+              <a-card size="small" :title="$t('会话时间')" style="margin: 8px 0px">
+                <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                  <a-form-item :label="$t('会话总时长')">
+                    <a-input v-model="allInfo.totalTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服接待时间')">
+                    <a-input v-model="allInfo.serviceReceptionTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('访客排队时长')">
+                    <a-input v-model="allInfo.visitorQueueTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服服务时长')">
+                    <a-input v-model="allInfo.serviceDuration" :disabled="true" />
+                  </a-form-item>
+                </a-form>
+              </a-card>
+              <a-card size="small" :title="$t('会话响应')">
+                <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                  <a-form-item :label="$t('客服首次响应时长')">
+                    <a-input v-model="allInfo.serviceReplyFirst" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服最大响应时长')">
+                    <a-input v-model="allInfo.serviceMaxRespons" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服超时响应轮次')">
+                    <a-input v-model="allInfo.serviceReplyTimeoutCount" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服响应总次数')">
+                    <a-input v-model="allInfo.serviceReplyTotalCount" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('客服响应总时长')">
+                    <a-input v-model="allInfo.serviceReplyTotalTime" :disabled="true" />
+                  </a-form-item>
+                  <a-form-item :label="$t('平均响应时长')">
+                    <a-input v-model="allInfo.serviceAverageReplyTime" :disabled="true" />
+                  </a-form-item>
+                </a-form>
+              </a-card>
+            </a-tab-pane>
+            <a-tab-pane
+              key="message"
+              :tab="$t('留言信息')"
+              style="padding: 8px; height: calc(100vh - 100px); overflow: auto"
+            >
+              <a-card size="small" :title="$t('留言信息')">
+                <a-form v-if="allInfo.message">
+                  <template v-for="itemMes in messageTemplate.messageFieldList">
+                    <a-form-item
+                      :key="itemMes.alias"
+                      :label="itemMes.name"
+                      :labelCol="{ span: 6 }"
+                      :wrapperCol="{ span: 16 }"
+                    >
+                      <a-input
+                        v-if="!['content', 'bz'].includes(itemMes.alias)"
+                        v-model="allInfo.message[itemMes.alias]"
+                        :disabled="true"
+                        style="margin-bottom: 6px"
+                      ></a-input>
+                      <a-textarea
+                        v-else
+                        v-model="allInfo.message[itemMes.alias]"
+                        :autoSize="{ minRows: 3, maxRows: 5 }"
+                        :disabled="true"
+                        style="margin: 4px 0 6px 0"
+                      />
+                    </a-form-item>
+                  </template>
+                </a-form>
+                <a-empty v-else />
+              </a-card>
+            </a-tab-pane>
+          </a-tabs>
+        </a-col>
+      </a-row>
+      <div class="bbar">
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    UserTableFormView: () => import('@/views/admin/General/UserTableFormView')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: {},
+      contentList: [],
+      scrollStats: true,
+      listPage: {
+        sortField: 'inputTime',
+        sortOrder: 'descend',
+        pageNo: 1,
+        pageSize: 20
+      },
+      page: {
+        sortField: 'inputTime',
+        sortOrder: 'descend',
+        pageNo: 1,
+        pageSize: 20
+      },
+      nowCheck: '',
+      loadingTop: false,
+      historyList: [],
+      currentData: {},
+      total: 0,
+      totalCount: 0,
+      // 图片预览路径
+      imagePreviewItem: '',
+      // 控制图片的弹出窗口
+      imgPreviewVisible: false,
+      allInfo: {},
+      nowTab: null,
+      chatObj: {},
+      // 服务小结
+      tableName: '',
+      template: [],
+      fieldRule: [],
+      remarksRule: [],
+      remarksMaxRows: 4,
+      remarksMinRows: 2,
+      handleFormRules: [],
+      handleWayData: [],
+      orderType: [],
+      templateOther: [],
+      params: {
+        labelWidth: 100
+      },
+      settingControl: {},
+      formThis: this,
+      messageTemplate: {}
+    }
+  },
+  methods: {
+    // 修改显示撤回的消息
+    getReCall (item) {
+      let user = ''
+      if (item.chatsCode === '1027') {
+        user = item.visitorId
+      } else {
+        user = this.$t('你')
+      }
+      this.$set(item, 'content', `${user}${this.$t('撤回了一条消息')}`)
+    },
+    // 获取数据
+    show (config) {
+      this.listPage.pageNo = 1
+      this.page.pageNo = 1
+      this.scrollStats = true
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.contentList = []
+      this.chatObj = {}
+      this.nowCheck = null
+      this.allInfo = {}
+      this.getChatList()
+      this.axios({
+        url: '/chat/setting/base',
+        data: { action: 'get' }
+      }).then(res => {
+        this.settingControl = res.result.info
+        this.groupList = res.result.groupList
+      })
+    },
+    getChatList () {
+      this.axios({
+        url: '/chat/report/getRecord',
+        data: Object.assign({
+          visitorId: this.config.record.visitorId,
+          conversationId: this.config.record.id
+        }, this.listPage)
+      }).then(res => {
+        this.loading = false
+        this.totalCount = res.result.history.totalCount
+        this.historyList = res.result.history ? res.result.history.data : []
+        this.currentData = res.result.current || this.currentData
+        this.getChatRecords(this.currentData)
+      })
+    },
+    // 获取服务小结视图内容
+    getView (record) {
+      const tplviewList = JSON.parse(this.settingControl.summaryLists)
+      const tplviewListNotGroup = tplviewList[0]
+      const tplviewListGroup = tplviewList.filter(item => item.group.includes(record.groupId))
+      let nowTplview = {}
+      if (tplviewListGroup.length) {
+        nowTplview = tplviewListGroup[0]
+      } else {
+        nowTplview = tplviewListNotGroup
+      }
+      if (nowTplview.templateId) {
+        this.template = []
+        this.axios({
+          url: '/admin/general/edit',
+          data: {
+            action: 'edit',
+            flowStatus: 'proceed',
+            id: record.id,
+            templateId: nowTplview.templateId
+          }
+        }).then(res => {
+          this.tableName = res.result.tableName
+          this.record = res.result.data
+          this.template = JSON.parse(JSON.stringify(res.result.template)) || []
+          this.templateOther = JSON.parse(JSON.stringify(res.result.template)) || []
+          // 表单初始化loader
+          if (res.result.templateScript && res.result.templateScript.afterInit) {
+            var initAttribute = res.result.templateScript.afterInit
+            var initTemplate = {
+              type: 'component',
+              attribute: initAttribute
+            }
+            this.template.push(initTemplate)
+          }
+          this.fieldRule = res.result.fieldRule
+          const getComponent = (array) => {
+            array.forEach((item, index) => {
+              if (item.columns) {
+                getComponent(item.columns)
+              } else if (item.trs) {
+                getComponent(item.trs)
+              } else if (item.list) {
+                getComponent(item.list)
+              } else {
+                if (item.type === 'component') {
+                  item.component = {
+                    template: `<span>${item.attribute}</span>`,
+                    data: () => {
+                      return {
+                        parent: this
+                      }
+                    }
+                  }
+                } else if (item.field && item.field.alias) {
+                  item.fieldRule = 'readonly'
+                } else if (item.type === 'button') {
+                  item.options.hidden = true
+                }
+              }
+            })
+          }
+          getComponent(this.template)
+        })
+      }
+    },
+    getChatRecords (record, type) {
+      this.nowCheck = record.id
+      this.contentList = []
+      this.chatObj = record
+      this.page.pageNo = 1
+      this.getInfo(record)
+      this.getRecords(record).then(() => {
+        this.getView(record)
+        this.scrollToBottom()
+      })
+    },
+    getRecords (record) {
+      return new Promise((resolve, reject) => {
+        let data = {}
+        data = {
+          conversationId: record.id,
+          tab: 0
+        }
+        this.axios({
+          url: '/chat/stats/record',
+          data: Object.assign(data, this.page)
+        }).then((res) => {
+          resolve()
+          this.total = res.result.totalCount
+          res.result.data.forEach(item => {
+            if (item.code === '1013' && item.content) {
+              item.contentObj = JSON.parse(item.content)
+            } else if (item.chatsCode === '1027' || item.chatsCode === '1028') {
+              this.getReCall(item)
+            }
+          })
+          if (res.result.data.length === 0) {
+            this.scrollStats = false
+          } else {
+            this.contentList = [...res.result.data, ...this.contentList]
+          }
+          this.loadingTop = false
+        })
+      })
+    },
+    tabsChange (e) {
+      if (e === 'message') {
+        const messageTemplate = JSON.parse(this.settingControl.messageTemplate)
+        const messageTemplateNotGroup = messageTemplate[0]
+        const messageTemplateGroup = messageTemplate.filter(item => item.group.includes(this.chatObj.groupId))
+        if (messageTemplateGroup.length) {
+          this.messageTemplate = messageTemplateGroup[0]
+        } else {
+          this.messageTemplate = messageTemplateNotGroup
+        }
+      }
+    },
+    getInfo (record) {
+      this.axios({
+        url: '/chat/report/getInformation',
+        data: {
+          id: record.id
+        }
+      }).then((res) => {
+        if (!res.code && res.result) {
+          // 满意度转换
+          switch (res.result.comment) {
+            case '1':
+              res.result.comment = this.$t('非常满意')
+              break
+            case '2':
+              res.result.comment = this.$t('满意')
+              break
+            case '3':
+              res.result.comment = this.$t('一般')
+              break
+            case '4':
+              res.result.comment = this.$t('不满意')
+              break
+            case '5':
+              res.result.comment = this.$t('非常不满意')
+              break
+          }
+          // 结束原因转换
+          switch (res.result.endType) {
+            case '1':
+              res.result.endType = this.$t('访客手动结束')
+              break
+            case '2':
+              res.result.endType = this.$t('访客首回合沉默结束')
+              break
+            case '3':
+              res.result.endType = this.$t('访客超时未回复结束')
+              break
+            case '4':
+              res.result.endType = this.$t('访客离线结束')
+              break
+            case '5':
+              res.result.endType = this.$t('客服首回合沉默转接结束')
+              break
+            case '6':
+              res.result.endType = this.$t('客服手动结束')
+              break
+            case '7':
+              res.result.endType = this.$t('客服离线结束')
+              break
+            case '8':
+              res.result.endType = this.$t('管理员强制结束')
+              break
+            case '9':
+              res.result.endType = this.$t('黑名单来访结束')
+              break
+            case '10':
+              res.result.endType = this.$t('非人工服务时间结束')
+              break
+            case '11':
+              res.result.endType = this.$t('排队过多转留言结束')
+              break
+            case '12':
+              res.result.endType = this.$t('排队中访客手动结束')
+              break
+            case '13':
+              res.result.endType = this.$t('排队中访客离线结束')
+              break
+          }
+          const arr = ['serviceDuration', 'serviceAverageReplyTime', 'serviceReplyTotalTime', 'serviceMaxRespons', 'serviceReplyFirst', 'visitorQueueTime', 'totalTime']
+          arr.forEach(item => {
+            let text = res.result[item]
+            if (!text) {
+              text = 0
+            }
+            let sec = parseInt(text)// 秒
+            let min = 0// 分
+            let hour = 0// 小时
+            if (sec > 59) {
+              min = parseInt(sec / 60)
+              sec = parseInt(sec % 60)
+              if (min > 59) {
+                hour = parseInt(min / 60)
+                min = parseInt(min % 60)
+              }
+            }
+            const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+            res.result[item] = result
+          })
+          res.result.isvalid = res.result.isvalid === 1 ? this.$t('有效') : this.$t('无效')
+          this.axios({
+            url: '/chat/channel/getChannel'
+          }).then((resChild) => {
+            const channelLists = resChild.result
+            const obj = channelLists.find(item => String(item.value) === res.result.channelNumber)
+            res.result.channel = obj ? obj.label : ''
+            this.allInfo = res.result
+          })
+        }
+      })
+    },
+    // 置底方法
+    scrollToBottom () {
+      this.$nextTick(() => {
+        if (this.contentList.length > 0) {
+          const chatContentList = document.getElementsByClassName('chatContentList')
+          chatContentList[0].scrollTop = chatContentList[0].scrollHeight
+        }
+      })
+    },
+    // 置顶加载数据
+    popupScroll (e) {
+      const height = JSON.parse(JSON.stringify(e.target.scrollHeight))
+      const scrollTop = e.target.scrollTop
+      if (scrollTop === 0 && this.scrollStats && this.contentList.length !== this.total) {
+        this.page.pageNo++
+        this.loadingTop = true
+        this.getRecords(this.chatObj).then(() => {
+          this.loadingTop = false
+          this.$nextTick(() => {
+            e.target.scrollTop = e.target.scrollHeight - height
+          })
+        })
+      }
+    },
+    // 聊天列表的图预览
+    openImgPreview (item) {
+      this.imagePreviewItem = ''
+      if (item.content.search('img') !== -1 && item.content.search('s-news-img') === -1) {
+        this.imgPreviewVisible = !this.imgPreviewVisible
+        this.imagePreviewItem = item.content
+      }
+    },
+    // 取消在聊天记录上图片的预览
+    imgPreviewCancel () {
+      this.imgPreviewVisible = false
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.chatContentList {
+  width: 100%;
+  overflow: auto;
+}
+.systemReminder {
+  width: 100%;
+  text-align: center;
+  color: #aaaaaa;
+}
+
+.userHead {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  border-radius: 20px;
+  background-color: #eaeaea;
+}
+/deep/.chatBox,
+/deep/.replyBox {
+  display: inline-block;
+  text-align: left;
+  word-break: break-all;
+  max-width: 450px;
+  padding: 12px;
+  border-radius: 9px;
+  img {
+    max-width: 417px;
+    max-height: 200px;
+  }
+}
+.nowCheck {
+  background: @primary-1;
+}
+.unCheck {
+  background: #ffffff;
+}
+.hoveyStyle:hover {
+  background: @primary-1;
+}
+.chatBox {
+  background: #ebebeb;
+  color: #333333;
+}
+.replyBox {
+  background-color: #a7ebe4;
+  color: #333333;
+  overflow: hidden;
+}
+.replyContent {
+  color: #333333;
+}
+/deep/.imgPreview {
+  width: 100%;
+  img {
+    width: 100%;
+  }
+}
+/deep/.ant-drawer-body {
+  padding: 0;
+  height: 100%;
+  > :first-child:not(.ant-spin-nested-loading) {
+    padding: 16px;
+  }
+  > .ant-spin-nested-loading {
+    height: 100%;
+    > .ant-spin-container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      > :first-child {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 0px;
+      }
+    }
+  }
+  .ant-tabs-bar {
+    margin-top: 2px;
+  }
+}
+</style>

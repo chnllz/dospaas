@@ -1,0 +1,1088 @@
+<template>
+  <div style="background: white">
+    <a-tabs
+      v-model="activeKey"
+      hide-add
+      type="editable-card"
+      size="small"
+      class="container"
+      @edit="onEdit"
+      @change="chagneTab"
+    >
+      <!-- 导航面板 -->
+      <a-tab-pane :key="0" :closable="false">
+        <template v-slot:tab>
+          <a-icon type="home" />
+          {{ $t('导航') }}
+          <a-icon v-show="activeKey === 0" type="reload" class="reload" @click="onRefresh(0)" />
+        </template>
+        <a-layout :key="show0">
+          <a-layout-sider
+            v-model="collapsed"
+            :trigger="null"
+            width="300"
+            collapsible
+            collapsedWidth="0"
+            theme="light"
+            style="height: calc(100vh - 170px)"
+          >
+            <a-row :gutter="[5, 5]" style="margin-bottom: 5px" type="flex">
+              <a-col flex="auto">
+                <div style="display: flex">
+                  <a-select
+                    v-model="queryParam.module"
+                    style="flex: 1"
+                    @change="
+                      (e) => {
+                        queryParam.searchString = ''
+                        choiceModule(e)
+                      }
+                    "
+                  >
+                    <a-select-option v-for="(value, index) in modules" :key="index" :value="value.module">
+                      {{ value.module + '(' + value.count + ')' }}
+                    </a-select-option>
+                  </a-select>
+                </div>
+              </a-col>
+              <a-col v-if="$store.getters.userInfo.roleId === $store.getters.setting.adminRoleId" :span="4">
+                <a-tooltip :title="$t('更新缓存')">
+                  <a-button @click="handleUpdateCache"><a-icon type="cloud-sync" /></a-button>
+                </a-tooltip>
+              </a-col>
+              <a-col :span="4">
+                <a-dropdown>
+                  <a-menu slot="overlay">
+                    <a-menu-item key="1" @click="handleAdd">{{ $t('添加数据表') }}</a-menu-item>
+                    <a-menu-item key="2" @click="handleExportOverview">{{ $t('导出数据表概览') }}</a-menu-item>
+                    <a-menu-item key="5" @click="handleExportTableField">{{ $t('导出数据表字段') }}</a-menu-item>
+                    <a-menu-item key="3" @click="handleSync">{{ $t('数据表同步') }}</a-menu-item>
+                  </a-menu>
+                  <a-button><a-icon type="menu" /></a-button>
+                </a-dropdown>
+              </a-col>
+              <a-col :span="4">
+                <a-tooltip>
+                  <template slot="title">{{ $t('高级搜索') }}</template>
+                  <a-button @click="openSenior"><a-icon type="filter" /></a-button>
+                </a-tooltip>
+              </a-col>
+              <a-col :span="24">
+                <a-input-search
+                  v-model="queryParam.searchString"
+                  :placeholder="$t('输入关键字搜索')"
+                  @search="$refs.table.refresh(true)"
+                />
+              </a-col>
+            </a-row>
+            <div style="flex-grow: 1; overflow: auto">
+              <s-table
+                ref="table"
+                size="small"
+                rowKey="sortId"
+                :columns="columns"
+                :data="loadDataTable"
+                :expandedRowKeys="showAll"
+                childrenColumnName="tablechild"
+                :sorter="{ field: 'id', order: 'descend' }"
+                @expand="onExpand"
+              >
+                <div
+                  slot="name"
+                  slot-scope="text, record"
+                  :style="
+                    record.style === 'span'
+                      ? { 'margin-top': '-20px', 'padding-left': '20px' }
+                      : record.style === 'datadetails' || record.style === 'viewdetails'
+                      ? { 'margin-top': '-20px', 'padding-left': '50px' }
+                      : { 'margin-top': '-20px', 'padding-left': '40px' }
+                  "
+                >
+                  <span v-if="record.style === 'span'" style="cursor: pointer" @click="openTags(record)">
+                    {{ record.name }}
+                  </span>
+                  <span v-else style="cursor: pointer" @click="openTags(record)">
+                    <a-icon v-if="record.style === 'field'" type="database" theme="twoTone" />
+                    <a-icon v-if="record.style === 'datadetails'" type="desktop" style="color: #faad14" />
+                    <a-icon
+                      v-if="record.style === 'viewdetails'"
+                      type="layout"
+                      theme="twoTone"
+                      two-tone-color="#52c41a"
+                    />
+                    {{ record.name }}
+                  </span>
+                </div>
+                <a-dropdown v-if="record.style === 'span'" slot="action" slot-scope="text, record">
+                  <a><a-icon type="more" /></a>
+                  <a-menu slot="overlay">
+                    <a-menu-item :disabled="record.accessLevel === 2" @click="handleEdit(record)">
+                      <div>
+                        <a-icon type="edit" />
+                        {{ $t('编辑') }}
+                      </div>
+                    </a-menu-item>
+                    <a-menu-item @click="handleExport(record)">
+                      <div>
+                        <a-icon type="export" />
+                        {{ $t('导出') }}
+                      </div>
+                    </a-menu-item>
+                    <a-menu-item :disabled="!!record.accessLevel" @click="handleDelete(record)">
+                      <div>
+                        <a-icon type="delete" />
+                        {{ $t('删除') }}
+                      </div>
+                    </a-menu-item>
+                  </a-menu>
+                </a-dropdown>
+              </s-table>
+            </div>
+          </a-layout-sider>
+          <a-layout style="background: white; padding-left: 10px; height: calc(100vh - 170px)">
+            <a-layout-content>
+              <a-breadcrumb>
+                <a-breadcrumb-item>{{ config.tbName || configview.tbName || $t('导航') }}</a-breadcrumb-item>
+                <a-breadcrumb-item>{{ config.title || configview.title || senior }}</a-breadcrumb-item>
+              </a-breadcrumb>
+              <div style="flex-grow: 1; overflow: auto">
+                <tplview-data
+                  v-show="config.styleshow === 'data'"
+                  ref="viewData"
+                  :item="config.data"
+                  @ok="getList"
+                  @add="getAdd"
+                  @refresh="handleOk"
+                />
+                <tplview-form
+                  v-show="configview.styleshow === 'view'"
+                  ref="viewForm"
+                  :item="configview.data"
+                  @ok="getForm"
+                  @add="getViewAdd"
+                  @refresh="handleOk"
+                />
+                <data-model-senior
+                  v-if="senior"
+                  ref="seniorTable"
+                  :search="queryParam"
+                  @getField="getField"
+                  @showTable="showTable"
+                />
+              </div>
+            </a-layout-content>
+          </a-layout>
+        </a-layout>
+      </a-tab-pane>
+      <!-- 仪表盘面板 -->
+      <a-tab-pane :key="1">
+        <template slot="tab">仪表盘</template>
+        <div style="height: calc(100vh - 170px)">
+          <a-row type="flex" style="align-items: center">
+            <a-col></a-col>
+            <a-col :span="4" style="line-height: 120%; padding-left: 15px">仪表盘</a-col>
+            <a-col :span="14"></a-col>
+            <a-col>
+              <a-space>
+                <a-dropdown>
+                  <a class="ant-dropdown-link" @click="(e) => e.preventDefault()">
+                    添加组件
+                    <a-icon type="down" />
+                  </a>
+                  <a-menu slot="overlay">
+                    <a-menu-item @click="addItem">超链接</a-menu-item>
+                    <a-menu-item>2nd menu item</a-menu-item>
+                    <a-menu-item>3rd menu item</a-menu-item>
+                  </a-menu>
+                </a-dropdown>
+
+                <a-button type="primary">保存</a-button>
+                <a-button>主题</a-button>
+                <a-button @click="preShow = !preShow">{{ preShow ? '取消' : '预览' }}</a-button>
+                <a-button @click="createMenu">部署</a-button>
+                <a-tooltip>
+                  <a-icon type="question-circle"></a-icon>
+                  <template slot="title">prompt text</template>
+                </a-tooltip>
+              </a-space>
+            </a-col>
+          </a-row>
+          <a-row v-if="!preShow">
+            <grid-layout
+              :layout.sync="layout"
+              :col-num="colNum"
+              :row-height="30"
+              :is-draggable="true"
+              :is-resizable="true"
+              :vertical-compact="true"
+              :use-css-transforms="true"
+            >
+              <grid-item
+                v-for="item in layout"
+                :key="item.i"
+                :static="item.static"
+                :x="item.x"
+                :y="item.y"
+                :w="item.w"
+                :h="item.h"
+                :i="item.i"
+                class="gridItem"
+              >
+                <!-- <a @click="clickRight(gridData[item.i].src)"> -->
+                <div
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    width: 100%;
+                    height: 100%;
+                  "
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%">
+                    <a-space></a-space>
+                    <h3 style="padding: 5px; margin-bottom: 0">{{ gridData[item.i].productLine }}</h3>
+                    <a-space style="padding: 5px">
+                      <div @click.stop="setItem(item.i)">
+                        <font-awesome-icon icon="fa-cog" style="cursor: pointer; line-height: 16px" />
+                      </div>
+                      <font-awesome-icon
+                        icon="fa-trash-alt"
+                        style="cursor: pointer; line-height: 16px; color: red"
+                        @click.stop="removeItem(item.i)"
+                      />
+                    </a-space>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; width: 100%; font-size: 23px">
+                    <h1>{{ gridData[item.i].productName }}</h1>
+                    <font-awesome-icon
+                      v-show="gridData[item.i].icon"
+                      :icon="gridData[item.i].icon ? gridData[item.i].icon : 'fa-bell'"
+                      :style="{ color: gridData[item.i].iconColor, lineHeight: '23px', marginTop: '13px' }"
+                    ></font-awesome-icon>
+                  </div>
+                  <h3>{{ gridData[item.i].productInstruction }}</h3>
+                  <!-- </a> -->
+                </div>
+              </grid-item>
+            </grid-layout>
+          </a-row>
+          <a-row v-else>
+            <grid-layout
+              :layout.sync="layout"
+              :col-num="colNum"
+              :row-height="30"
+              :is-draggable="false"
+              :is-resizable="false"
+              :vertical-compact="true"
+              :use-css-transforms="true"
+            >
+              <grid-item
+                v-for="item in layout"
+                :key="item.i"
+                :static="item.static"
+                :x="item.x"
+                :y="item.y"
+                :w="item.w"
+                :h="item.h"
+                :i="item.i"
+                class="gridItem"
+              >
+                <a @click="clickRight(gridData[item.i].src)">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      justify-content: space-between;
+                      width: 100%;
+                      height: 100%;
+                    "
+                  >
+                    <div style="display: flex; justify-content: flex-start; padding-left: 15px">
+                      <h3 style="padding: 5px">{{ gridData[item.i].productLine }}</h3>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; width: 100%; font-size: 23px">
+                      <h1 style="padding-left: 20px">{{ gridData[item.i].productName }}</h1>
+                      <font-awesome-icon
+                        v-show="gridData[item.i].icon"
+                        :icon="gridData[item.i].icon ? gridData[item.i].icon : 'fa-bell'"
+                        :style="{
+                          color: gridData[item.i].iconColor,
+                          lineHeight: '23px',
+                          marginTop: '13px',
+                          paddingRight: '20px'
+                        }"
+                      ></font-awesome-icon>
+                    </div>
+                    <h3 style="padding-left: 20px">{{ gridData[item.i].productInstruction }}</h3>
+                  </div>
+                </a>
+              </grid-item>
+            </grid-layout>
+          </a-row>
+        </div>
+      </a-tab-pane>
+      <!-- 其他面板 -->
+      <a-tab-pane v-for="(pane, index1) in panes" :key="pane.key" :closable="pane.closable">
+        <template v-slot:tab>
+          <a-icon v-if="pane.content === 'field'" type="database" theme="twoTone" />
+          <a-icon v-if="pane.content === 'datadetails'" type="desktop" style="color: #faad14" />
+          <a-icon v-if="pane.content === 'viewdetails'" type="layout" theme="twoTone" two-tone-color="#52c41a" />
+          {{ pane.title }}
+          <a-icon v-show="activeKey === pane.key" type="reload" class="reload" @click="onRefresh(pane.key, index1)" />
+        </template>
+        <div :key="panesKey[index1]" style="display: flex; flex-direction: column; height: calc(100vh - 170px)">
+          <a-row style="margin-bottom: 8px">
+            <a-col :span="20">
+              <div style="display: flex">
+                <a-button
+                  v-if="pane.content !== 'field'"
+                  :disabled="pane.data && pane.data.record.accessLevel === 2"
+                  type="primary"
+                  size="small"
+                  @click="handleSubmit('save')"
+                >
+                  {{ $t('保存') }}
+                </a-button>
+                <a-breadcrumb
+                  v-if="pane.content !== 'datadetails' && pane.content !== 'viewdetails'"
+                  style="margin-left: 8px"
+                >
+                  <a-breadcrumb-item>
+                    {{ pane.alias ? pane.title + '(' + pane.module + '_' + pane.alias + ')' : pane.title }}
+                  </a-breadcrumb-item>
+                  <a-breadcrumb-item>{{ pane.name }}</a-breadcrumb-item>
+                </a-breadcrumb>
+                <a-breadcrumb v-else style="margin-left: 8px">
+                  <a-breadcrumb-item>
+                    {{ pane.alias ? pane.namefirst + '(' + pane.module + '_' + pane.alias + ')' : pane.namefirst }}
+                  </a-breadcrumb-item>
+                  <a-breadcrumb-item>{{ pane.nametwo }}</a-breadcrumb-item>
+                  <a-breadcrumb-item>{{ pane.title }}</a-breadcrumb-item>
+                </a-breadcrumb>
+                <div v-if="pane.data && pane.data.record.accessLevel === 2" style="margin-left: 16px; color: #f5222d">
+                  你没有编辑权限，请联系系统管理员
+                </div>
+              </div>
+            </a-col>
+            <a-col :span="4" style="text-align: right">
+              <a-popover v-model="helpVisible" trigger="click" :arrowPointAtCenter="true" placement="bottomRight">
+                <template slot="content">
+                  <div style="width: 350px" class="helpText">
+                    <div v-dompurify-html="helpIllustrate" v-viewer></div>
+                  </div>
+                </template>
+                <a-icon
+                  type="question-circle"
+                  style="font-size: 16px; margin-right: 8px; color: rgba(0, 0, 0, 0.65)"
+                  @click="getHelp(pane)"
+                ></a-icon>
+              </a-popover>
+            </a-col>
+          </a-row>
+          <div
+            :style="
+              pane.content !== 'viewdetails'
+                ? { 'flex-grow': 1, overflow: 'auto' }
+                : { 'flex-grow': 1, overflow: 'hidden' }
+            "
+          >
+            <!-- 字段管理 -->
+            <field v-if="pane.content === 'field'" :tableId="activeKey !== 0 ? activeKey : ''" />
+            <!-- 数据窗口 -->
+            <tplview-data-form-edit
+              v-if="pane.content === 'datadetails'"
+              ref="tplviewDataFormEdit"
+              :tableId="tableId"
+              :active="activeKey !== 0 ? String(activeKey) : ''"
+              :configdata="pane.data"
+              @ok="handleOk"
+              @refresh="tabChange"
+            />
+            <!-- 表单视图 -->
+            <tplview-form-form
+              v-if="pane.content === 'viewdetails'"
+              ref="tplviewFormForm"
+              :configdata="pane.data"
+              @ok="handleOk"
+              @refresh="tabViewChange"
+            />
+          </div>
+        </div>
+      </a-tab-pane>
+    </a-tabs>
+    <!-- 编辑数据表 -->
+    <table-form ref="tableForm" @ok="handleOk" />
+    <general-export ref="generalExport" />
+    <table-dashboard-form ref="tableDashboardForm" @ok="handleSetOk" />
+    <dashboard-create-menu ref="dashboardCreateMenu" @ok="handleSetOk" />
+  </div>
+</template>
+<script>
+import storage from '@/utils/storage'
+import VueGridLayout from 'vue-grid-layout'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    TableForm: () => import('./TableForm'),
+    Field: () => import('./Field/Field'),
+    TplviewData: () => import('./TplviewData'),
+    TplviewForm: () => import('./TplviewForm'),
+    TplviewFormForm: () => import('./TplviewFormForm'),
+    TplviewDataFormEdit: () => import('./TplviewDataFormEdit'),
+    DataModelSenior: () => import('./DataModelSenior'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport'),
+    GridLayout: VueGridLayout.GridLayout,
+    GridItem: VueGridLayout.GridItem,
+    TableDashboardForm: () => import('./TableDashboardForm'),
+    DashboardCreateMenu: () => import('./DashboardCreateMenu')
+  },
+  data () {
+    return {
+      panes: [],
+      panesKey: [],
+      activeKey: 0,
+      show0: false,
+      collapsed: false,
+      config: {},
+      configfield: {},
+      tableShowData: {},
+      configdata: {},
+      configview: {},
+      showAll: [],
+      datadetails: {},
+      viewdetails: {},
+      tableId: [],
+      tableData: [],
+      modules: [],
+      dataFormType: '',
+      dataaddType: '',
+      viewFormType: '',
+      viewaddType: '',
+      senior: this.$t('高级搜索'),
+      typeList: [], // 自动搜索
+      columns: [{
+        title: this.$t('数据表名称'),
+        dataIndex: 'name',
+        width: 250,
+        scopedSlots: {
+          customRender: 'name'
+        }
+      }, {
+        dataIndex: 'action',
+        scopedSlots: {
+          customRender: 'action'
+        }
+      }],
+      queryParam: { module: 'admin', searchString: '' },
+      layout: [],
+      colNum: 12,
+      gridIndex: 0,
+      gridData: [],
+      helpVisible: false,
+      helpIllustrate: '',
+      preShow: false
+    }
+  },
+  watch: {
+    panes (val) {
+      if (this.panes.length === 0) {
+        this.activeKey = 0
+      }
+      this.panesKey = val.map(item => {
+        return !!item.key + '1'
+      })
+    },
+    tableData (val) {
+      if (this.tableShowData) {
+        const record = val.find(item => item.tableId === this.tableShowData.tableId)
+        if (record && this.showAll.indexOf(record.id) === -1) {
+          this.showAll.push(record.id)
+          for (const i in record.tablechild) {
+            this.showAll.push(record.tablechild[i].id)
+          }
+        }
+      }
+    }
+  },
+  created () {
+    if (!storage.get('moduleName')) {
+      storage.set('moduleName', 'crm')
+    }
+    this.queryParam.module = storage.get('moduleName')
+    this.gridIndex = this.layout.length
+    this.loadData()
+  },
+  methods: {
+    // 刷新面板
+    onRefresh (key, index) {
+      if (key === 0) {
+        this.show0 = !this.show0
+      } else {
+        this.panesKey.splice(index, 1, !this.panesKey[index])
+      }
+    },
+    onEdit (targetKey, action) {
+      this[action](targetKey)
+    },
+    chagneTab () {
+      this.panes.forEach(item => {
+        if (item.key === this.activeKey) {
+          if (item.content === 'viewdetails') {
+            this.viewdetails = item.data
+          } else if (item.content === 'datadetails') {
+            this.datadetails = item.data
+          } else if (item.content === 'field') {
+            this.configfield = item.data
+          }
+        }
+      })
+    },
+    remove (targetKey) {
+      let activeKey = this.activeKey
+      let lastIndex
+      this.panes.forEach((pane, i) => {
+        if (pane.key === targetKey) {
+          lastIndex = i - 1
+        }
+      })
+      const panes = this.panes.filter(pane => pane.key !== targetKey)
+      if (panes.length && activeKey === targetKey) {
+        if (lastIndex >= 0) {
+          activeKey = panes[lastIndex].key
+        } else {
+          activeKey = panes[0].key
+        }
+      }
+      this.panes = panes
+      this.activeKey = activeKey
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/table/index',
+        data: Object.assign(parameter, this.queryParam, { init: String(!this.modules.length) })
+      }).then(res => {
+        if (this.modules.length === 0) {
+          this.modules = res.result.option ? res.result.option.modules : []
+        }
+        for (const i in res.result.data) {
+          res.result.data[i]['style'] = 'span'
+          res.result.data[i]['sortId'] = res.result.data[i].id
+          res.result.data[i]['tablechild'] = [{
+            name: this.$t('字段管理'), id: 100000000 + i + 1, sortId: 100000000 + i + 1, style: 'field', tableId: res.result.data[i].tableId, tbName: res.result.data[i].name, data: res.result.data[i]
+          }, {
+            name: this.$t('数据窗口'), id: 100000000 + i + 2, sortId: 100000000 + i + 2, style: 'data', tableId: res.result.data[i].tableId, tbName: res.result.data[i].name, data: res.result.data[i]
+          }, {
+            name: this.$t('表单视图'), id: 100000000 + i + 3, sortId: 100000000 + i + 3, style: 'view', tableId: res.result.data[i].tableId, tbName: res.result.data[i].name, data: res.result.data[i]
+          }]
+          if (res.result.data[i].data && res.result.data[i].data.window) {
+            res.result.data[i].tablechild[1]['tablechild'] = res.result.data[i].data.window
+            for (let j = 0; j < res.result.data[i].tablechild[1].tablechild.length; j++) {
+              res.result.data[i].tablechild[1].tablechild[j]['sortId'] = res.result.data[i].tablechild[1].tablechild[j].id + 'window'
+              res.result.data[i].tablechild[1].tablechild[j]['style'] = 'datadetails'
+              res.result.data[i].tablechild[1].tablechild[j]['viewname'] = res.result.data[i].tablechild[1].name
+              res.result.data[i].tablechild[1].tablechild[j]['tbName'] = res.result.data[i].name
+              res.result.data[i].tablechild[1].tablechild[j]['alias'] = res.result.data[i].alias
+              res.result.data[i].tablechild[1].tablechild[j]['modules'] = this.queryParam.modules
+            }
+          }
+          if (res.result.data[i].data && res.result.data[i].data.form) {
+            res.result.data[i].tablechild[2]['tablechild'] = res.result.data[i].data.form
+            for (let j = 0; j < res.result.data[i].tablechild[2].tablechild.length; j++) {
+              res.result.data[i].tablechild[2].tablechild[j]['sortId'] = res.result.data[i].tablechild[2].tablechild[j].id + 'form'
+              res.result.data[i].tablechild[2].tablechild[j]['style'] = 'viewdetails'
+              res.result.data[i].tablechild[2].tablechild[j]['viewname'] = res.result.data[i].tablechild[2].name
+              res.result.data[i].tablechild[2].tablechild[j]['tbName'] = res.result.data[i].name
+              res.result.data[i].tablechild[2].tablechild[j]['alias'] = res.result.data[i].alias
+              res.result.data[i].tablechild[2].tablechild[j]['modules'] = this.queryParam.modules
+            }
+          }
+          res.result.data[i].name = res.result.data[i].name + '(' + res.result.data[i].alias + ')'
+        }
+        this.tableData = res.result.data
+        return res.result
+      })
+    },
+    onExpand (expanded, record) {
+      if (expanded) {
+        // 设置展开窗Key，代表展开操作
+        this.showAll.push(record.id)
+      } else {
+        // 代表折叠操作
+        if (this.showAll.length) {
+          this.showAll = this.showAll.filter(v => {
+            return v !== record.id
+          })
+        }
+      }
+    },
+    choiceModule (value) {
+      this.queryParam.module = value
+      this.$refs.table.refresh(true)
+      storage.set('moduleName', value)
+    },
+    openSenior () {
+      this.senior = this.$t('高级搜索')
+      this.configview = {}
+      this.config = {}
+    },
+    // 更新缓存
+    handleUpdateCache () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确定要更新缓存吗？'),
+        onOk: () => {
+          this.$setLoading({ spinning: true, tip: this.$t('正在更新缓存，请稍候……'), size: 'large' })
+          that.axios({
+            url: '/admin/index/updateCache'
+          }).then(() => {
+            that.$setLoading(false)
+            that.$message.success(this.$t('缓存更新完成'))
+          })
+        }
+      })
+    },
+    handleAdd () {
+      this.$refs.tableForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        url: '/admin/table/add',
+        module: this.queryParam.module
+      })
+    },
+    handleEdit (record) {
+      this.$refs.tableForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}：` + record.name,
+        url: '/admin/table/edit',
+        module: this.queryParam.module,
+        record: record
+      })
+    },
+    handleExport (record) {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportTableField',
+        parameter: {
+          module: this.queryParam.module,
+          tableId: record.tableId
+        }
+      })
+    },
+    handleExportOverview () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportTable',
+        parameter: {
+          module: this.queryParam.module
+        }
+      })
+    },
+    handleExportTableField () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportTableField',
+        parameter: {
+          module: this.queryParam.module,
+          tableId: ''
+        }
+      })
+    },
+    handleSync () {
+      const me = this
+      this.$confirm({
+        title: this.$t('您确认要同步数据表吗?'),
+        onOk () {
+          me.$setLoading({ spinning: true, tip: me.$t('数据表同步中，请稍候……'), size: 'large' })
+          me.axios({
+            url: '/admin/table/tableSync',
+            data: { module: me.queryParam.module }
+          }).then(res => {
+            me.$setLoading(false)
+            me.$refs.table.refresh()
+            me.$message.success(res.message)
+          })
+        }
+      })
+    },
+    handleOk (id) {
+      if (id) {
+        for (const i in this.panes) {
+          if (id === this.panes[i].key) {
+            this.panes.splice(i, 1)
+          }
+        }
+      }
+      this.$refs.table.refresh()
+    },
+    handleDelete (record) {
+      const me = this
+      const table = this.$refs.table
+      const tableId = record && record.tableId || this.selectedRowKeys
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          me.axios({
+            url: '/admin/table/delete',
+            data: { tableId: tableId }
+          }).then(res => {
+            if (res.code) {
+              me.$message.error(res.message)
+            } else {
+              me.$message.success(res.message)
+              table.refresh()
+            }
+          })
+        }
+      })
+    },
+    openTags (record) {
+      if (record.style === 'span') {
+        if (this.showAll.indexOf(record.id) === -1) {
+          this.showAll.push(record.id)
+          for (const i in record.tablechild) {
+            this.showAll.push(record.tablechild[i].id)
+          }
+        } else {
+          const index = this.showAll.indexOf(record.id)
+          this.showAll.splice(index, 1)
+        }
+      } else {
+        if (record.style === 'field' && this.panes.every(item => item.key !== record.tableId)) {
+          this.configfield = {
+            action: 'edit',
+            title: record.name,
+            url: '/admin/table/edit',
+            module: record.module,
+            record: record
+          }
+          this.panes.push({ title: record.tbName, content: 'field', key: record.tableId, name: record.name, alias: record.data.alias, data: this.configfield, module: record.data.module })
+          this.activeKey = record.tableId
+        } else if (record.style === 'field') {
+          this.activeKey = record.tableId
+        } else if (this.panes.every(item => item.key !== record.id)) {
+          if (record.style === 'data') {
+            this.config = {}
+            this.senior = ''
+            this.config = {
+              action: 'edit',
+              title: record.name,
+              url: '/admin/table/edit',
+              module: this.queryParam.module,
+              data: record,
+              styleshow: 'data',
+              tbName: record.tbName,
+              loading: true
+            }
+            this.configview = {}
+            this.$nextTick(() => {
+              this.$refs.viewData.handleOk()
+            })
+          }
+          if (record.style === 'datadetails') {
+            this.datadetails = {
+              action: 'edit',
+              title: record.name,
+              url: '/admin/tplview/editData',
+              record: record,
+              tableId: record.tableId || record.value,
+              variable: record.variable,
+              module: this.queryParam.module,
+              item: record.data
+            }
+            this.panes.push({ title: record.name, content: 'datadetails', key: record.id, namefirst: record.tbName, nametwo: record.viewname, alias: record.alias, module: this.queryParam.module, data: this.datadetails })
+            this.activeKey = record.id
+            const name = String(this.activeKey)
+            this.tableId[name] = record.tableId || record.value
+            this.dataFormType = 'data'
+          }
+          if (record.style === 'view') {
+            this.configview = {}
+            this.senior = ''
+            this.configview = {
+              action: 'edit',
+              title: record.name,
+              url: '/admin/table/edit',
+              module: this.queryParam.module,
+              data: record,
+              styleshow: 'view',
+              tbName: record.tbName
+            }
+            this.config = {}
+            this.$nextTick(() => {
+              this.$refs.viewForm.handleOk()
+            })
+          }
+          if (record.style === 'viewdetails') {
+            this.viewdetails = {
+              action: 'edit',
+              title: record.name,
+              url: '/admin/tplview/editForm',
+              record: record,
+              tableId: record.tableId || record.value
+            }
+            this.panes.push({ title: record.name, content: 'viewdetails', key: record.id, namefirst: record.tbName, nametwo: record.viewname, alias: record.alias, data: this.viewdetails, module: this.queryParam.module })
+            this.activeKey = record.id
+            const name = String(this.activeKey)
+            this.tableId[name] = record.tableId || record.value
+            this.viewFormType = 'view'
+          }
+        } else {
+          this.activeKey = record.id
+        }
+      }
+    },
+    getList (data) {
+      if (this.panes.every(item => item.key !== data.record.id)) {
+        this.panes.push({ title: data.title, content: 'datadetails', key: data.record.id, namefirst: data.item.tbName, nametwo: data.item.name, data: data, alias: data.alias, module: data.item.data.module })
+        this.activeKey = data.record.id
+      }
+      this.activeKey = data.record.id
+      this.datadetails = data
+      const name = String(this.activeKey)
+      this.tableId[name] = data.tableId
+      this.dataFormType = 'data'
+    },
+    getForm (data) {
+      if (this.panes.every(item => item.key !== data.record.id)) {
+        this.panes.push({ title: data.title, content: 'viewdetails', key: data.record.id, namefirst: data.item.tbName, nametwo: data.item.name, data: data, alias: data.alias, module: data.item.data.module })
+        this.activeKey = data.record.id
+      }
+      this.activeKey = data.record.id
+      this.viewdetails = data
+      const name = String(this.activeKey)
+      this.tableId[name] = data.tableId
+      this.viewFormType = 'view'
+    },
+    getField (data) {
+      if (data.type === '字段') {
+        this.configfield = {
+          action: 'edit',
+          title: data.name,
+          url: '/admin/table/edit',
+          module: this.queryParam.module,
+          record: data
+        }
+        if (this.panes.every(item => item.key !== data.tableId)) {
+          this.panes.push({ title: data.tableName, content: 'field', key: data.tableId, name: data.name, alias: data.alias, module: this.queryParam.module })
+          this.activeKey = data.tableId
+        } else {
+          this.activeKey = data.tableId
+        }
+      } else if (['卡片数据窗口', '普通数据窗口', '流程数据窗口', '子表单数据窗口'].includes(data.type)) {
+        if (this.panes.every(item => item.key !== data.id)) {
+          this.panes.push({ title: data.name, content: 'datadetails', key: data.id, namefirst: data.tableName, nametwo: '数据窗口', data: data, alias: data.alias, module: this.queryParam.module })
+          this.activeKey = data.id
+        }
+        this.dataFormType = ''
+        this.activeKey = data.id
+        data['action'] = 'edit'
+        if (data.type === '普通数据窗口') {
+          data['variable'] = 'table_form_list'
+        } else if (data.type === '子表单数据窗口') {
+          data['variable'] = 'table_subform_list'
+        } else if (data.type === '卡片数据窗口') {
+          data['variable'] = 'table_card_list'
+        } else {
+          data['variable'] = 'table_flow_list'
+        }
+        data['url'] = '/admin/tplview/editData'
+        data['record'] = {}
+        data.record['id'] = data.id
+        this.datadetails = data
+        this.dataFormType = 'data'
+        const name = String(this.activeKey)
+        this.tableId[name] = data.tableId
+      } else {
+        if (this.panes.every(item => item.key !== data.id)) {
+          this.panes.push({ title: data.name, content: 'viewdetails', key: data.id, namefirst: data.tableName, nametwo: '表单视图', data: data, alias: data.alias, module: this.queryParam.module })
+          this.activeKey = data.id
+        }
+        this.viewFormType = ''
+        data['action'] = 'edit'
+        data['url'] = '/admin/tplview/editForm'
+        data['record'] = {}
+        data.record['id'] = data.id
+        this.activeKey = data.record.id
+        this.viewdetails = data
+        this.viewFormType = 'view'
+        const name = String(this.activeKey)
+        this.tableId[name] = data.tableId
+      }
+    },
+    showTable (data) {
+      this.tableShowData = data
+      this.$set(this.queryParam, 'searchString', data.tableName)
+      this.$refs.table.refresh(true)
+    },
+    getHelp (record) {
+      this.helpVisible = false
+      this.$setLoading({ spinning: true })
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: record.content === 'field' ? '22041616460103' : record.content === 'datadetails' ? '22041616462505' : '22041616463506'
+        }
+      }).then(res => {
+        this.$setLoading({ spinning: false })
+        if (!res.code) {
+          const obj = res.result
+          if (obj.displayMode === 'drawer') {
+            this.helpVisible = false
+            this.$showDocument({ visible: true, content: obj.content })
+          } else {
+            this.helpVisible = true
+            this.helpIllustrate = obj.content
+          }
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    tabChange (value, id) {
+      for (const i in this.panes) {
+        if (this.activeKey === this.panes[i].key) {
+          this.panes[i].key = id
+          this.panes[i].data['record'] = {}
+          this.panes[i].data.record['id'] = id
+          this.panes[i].title = value.info.name
+          this.activeKey = id
+          this.datadetails = this.panes[i].data
+        }
+      }
+      this.handleOk()
+      this.$nextTick(() => {
+        this.$refs.viewForm.handleOk()
+      })
+    },
+    tabViewChange (value, id) {
+      for (const i in this.panes) {
+        if (this.activeKey === this.panes[i].key) {
+          this.panes[i].key = id
+          this.panes[i].data['record'] = {}
+          this.panes[i].data.record['id'] = id
+          this.panes[i].title = value.info.name
+          this.activeKey = id
+          this.viewdetails = this.panes[i].data
+        }
+      }
+      this.handleOk()
+    },
+    getAdd (data) {
+      this.panes.push({ title: data.title, content: 'datadetails', key: data.Keyid, namefirst: data.item.tbName, nametwo: data.item.name, data: data, module: data.module })
+      this.activeKey = data.Keyid
+      this.datadetails = data
+      this.dataaddType = 'dataadd'
+      const name = String(this.activeKey)
+      this.tableId[name] = data.tableId
+    },
+    getViewAdd (data) {
+      this.panes.push({ title: data.title, content: 'viewdetails', key: data.Keyid, namefirst: data.item.tbName, nametwo: data.item.name, data: data, module: data.module })
+      this.activeKey = data.Keyid
+      this.viewdetails = data
+      this.viewaddType = 'viewadd'
+      const name = String(this.activeKey)
+      this.tableId[name] = data.tableId
+    },
+    // 数据提交
+    handleSubmit () {
+      let type = ''
+      this.panes.forEach(item => {
+        if (item.key === this.activeKey) {
+          type = item.content
+        }
+      })
+      if (type === 'datadetails') {
+        for (const i in this.$refs.tplviewDataFormEdit) {
+          if (this.$refs.tplviewDataFormEdit[i].data.id === this.activeKey) {
+            this.$refs.tplviewDataFormEdit[i].handleSubmit('save')
+          } else if (!this.$refs.tplviewDataFormEdit[i].data.id && this.activeKey === this.$refs.tplviewDataFormEdit[i].config.Keyid) {
+            this.$refs.tplviewDataFormEdit[i].handleSubmit('save')
+          }
+        }
+      } else if (type === 'viewdetails') {
+        for (const i in this.$refs.tplviewFormForm) {
+          if ((this.$refs.tplviewFormForm[i].data.id && String(this.$refs.tplviewFormForm[i].data.id) === String(this.activeKey)) || this.$refs.tplviewFormForm[i].config.Keyid === this.activeKey) {
+            this.$refs.tplviewFormForm[i].handleSubmit('save')
+          }
+        }
+      }
+    },
+    addItem () {
+      this.layout.push({
+        x: (this.layout.length * 2) % (this.colNum || 12),
+        y: this.layout.length + (this.colNum || 12),
+        w: 2,
+        h: 4,
+        i: this.gridIndex
+      })
+      this.gridData.push({ id: this.gridIndex + 1 })
+      this.gridIndex++
+    },
+    removeItem (val) {
+      const index = this.layout.map(item => item.i).indexOf(val)
+      this.layout.splice(index, 1)
+    },
+    setItem (val) {
+      this.$refs.tableDashboardForm.show({
+        ...this.gridData[val],
+        title: '仪表盘设置',
+        iconColor: this.gridData[val].iconColor ?? ''
+      })
+    },
+    handleSetOk (val) {
+      const res = val.setting
+      this.gridData = this.gridData.map(item => {
+        if (item.id === res.id) {
+          item = res
+        }
+        return item
+      })
+    },
+    clickRight (src) {
+      window.open(src, '_blank')
+    },
+    createMenu () {
+      this.$refs.dashboardCreateMenu.show({
+        title: `${this.$t('创建菜单')}`,
+        url: '/admin/menu/getTreeMenu',
+        submitUrl: '/admin/menu/add',
+        record: { name: '仪表盘' }
+      })
+    },
+    loadData () {
+      this.axios({
+        url: '/dashboard/view/mockInit'
+      }).then(res => {
+        this.loading = false
+        this.layout = res.result.data.layout
+        this.gridData = res.result.data.gridData
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+
+/deep/ .ant-tabs.ant-tabs-card .ant-tabs-card-bar .ant-tabs-tab {
+  margin-right: -1px;
+}
+
+.container /deep/ .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+.reload {
+  margin-left: 8px;
+  color: rgba(0, 0, 0, 0.65);
+  transition-duration: 0.2s;
+}
+.reload:hover {
+  color: @primary-color;
+}
+.gridItem {
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  touch-action: none;
+}
+</style>

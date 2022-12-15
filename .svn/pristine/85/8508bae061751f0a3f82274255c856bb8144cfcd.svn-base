@@ -1,0 +1,495 @@
+<template>
+  <div>
+    <a-card size="small" style="min-height: 300px; overflow: hidden; position: relative">
+      <a-row type="flex" align="middle">
+        <a-col>
+          <a-radio-group
+            v-model="showType"
+            button-style="solid"
+            style="margin: 5px 0 10px 0"
+            @change="
+              (e) => {
+                if (e.target.value === '1') queueShow()
+              }
+            "
+          >
+            <a-radio-button value="0">{{ $t('表格展示') }}</a-radio-button>
+            <a-radio-button value="1">{{ $t('图表展示') }}</a-radio-button>
+          </a-radio-group>
+        </a-col>
+        <a-col :span="5">
+          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
+            <a-form-item :label="$t('队列名称')">
+              <a-select v-model="queueValue" mode="multiple" style="width: 260px" :placeholder="$t('请选择队列名称')">
+                <a-select-option v-for="(item, index) in queueList" :key="index" :value="item">
+                  {{ item }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-form>
+        </a-col>
+
+        <a-col style="margin-left: 10px">
+          <a-space>
+            <a-button htmlType="submit" @click="handleWay('search')">{{ $t('搜索') }}</a-button>
+            <a-button @click="handleWay('reset')">
+              {{ $t('重置') }}
+            </a-button>
+          </a-space>
+        </a-col>
+      </a-row>
+
+      <div v-show="showType === '0'" class="tableCard">
+        <a-table
+          ref="table"
+          size="small"
+          :columns="columns"
+          :bordered="false"
+          :dataSource="queueData"
+          :pagination="false"
+        >
+          <div slot="queue" slot-scope="text">
+            {{ text || '--' }}
+          </div>
+          <div slot="total" slot-scope="text, record">
+            {{ record.agentsStatus.total }}
+          </div>
+          <div slot="login" slot-scope="text, record">
+            {{ record.agentsStatus.login }}
+          </div>
+          <div slot="busy" slot-scope="text, record">
+            {{ record.agentsStatus.busy }}
+          </div>
+          <div slot="idle" slot-scope="text, record">
+            {{ record.agentsStatus.idle }}
+          </div>
+          <div slot="action" slot-scope="text, record">
+            <a @click="handleLook(record)">{{ $t('查看') }}</a>
+          </div>
+        </a-table>
+      </div>
+      <div v-show="showType === '1'">
+        <a-card
+          v-for="(item, index) in queueData"
+          v-show="queueData.length"
+          :key="index"
+          size="small"
+          class="cardEchart"
+          :title="item.queue"
+          :headStyle="{
+            fontWeight: 'bold',
+            backgroundColor: '#fff',
+            borderBottom: '0',
+            fontSize: '14px',
+            padding: '0'
+          }"
+        >
+          <div ref="main" style="background: #fff; margin: 0; height: 180px" @loadstart="myEcharts(index, item)"></div>
+        </a-card>
+        <a-empty v-show="!queueData.length" />
+      </div>
+    </a-card>
+    <a-drawer
+      :title="queueTitle"
+      :width="700"
+      :visible="visible"
+      :destroyOnClose="true"
+      @close="
+        () => {
+          currentNumber = null
+          visible = !visible
+        }
+      "
+    >
+      <a-spin :spinning="false">
+        <a-tabs default-active-key="1">
+          <a-tab-pane key="1">
+            <span slot="tab">{{ $t('坐席详情') }}</span>
+            <a-table
+              ref="table"
+              size="small"
+              rowKey="extension"
+              :columns="agentColumns"
+              :dataSource="agentsData"
+              :pagination="{ pageSize: 20 }"
+            ></a-table>
+          </a-tab-pane>
+          <a-tab-pane key="2">
+            <span slot="tab">{{ $t('排队详情') }}</span>
+            <a-table
+              ref="table"
+              size="small"
+              rowKey="callerid"
+              :columns="waitColumns"
+              :data-source="waitData"
+              :pagination="{ pageSize: 20 }"
+            >
+              <div slot="action" slot-scope="text, record">
+                <a @click="queuePickup(record)">{{ $t('抢接') }}</a>
+              </div>
+            </a-table>
+          </a-tab-pane>
+        </a-tabs>
+        <div class="bbar">
+          <a-button
+            @click="
+              () => {
+                currentNumber = null
+                visible = !visible
+              }
+            "
+          >
+            {{ $t('关闭') }}
+          </a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import echarts from 'echarts'
+export default {
+  data () {
+    return {
+      // 队列标题
+      queueTitle: '',
+      // 排队详情
+      waitData: [],
+      // 队列坐席
+      agentsData: [],
+      // 队列数据
+      queueData: [],
+      visible: false,
+      showType: '0',
+      // 队列列表
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      },
+      // {
+      //   title: this.$t('部门'),
+      //   dataIndex: 'department'
+      // },
+      {
+        title: this.$t('队列名称'),
+        dataIndex: 'queue'
+      }, {
+        title: this.$t('呼入电话总数'),
+        dataIndex: 'incomingCallCount'
+      }, {
+        title: this.$t('当前排队数'),
+        dataIndex: 'waitNumber'
+      }, {
+        title: this.$t('接通量'),
+        dataIndex: 'indirectFlux'
+      }, {
+        title: this.$t('接通率'),
+        dataIndex: 'completePercent'
+      }, {
+        title: this.$t('10秒内接通率'),
+        dataIndex: 'completePercent10'
+      }, {
+        title: this.$t('20秒内接通率'),
+        dataIndex: 'completePercent20'
+      }, {
+        title: this.$t('坐席总数'),
+        dataIndex: 'agentsTotal',
+        scopedSlots: { customRender: 'total' }
+      }, {
+        title: this.$t('签入坐席'),
+        dataIndex: 'agentsLogin',
+        scopedSlots: { customRender: 'login' }
+      }, {
+        title: this.$t('示忙坐席'),
+        dataIndex: 'agentsBusy',
+        scopedSlots: { customRender: 'busy' }
+      }, {
+        title: this.$t('空闲坐席'),
+        dataIndex: 'agentsIdle',
+        scopedSlots: { customRender: 'idle' }
+      }, {
+        title: this.$t('最长等待时间'),
+        dataIndex: 'maxWaitTime'
+      }],
+      // 坐席详情列表
+      agentColumns: [{
+        title: this.$t('坐席姓名'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('分机号码'),
+        dataIndex: 'extension',
+        sorter: (a, b) => a.extension - b.extension
+      }, {
+        title: this.$t('当前状态'),
+        dataIndex: 'status',
+        // sorter: (a, b) => a.status - b.status
+        sorter: (a, b) => a.status.localeCompare(b.status)
+      }, {
+        title: this.$t('持续时长'),
+        dataIndex: 'time',
+        width: 120
+      }],
+      waitColumns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('来电号码'),
+        dataIndex: 'callerid'
+      }, {
+        title: this.$t('客户名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('客户级别'),
+        dataIndex: 'level'
+      }, {
+        title: this.$t('等待时间'),
+        dataIndex: 'waitTime',
+        width: 120
+      }],
+      timeId: null,
+      timeout: '',
+      queueList: [],
+      queueValue: [],
+      allData: [],
+      currentNumber: null,
+      infoData: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  watch: {
+    queueData: function (val) {
+      this.queueData.forEach((item, index) => {
+        this.$nextTick(() => {
+          this.myEcharts(echarts.init(this.$refs.main[index]), this.queueData[index].agentsStatus)
+        })
+      })
+    }
+  },
+  deactivated () {
+    clearInterval(this.timeId)
+  },
+  mounted () {
+    // this.getTimeOut()
+    this.loadData()
+    this.getField()
+    this.initWebSocket()
+  },
+  methods: {
+    getField () {
+      this.axios({
+        url: '/callcenter/monitor/initQueue'
+      }).then(res => {
+        if (res.code === 0) {
+          this.queueList = res.result
+        }
+      })
+    },
+    handleWay (type) {
+      if (type === 'search' && this.queueValue.length > 0) {
+        const queueData = []
+        this.queueValue.forEach(item => {
+          const obj = this.allData.find(itemData => itemData.queue === item)
+          queueData.push(obj)
+        })
+        this.queueData = queueData
+      } else {
+        this.queueValue = []
+        this.queueData = this.allData
+      }
+    },
+    getTimeOut () {
+      this.axios({
+        url: '/callcenter/monitor/queue',
+        data: this.$route.query
+      }).then(res => {
+        this.timeout = res.result.timeout
+        this.setTime()
+      })
+    },
+    setTime () {
+      const timeout = this.timeout
+      this.timeId = setInterval(() => {
+        this.loadData()
+      }, timeout)
+    },
+    loadData () {
+      this.axios({
+        url: '/callcenter/monitor/queue',
+        data: this.$route.query
+      }).then(res => {
+        let queueData = []
+        this.allData = res.result.data
+        if (this.queueValue.length > 0) {
+          this.queueValue.forEach(item => {
+            const obj = this.allData.find(itemData => itemData.queue === item)
+            queueData.push(obj)
+          })
+        } else {
+          queueData = res.result.data
+        }
+        this.queueData = queueData
+        if (this.currentNumber) {
+          const record = this.queueData.find(item => item.number === this.currentNumber)
+          this.handleLook(record)
+        }
+      })
+    },
+    // 初始webstocket
+    initWebSocket () {
+      // 监听socket连接
+      this.stompClient = this.$store.state.app.webSocket
+      const indexChatMsg = (msg) => {
+        this.infoData = JSON.parse(msg.body)
+        if (this.infoData.code === '2005') {
+          let queueData = []
+          this.allData = this.infoData.data
+          if (this.queueValue.length > 0) {
+            this.queueValue.forEach(item => {
+              const obj = this.allData.find(itemData => itemData.queue === item)
+              queueData.push(obj)
+            })
+          } else {
+            queueData = this.infoData.data
+          }
+          this.queueData = queueData
+          if (this.currentNumber) {
+            const record = this.queueData.find(item => item.number === this.currentNumber)
+            this.handleLook(record)
+          }
+        }
+      }
+      const webSocketMsg = Object.assign({}, this.$store.state.app.setting.webSocketMsg, {
+        indexChatMsg: indexChatMsg
+      })
+      this.$setSetting({ webSocketMsg: (webSocketMsg) })
+    },
+    queueShow () {
+      const data = JSON.parse(JSON.stringify(this.queueData))
+      this.queueData = []
+      this.$nextTick(() => {
+        this.queueData = data
+      })
+    },
+    handleLook (record) {
+      let agentsData = []
+      agentsData = record.agentsDetail.filter(item => item.status !== '签出')
+      this.agentsData = agentsData
+      this.waitData = record.waitNumberData
+      this.queueTitle = record.queue
+      this.visible = true
+      this.currentNumber = record.number
+    },
+    queuePickup (record) {
+      var that = this
+      this.axios({
+        url: '/callcenter/api/queueGrab',
+        data: {
+          extension: that.userInfo.extension,
+          channel: record.channel
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.$message.success(res.message)
+          this.loadData()
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+    },
+    myEcharts (echart, status) {
+      const option = {
+        tooltip: {
+          trigger: 'item',
+          formatter: '{a} <br/>{b} : {c} ({d}%)'
+        },
+        legend: {
+          orient: 'vertical',
+          right: 10,
+          y: 'middle',
+          data: [this.$t('空闲'), this.$t('示忙'), this.$t('通话'), this.$t('振铃'), this.$t('离线')]
+        },
+        series: [{
+          name: this.$t('坐席状态'),
+          type: 'pie',
+          avoidLabelOverlap: false,
+          label: {
+            normal: {
+              show: false
+            }
+          },
+          labelLine: {
+            normal: {
+              show: false
+            }
+          },
+          radius: '80%',
+          center: ['40%', '50%'],
+          data: [
+            { value: status.idle, name: this.$t('空闲') },
+            { value: status.busy, name: this.$t('示忙') },
+            { value: status.calling, name: this.$t('通话') },
+            { value: status.ringing, name: this.$t('振铃') },
+            { value: status.loginOut, name: this.$t('离线') }
+          ],
+          itemStyle: {
+            normal: {
+              color: function (params) {
+                var colorList = [
+                  '#1994FC', '#F3654A', '#22D598', '#895BF1', '#FDB536'
+                ]
+                return colorList[params.dataIndex]
+              }
+            }
+          },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          }
+        }]
+      }
+      echart.setOption(option)
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+/deep/.ant-table-small > .ant-table-content > .ant-table-body > table > .ant-table-thead > tr > th {
+  background-color: @primary-1;
+}
+/deep/.ant-table-small {
+  border: 0;
+}
+/deep/.ant-table-tbody {
+  background-color: #fff;
+}
+/deep/.ant-table-thead > tr > th {
+  border-bottom: 1px solid @primary-color;
+}
+/deep/.ant-card-small > .ant-card-head > .ant-card-head-wrapper > .ant-card-head-title {
+  padding: 16px 16px 0 16px;
+}
+.tableCard {
+  padding: 14px;
+  background: linear-gradient(#fff, @primary-2);
+}
+.cardEchart {
+  width: 370px;
+  height: 250px;
+  padding: 0px;
+  display: inline-block;
+  margin: 0 14px 14px 0;
+  position: relative;
+  border-radius: 4px;
+}
+</style>

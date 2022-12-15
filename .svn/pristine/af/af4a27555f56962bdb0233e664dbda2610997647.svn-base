@@ -1,0 +1,435 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button @click="reset">{{ $t('重置') }}</a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('会话开始时间')">
+              <a-range-picker
+                v-model="sessionTime"
+                :allowClear="false"
+                :disabled-date="disabledDate"
+                :ranges="{
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('最近七天')]: [moment().subtract(6, 'days'), moment()],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                  [$t('最近31天')]: [moment().subtract(30, 'days'), moment()]
+                }"
+                format="YYYY-MM-DD"
+                style="width: 100%"
+                @change="getInputTime"
+                @openChange="onOpenChange"
+                @calendarChange="onCalendarChange"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('客服名称')">
+              <a-tree-select
+                v-model="queryParam.serviceId"
+                :filterTreeNode="filterTreeOption"
+                :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                allowClear
+                treeCheckable
+                multiple
+                :replaceFields="{
+                  value: 'serviceId',
+                  title: 'nickName'
+                }"
+                style="width: 100%"
+                :tree-data="treeData"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-row type="flex" justify="space-between" align="middle" style="margin-bottom: 8px">
+      <a-col>
+        <a-space>
+          <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+        </a-space>
+      </a-col>
+      <a-col>
+        <a-popover placement="left">
+          <template slot="content">
+            <div v-dompurify-html="content" style="width: 300px"></div>
+          </template>
+          <a-icon type="question-circle" style="font-size: 16px" />
+        </a-popover>
+      </a-col>
+    </a-row>
+    <s-table
+      ref="table"
+      :showPagination="false"
+      bordered
+      :scroll="{ x: 2570, y: true }"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="sorter"
+    ></s-table>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      filterTreeOption (input, treeNode) {
+        return treeNode.data.props.title.includes(input)
+      },
+      sessionTime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+      advanced: false,
+      content: `${this.$t('首次登录时间：客服第一次登录系统的时间。')}<br />
+                ${this.$t('最后登出时间：客服最后一次登出系统的时间。')}<br />
+                ${this.$t('登录时长：客服处于“登录”状态的时长。')}<br />
+                ${this.$t('首次就绪时间：客服第一次切换状态为“就绪”的时间。')}<br />
+                ${this.$t('示忙次数：客服切换到“示忙”状态的次数，如果开启了示忙细分状态，则包含所有示忙细分状态的总次数。')}<br />
+                ${this.$t('示忙细项次数：客服切换到示忙某一细分状态的次数。')}<br />
+                ${this.$t('示忙细项占比：某一示忙细分状态的次数/示忙次数。')}<br />
+                ${this.$t('离开次数：客服切换到“离开”状态的次数。')}<br />
+                ${this.$t('正式工作时间：客服第一次接入访客的时间。')}<br />
+                ${this.$t('结束工作时间：客服接待最后一个访客的会话结束时间。')}<br />
+                ${this.$t('工作时长：客服处于接待访客的时长(无论客服是否处于”在线“状态)。')}`,
+      treeData: [],
+      selectCurrentDate: null,
+      queryParam: {
+        startTime: this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        endTime: this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      },
+      // 示忙明细
+      chatFurtherStates: [],
+      columns: [{
+        title: this.$t('日期'),
+        dataIndex: 'dates',
+        sorter: true,
+        align: 'center',
+        customRender: (text, record) => {
+          if (!text) {
+            return '--'
+          } else {
+            return this.moment(text).format('YYYY-MM-DD')
+          }
+        },
+        width: 150
+      }, {
+        title: this.$t('客服名称'),
+        dataIndex: 'serviceName',
+        sorter: true,
+        align: 'center',
+        customRender: (text, record) => {
+          return record.serviceId ? `${record.serviceId}(${text})` : (text || '--')
+        },
+        width: 150
+      }, {
+        title: this.$t('首次登录时间'),
+        dataIndex: 'firstLoginTime',
+        width: 150,
+        sorter: true,
+        align: 'center'
+      }, {
+        title: this.$t('最后登出时间'),
+        dataIndex: 'lastLoginOutTime',
+        width: 150,
+        sorter: true,
+        align: 'center'
+      }, {
+        title: this.$t('登录时长'),
+        width: 100,
+        dataIndex: 'loginCount',
+        sorter: true,
+        align: 'center',
+        customRender: (text) => {
+          let sec = parseInt(text)
+          let min = 0
+          let hour = 0
+          if (sec > 59) {
+            min = parseInt(sec / 60)
+            sec = parseInt(sec % 60)
+            if (min > 59) {
+              hour = parseInt(min / 60)
+              min = parseInt(min % 60)
+            }
+          }
+          const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+          return result
+        }
+      }, {
+        title: this.$t('首次就绪时间'),
+        dataIndex: 'firstReadyTime',
+        width: 150,
+        sorter: true,
+        align: 'center'
+      }, {
+        title: this.$t('示忙次数'),
+        dataIndex: 'busyNumber',
+        sorter: true,
+        width: 100,
+        align: 'center'
+      }, {
+        title: this.$t('示忙总时长'),
+        dataIndex: 'busyTime',
+        sorter: true,
+        width: 100,
+        align: 'center',
+        customRender: (text) => {
+          let sec = parseInt(text)
+          let min = 0
+          let hour = 0
+          if (sec > 59) {
+            min = parseInt(sec / 60)
+            sec = parseInt(sec % 60)
+            if (min > 59) {
+              hour = parseInt(min / 60)
+              min = parseInt(min % 60)
+            }
+          }
+          const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+          return result
+        }
+      }, {
+        title: this.$t('离开次数'),
+        dataIndex: 'leaveNumber',
+        sorter: true,
+        width: 100,
+        align: 'center'
+      }, {
+        title: this.$t('就绪时长'),
+        dataIndex: 'readyTime',
+        sorter: true,
+        width: 100,
+        align: 'center',
+        customRender: (text) => {
+          let sec = parseInt(text)
+          let min = 0
+          let hour = 0
+          if (sec > 59) {
+            min = parseInt(sec / 60)
+            sec = parseInt(sec % 60)
+            if (min > 59) {
+              hour = parseInt(min / 60)
+              min = parseInt(min % 60)
+            }
+          }
+          const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+          return result
+        }
+      }, {
+        title: this.$t('正式工作时间'),
+        width: 150,
+        align: 'center',
+        dataIndex: 'workStartTime',
+        sorter: true
+      }, {
+        title: this.$t('结束工作时间'),
+        align: 'center',
+        width: 150,
+        dataIndex: 'workEndTime',
+        sorter: true
+      }, {
+        title: this.$t('工作时长'),
+        dataIndex: 'workTime',
+        sorter: true,
+        align: 'center',
+        width: 100,
+        customRender: (text) => {
+          let sec = parseInt(text)
+          let min = 0
+          let hour = 0
+          if (sec > 59) {
+            min = parseInt(sec / 60)
+            sec = parseInt(sec % 60)
+            if (min > 59) {
+              hour = parseInt(min / 60)
+              min = parseInt(min % 60)
+            }
+          }
+          const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+          return result
+        }
+      }],
+      sorter: { field: 'id', order: 'descend' },
+      disabledCurrent: null,
+      params: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+
+  mounted () {
+    this.axios({
+      url: '/chat/setting/base',
+      data: { action: 'get' }
+    }).then(res => {
+      const info = res.result.info
+      const chatFurtherStates = JSON.parse(info.furtherStates)
+      if (info.busyEnable) {
+        const showStates = chatFurtherStates.filter(chatItem => chatItem.check)
+        let array = []
+        showStates.forEach(childItem => {
+          const obj = {}
+          switch (childItem.value) {
+            case 11:
+              obj.title = childItem.label
+              obj.dataIndex = 'busyDetailOne'
+              break
+            case 12:
+              obj.title = childItem.label
+              obj.dataIndex = 'busyDetailTwo'
+              break
+            case 13:
+              obj.title = childItem.label
+              obj.dataIndex = 'busyDetailThree'
+              break
+            case 14:
+              obj.title = childItem.label
+              obj.dataIndex = 'busyDetailFour'
+              break
+            case 15:
+              obj.title = childItem.label
+              obj.dataIndex = 'busyDetailFive'
+              break
+            case 16:
+              obj.title = childItem.label
+              obj.dataIndex = 'busyDetailSix'
+              break
+          }
+          const data = [{
+            // title: obj.title + this.$t('次数'),
+            title: this.$t(`${obj.title}次数`),
+            dataIndex: obj.dataIndex,
+            align: 'center',
+            width: 100
+          }, {
+            title: this.$t('占比'),
+            dataIndex: obj.dataIndex + 'Rate',
+            align: 'center',
+            width: 80,
+            customRender: (text, record) => {
+              if (!text) {
+                return '0.00%'
+              } else {
+                return text
+              }
+            }
+          }]
+          array = [...array, ...data]
+        })
+        this.columns.splice(8, 0, {
+          title: this.$t('示忙细分状态'),
+          children: array
+        })
+      }
+    })
+
+    this.axios({
+      url: '/chat/group/getAllGroup'
+    }).then(res => {
+      const getTreeData = (array, parent) => {
+        array.forEach(item => {
+          if (item.children && item.children.length) {
+            getTreeData(item.children, item)
+          } else if (!item.distributionMode) {
+            item.nickName = `${item.serviceId}(${item.nickName})`
+            item.serviceId = `${item.serviceId}-${parent?.['serviceId'] || ''}`
+          } else {
+            item.disabled = true
+          }
+        })
+      }
+      getTreeData(res.result.data)
+      this.treeData = res.result.data
+    })
+  },
+  methods: {
+    loadDataTable (parameter) {
+      const params = Object.assign(parameter, this.queryParam)
+      if (params.serviceId) {
+        params.serviceId = this.queryParam.serviceId.map(item => {
+          return item.split('-')[0]
+        })
+      }
+      return this.axios({
+        url: '/chat/customerReport/getAttendanceInit',
+        data: params
+      }).then(res => {
+        if (res.result?.total) {
+          const obj = { ...res.result.total, ...{ id: parseInt(Math.random() * (10000000 - 100000 + 1) + 100000, 10), serviceName: this.$t('合计') } }
+          res.result.data.push(obj)
+        }
+        return res.result
+      })
+    },
+    onOpenChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+    },
+    onCalendarChange (dates) {
+      // 获取手动选择的时间段起始值
+      this.disabledCurrent = dates[0]
+    },
+    disabledDate (current, date) {
+      if (!this.disabledCurrent) return false
+      return (current && current < this.moment(this.disabledCurrent).subtract(30, 'days').endOf('day')) || current > this.moment(this.disabledCurrent).add(30, 'days').endOf('day')
+    },
+    getInputTime (date, dateString) {
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    // 重置
+    reset () {
+      this.queryParam = {}
+      this.queryParam.startTime = this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      this.queryParam.endTime = this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      const day = [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)]
+      this.sessionTime = day
+      this.$refs.table.refresh()
+    },
+    calendarChange (date, dateString) {
+      if (date.length <= 1) {
+        this.selectCurrentDate = date[0]
+      } else {
+        this.selectCurrentDate = null
+      }
+    },
+    onChange (dates, dateStrings) {
+      this.sessionTime = dates
+      this.queryParam.startTime = dateStrings[0]
+      this.queryParam.endTime = dateStrings[1]
+    },
+    handleExport () {
+      const params = this.queryParam
+      if (params.serviceId) {
+        params.serviceId = this.queryParam.serviceId.map(item => {
+          return item.split('-')[0]
+        })
+      }
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        number: 'SysAttendanceInit',
+        className: 'ExportChatStatsTask',
+        parameter: {
+          condition: {
+            req: params,
+            type: 'attendanceInit'
+          }
+        }
+      })
+    }
+  }
+}
+</script>

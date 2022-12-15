@@ -1,0 +1,87 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="1200" :visible="visible" @close="onClose">
+    <a-spin :spinning="false">
+      <user-table-list
+        ref="userTableList"
+        :key="userKey"
+        :viewThis="viewThis"
+        :params="Object.assign({ tplviewid, relation: search, type: config.type, selectAction: selectAction }, data)"
+        :screenData="screenData"
+        :filtersData="filtersData"
+        @ok="getValue"
+      />
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  components: {
+    UserTableList: () => import('./UserTableList.vue')
+  },
+  props: {
+    viewThis: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      config: {},
+      tplviewid: '',
+      search: {},
+      filtersData: [],
+      userKey: 'userKey',
+      data: {},
+      screenData: {},
+      selectAction: undefined
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.search = {}
+      this.filtersData = config.filtersData
+      if (config.data) {
+        this.data = config.data
+      }
+      if (config.screenData) {
+        this.screenData = config.screenData
+      }
+      if (config.action === 'subform') {
+        let bartemplate = this.config.barData.bartemplate
+        bartemplate = JSON.parse(bartemplate)
+        this.tplviewid = bartemplate.dateView
+        this.search.val = this.config.searchValue || ''
+        this.search.key = bartemplate.winField
+        if (!this.search.key) {
+          this.search = undefined
+        }
+        this.selectAction = JSON.stringify(config.selectAction) ? config.selectAction : true
+      } else {
+        this.tplviewid = config.tplviewid
+      }
+    },
+    getValue (val, type, screenData) {
+      if (val) {
+        if (this.config.action === 'subform') {
+          this.$emit('ok', val)
+          if (type !== 'line') {
+            this.visible = false
+          }
+        } else {
+          this.$emit('ok', val, this.config.alias, this.config.info, this.config.record, screenData)
+          this.visible = false
+        }
+      }
+    },
+    onClose () {
+      this.search = {}
+      this.visible = false
+    }
+  }
+}
+</script>

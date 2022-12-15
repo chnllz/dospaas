@@ -1,0 +1,307 @@
+<template>
+  <a-form :form="form">
+    <a-form-item v-if="data.formType !== 'switch'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <span slot="label">
+        {{ $t('是否允许半星') }}
+        <a-tooltip placement="top">
+          <template slot="title">
+            <span>{{ $t('该属性保存后不支持再次编辑。') }}</span>
+          </template>
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-switch
+        v-decorator="[
+          'setting[attribute][half]',
+          { initialValue: data.attribute.half === '1', valuePropName: 'checked' }
+        ]"
+        :un-checked-children="$t('否')"
+        :checked-children="$t('是')"
+        :disabled="config.action === 'edit'"
+        @change="
+          (checked) => {
+            half = checked
+            setting.attribute.half = '1'
+            data.form.copywriting = writeFlag ? '1' : '0'
+          }
+        "
+      />
+    </a-form-item>
+    <a-form-item
+      v-if="data.formType !== 'switch'"
+      :label="$t('是否允许再次点击清除')"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+    >
+      <a-switch
+        v-decorator="[
+          'setting[attribute][clear]',
+          { initialValue: data.attribute.clear === '1', valuePropName: 'checked' }
+        ]"
+        :un-checked-children="$t('否')"
+        :checked-children="$t('是')"
+      />
+    </a-form-item>
+    <a-form-item
+      v-if="data.formType !== 'switch' && !half"
+      :label="$t('文案展现')"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+    >
+      <a-switch
+        v-decorator="[
+          'setting[form][copywriting]',
+          { initialValue: data.form.copywriting === '1', valuePropName: 'checked' }
+        ]"
+        :un-checked-children="$t('否')"
+        :checked-children="$t('是')"
+        @change="
+          (checked) => {
+            writeFlag = checked
+            data.form.copywriting = writeFlag ? '1' : '0'
+          }
+        "
+      />
+      <template v-if="writeFlag">
+        <a-row v-for="(item, index) in writeList" :key="index">
+          <a-col :span="6">
+            <a-rate :value="index + 1" disabled />
+          </a-col>
+          <a-col :span="6">
+            <a-input
+              :placeholder="$t('请输入文案')"
+              :value="item"
+              :maxLength="20"
+              @change="
+                (e) => {
+                  changeWrite(e, index)
+                }
+              "
+            />
+          </a-col>
+        </a-row>
+      </template>
+    </a-form-item>
+    <a-form-item :label="$t('替换字符')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <div class="center">
+        <a-radio-group
+          name="radioGroup"
+          :default-value="data.form.prefixType ? data.form.prefixType : 'default'"
+          @change="getPrefixType"
+        >
+          <a-radio value="default">{{ $t('默认') }}</a-radio>
+          <a-radio value="word">{{ $t('文字') }}</a-radio>
+          <a-radio value="icon">{{ $t('图标') }}</a-radio>
+        </a-radio-group>
+        <a-input
+          v-if="iconFlag === 'word'"
+          v-model="prefixVal"
+          size="small"
+          style="width: 50px"
+          @input="getPrefixVal"
+        ></a-input>
+        <template v-else-if="iconFlag === 'icon'">
+          <a-button size="small" @click="handleMenuIcon">
+            <a-badge v-if="prefixIcon" status="success" :text="$t('设置')" />
+            <a-badge v-else status="default" :text="$t('设置')" />
+          </a-button>
+          <a-icon
+            v-if="prefixIcon && prefixIcon.indexOf('fa-') === -1"
+            :type="prefixIcon"
+            theme="filled"
+            style="font-size: 16px; margin-left: 10px"
+          />
+          <font-awesome-icon
+            v-else-if="prefixIcon && !prefixIcon.indexOf('fa-') === -1"
+            :icon="prefixIcon"
+            class="font-awesome-icon"
+          />
+        </template>
+      </div>
+    </a-form-item>
+    <formula-edit ref="FormulaEdit" :key="formulaKey" :params="formulaData" @ok="handleFormulate" />
+    <menu-icon ref="menuIcon" @ok="getIcon"></menu-icon>
+    <DateLinkage ref="dataLinkage" :key="linkKey" @ok="getDateLinkage" />
+    <form-rule-way-condition ref="formRuleWayCondition" @func="getCondition" />
+  </a-form>
+</template>
+
+<script>
+import { Rate } from 'ant-design-vue'
+import Vue from 'vue'
+Vue.use(Rate)
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    FormulaEdit: () => import('./FormulaEdit'),
+    MenuIcon: () => import('@/components/SelectIcon'),
+    DateLinkage: () => import('./DataLinkage'),
+    FormRuleWayCondition: () => import('@/views/admin/Flow/modules/FormRuleWayCondition'),
+    QuerierCodemirrorInput: () => import('@/views/admin/Table/QuerierCodemirrorInput')
+  },
+  props: {
+    setting: {
+      type: Object,
+      default: () => { }
+    },
+    tableField: {
+      type: Array,
+      default: () => {
+        return []
+      }
+    },
+    config: {
+      type: Object,
+      default: () => { }
+    },
+    dataOld: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      linkKey: 'linkKey',
+      refreshKey: 0,
+      formulaKey: 'formulaKey',
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      form: this.$form.createForm(this),
+      data: {},
+      half: false,
+      writeFlag: false,
+      writeList: ['', '', '', '', ''],
+      iconFlag: '',
+      prefixVal: '',
+      prefixIcon: '',
+      attributeFlag: false,
+      defalutTemplates: [
+        { value: '', text: this.$t('不设置') },
+        { value: 'value', text: this.$t('自定义') },
+        { value: 'formula', text: this.$t('公式编辑') },
+        { value: 'linkData', text: this.$t('数据联动') }
+      ],
+      quoteTypes: [
+        { value: 'insert', text: this.$t('新建时') },
+        { value: 'always', text: this.$t('新建+编辑时') }
+      ],
+      defaultType: '',
+      defaultFlag: false,
+      formulaData: {},
+      forcedType: ''
+    }
+  },
+  watch: {
+    setting: {
+      handler (newVal) {
+        this.data = JSON.parse(JSON.stringify(newVal))
+        this.data.form = this.data.form && !(this.data.form instanceof Array) ? this.data.form : {}
+        this.half = this.data.attribute.half === '1'
+        this.writeFlag = this.data.form.copywriting === '1'
+        this.writeList = this.data.form.writeList || ['', '', '', '', '']
+        this.iconFlag = this.data.form.prefixType
+        this.prefixVal = this.data.form.prefixVal
+        this.prefixIcon = this.data.form.prefixIcon
+        this.defaultType = this.data.form.defaultTemplate || 'custom'
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    // 文案列表
+    changeWrite (e, index) {
+      const value = e.target.value
+      this.writeList.splice(index, 1, value)
+    },
+    // 获取替换字符
+    getPrefixType (e) {
+      const val = e.target.value
+      this.data.form.prefixType = val
+      this.iconFlag = val
+      this.prefixIcon = ''
+    },
+    // 替换字符
+    getPrefixVal (e) {
+      const val = e.target.value
+      this.prefixVal = val.slice(0, 1)
+      this.data.form.prefixType = this.prefixVal
+    },
+    // 显示图标库
+    handleMenuIcon () {
+      this.$refs.menuIcon.show()
+    },
+    // 获取图标
+    getIcon (value) {
+      this.prefixIcon = value
+      this.data.form.prefixIcon = this.prefixIcon
+    },
+    // 选择默认值
+    changeDefault (val) {
+      if (val !== 'linkData' && val !== 'formula') {
+        this.defaultType = 'custom'
+      } else {
+        this.defaultType = val
+      }
+    },
+    // 打开过滤条件
+    openFormulate () {
+      this.formulaKey = this.formulaKey === 'formulaKey' ? 'formulaKey_1' : 'formulaKey'
+      this.formulaData = { tableId: this.tableId, data: this.setting.form.formulateValue || {} }
+      this.$nextTick(() => {
+        this.$refs.FormulaEdit.show({ title: this.$t('公式编辑器') })
+      })
+    },
+    // 公式编辑
+    handleFormulate (res) {
+      this.setting.form.formulateValue = res.data
+    },
+    // 默认值数据联动
+    handleDefaultLink () {
+      this.linkKey = this.linkKey === 'linkKey' ? 'linkKey_1' : 'linkKey'
+      this.$nextTick(() => {
+        this.$refs.dataLinkage.show({
+          data: this.dataOld,
+          setting: this.setting,
+          tableField: this.tableField,
+          tableId: this.config.tableId
+        })
+      })
+    },
+    // 获取数据联动值
+    getDateLinkage (val) {
+      this.setting.form.defaultValueLink = val
+    },
+    forcedHandleCodemirror () {
+      this.$refs.formRuleWayCondition.show({
+        tableId: this.config.tableId,
+        data: { wayCondition: this.setting.form.forcedDefaultValue }
+      })
+    },
+    getCondition (data) {
+      this.setting.form.forcedDefaultValue = data
+    },
+    handleSubmit () {
+      let val = {}
+      const { validateFields } = this.form
+      validateFields((errors, values) => {
+        if (!errors) {
+          values.setting.form = values.setting.form || {}
+          values.setting.form.defaultValueLink = this.dataSource === 'linkData' ? this.setting.form.defaultValueLink : undefined
+          values.setting.form.writeList = this.writeFlag ? this.writeList : undefined
+          values.setting.form.prefixType = this.iconFlag
+          values.setting.attribute.clear = values.setting.attribute.clear ? '1' : '0'
+          values.setting.attribute.half = values.setting.attribute.half ? '1' : '0'
+          values.setting.form.copywriting = values.setting.form.copywriting ? '1' : '0'
+          if (values.setting.form.prefixType === 'word') {
+            values.setting.form.prefixVal = this.prefixVal
+          } else if (values.setting.form.prefixType === 'icon') {
+            values.setting.form.prefixIcon = this.prefixIcon
+          }
+          val = values
+        }
+      })
+      return val
+    }
+  }
+}
+</script>

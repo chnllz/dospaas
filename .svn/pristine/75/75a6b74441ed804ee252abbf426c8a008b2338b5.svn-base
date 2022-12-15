@@ -1,0 +1,709 @@
+<template>
+  <!-- 窗口右侧的属性面板 -->
+  <a-modal
+    :title="title"
+    :width="drawerFixedWidth"
+    :destroyOnClose="true"
+    :bodyStyle="{
+      height: drawerHeight || 'calc(100vh - 150px)',
+      overflow: 'auto',
+      paddingTop: '0px'
+    }"
+    centered
+    :visible="visible"
+    @cancel="onClose"
+  >
+    <!-- 库所设置 -->
+    <template v-if="activeKey === 'place'">
+      <a-spin v-if="currentSelect.type === 'start'" :spinning="false">
+        <a-form>
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-tag color="purple">{{ currentSelect.type }}</a-tag>
+          </a-form-item>
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              :placeholder="$t('请输入节点名称')"
+              disabled
+              :value="currentSelect.nodeName"
+              @change="nodeNameChange"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-model="currentSelect.remarks"
+              :autoSize="{ minRows: 6, maxRows: 10 }"
+              :placeholder="$t('请输入备注')"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+      <a-spin v-if="currentSelect.type === 'end'" :spinning="false">
+        <a-form>
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-tag color="purple">{{ currentSelect.type }}</a-tag>
+          </a-form-item>
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              :placeholder="$t('请输入节点名称')"
+              disabled
+              :value="currentSelect.nodeName"
+              @change="nodeNameChange"
+            />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('流程状态') }}
+              <a-tooltip
+                :title="$t('流程状态通常在“活动”上设置，如遇特殊情况“活动”上设置无法满足需求时可在此处进行设置')"
+              >
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-select v-model="currentSelect.processStatus" showSearch option-filter-prop="children">
+              <a-select-option v-for="item in processStatusData" :key="item.id" :value="item.dictDataNumber">
+                {{ item.dictDataName }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-model="currentSelect.remarks"
+              :autoSize="{ minRows: 6, maxRows: 10 }"
+              :placeholder="$t('请输入备注')"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+      <a-spin v-else-if="currentSelect.type === 'event'" :spinning="false">
+        <a-form>
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-tag color="purple">{{ currentSelect.type }}</a-tag>
+          </a-form-item>
+          <a-form-item label="id">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :placeholder="$t('请输入节点名称')" :value="currentSelect.nodeName" @change="nodeNameChange" />
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-model="currentSelect.remarks"
+              :autoSize="{ minRows: 6, maxRows: 10 }"
+              :placeholder="$t('请输入备注')"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </template>
+    <!-- 连线设置 -->
+    <template v-if="activeKey === 'arc'">
+      <a-spin :spinning="false">
+        <a-form :form="form" style="height: 100%">
+          <a-row>
+            <a-col :span="12">
+              <a-form-item label="ID" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-input :value="currentSelect.id" disabled />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :label="$t('所属向弧编号')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-input :value="currentSelect.id" disabled />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :label="$t('流程子状态')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-select
+                  v-decorator="[
+                    'processSubStatus',
+                    {
+                      initialValue: currentSelect.processSubStatus,
+                      rules: [{ required: true, message: '请选择流程子状态' }]
+                    }
+                  ]"
+                  :allowClear="true"
+                  optionFilterProp="children"
+                  showSearch
+                  @change="
+                    (value, option) => {
+                      currentSelect.processSubStatus = value
+                    }
+                  "
+                >
+                  <a-select-option v-for="item in processSubStatusData" :key="item.id" :value="item.dictDataNumber">
+                    {{ item.dictDataName }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <span slot="label">
+                  {{ $t('禁用连线') }}
+                  <a-tooltip
+                    :title="
+                      $t(
+                        '启用时，该分支路由显示为绿色。禁用后，该分支路由将不会启用(显示为灰色)。需要点击【刷新】重新绘制，线条颜色才会变化。'
+                      )
+                    "
+                  >
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-switch v-model="currentSelect.disabled" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-tabs default-active-key="condition">
+            <a-tab-pane key="condition" style="height: calc(100vh - 230px)" :tab="$t('条件设置')">
+              <a-form-item :label="$t('条件备注')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+                <a-textarea
+                  v-model="currentSelect.remarks1"
+                  :autoSize="{ minRows: 1, maxRows: 6 }"
+                  :placeholder="$t('请输入备注')"
+                />
+              </a-form-item>
+              <a-row>
+                <a-col :span="8">
+                  <a-form-item :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }">
+                    <span slot="label">
+                      {{ $t('else条件') }}
+                      <a-tooltip
+                        :title="
+                          $t(
+                            '当勾选此选项时下面的条件设置将无效，流程在进行条件匹配时优先匹配其他条件，如果其他条件都不匹配，则匹配此向弧。'
+                          )
+                        "
+                      >
+                        <a-icon type="question-circle" />
+                      </a-tooltip>
+                    </span>
+                    <a-switch v-model="currentSelect.matching" />
+                  </a-form-item>
+                </a-col>
+                <a-col v-if="!currentSelect.matching" :span="8">
+                  <a-form-item :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }">
+                    <span slot="label">
+                      {{ $t('优先级') }}
+                      <a-tooltip :title="$t('数字大的将优先参与判断')">
+                        <a-icon type="question-circle" />
+                      </a-tooltip>
+                    </span>
+                    <a-input-number v-model="currentSelect.priority" :min="0" />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              <template v-if="!currentSelect.matching">
+                <flow-attr-visualized
+                  ref="flowAttrVisualized"
+                  :myCondition="myCondition"
+                  :thisTableField="thisTableField"
+                />
+              </template>
+            </a-tab-pane>
+            <a-tab-pane key="trigger" :tab="$t('触发事件')" force-render>
+              <a-form-item :label="$t('触发事件备注')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+                <a-textarea
+                  v-model="currentSelect.remarks2"
+                  :autoSize="{ minRows: 1, maxRows: 8 }"
+                  :placeholder="$t('请输入备注')"
+                />
+              </a-form-item>
+              <!-- <codemirror ref="arcEvents" :params="myEvent" /> -->
+              <flow-attr-trigger-event
+                ref="arcEvents"
+                :params="myEvent"
+                :myEvent="myEvent"
+                :thisTableField="thisTableField"
+              ></flow-attr-trigger-event>
+            </a-tab-pane>
+          </a-tabs>
+        </a-form>
+      </a-spin>
+    </template>
+    <!-- 变迁设置 -->
+    <template v-else-if="activeKey === 'transition' && !currentSelect.quoteId">
+      <flow-attr-transition
+        v-if="
+          currentSelect.type === 'user_transition' ||
+          currentSelect.type === 'time_transition' ||
+          currentSelect.type === 'auto_transition'
+        "
+        ref="flowAttrTransition"
+        :params="{ currentSelect: currentSelect, flowData: flowData, workflowId: workflowId }"
+        @ok="handleFlowAttrTransition"
+        @cancel="onClose"
+      />
+      <a-spin v-else-if="currentSelect.type === 'freedom'" :spinning="false">
+        <a-form>
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-tag color="purple">{{ currentSelect.type }}</a-tag>
+          </a-form-item>
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :placeholder="$t('请输入节点名称')" :value="currentSelect.nodeName" @change="nodeNameChange" />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+      <a-spin v-else-if="currentSelect.type === 'child-flow'" :spinning="false">
+        <a-form>
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-tag color="purple">{{ currentSelect.type }}</a-tag>
+          </a-form-item>
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :placeholder="$t('请输入节点名称')" :value="currentSelect.nodeName" @change="nodeNameChange" />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+      <a-spin v-else-if="currentSelect.type === 'x-lane' || currentSelect.type === 'y-lane'" :spinning="false">
+        <a-form>
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-tag color="purple">{{ currentSelect.type }}</a-tag>
+          </a-form-item>
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :placeholder="$t('请输入节点名称')" :value="currentSelect.nodeName" @change="nodeNameChange" />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </template>
+    <!-- 复用变迁设置 -->
+    <template v-else-if="activeKey === 'transition' && currentSelect.quoteId">
+      <a-spin :spinning="false">
+        <a-form>
+          <a-alert
+            :message="$t('复用变迁不允许修改参数，请到原变迁上修改参数')"
+            type="info"
+            style="margin-bottom: 2px"
+          />
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.id" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('复用id')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.quoteId" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :placeholder="$t('请输入节点名称')" :value="currentSelect.nodeName" disabled />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </template>
+    <!-- 网关设置 -->
+    <template v-else-if="activeKey === 'gateway'">
+      <a-spin
+        v-if="
+          ['gateway_explicit', 'gateway_andsplit', 'gateway_andjoin', 'gateway_implicit', 'gateway_orjoin'].includes(
+            currentSelect.type
+          )
+        "
+        :spinning="false"
+      >
+        <a-form :form="gatewayForm">
+          <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-radio-group v-model="currentSelect.type" @change="gatewayChange">
+              <a-radio
+                v-for="gatewayItem in gatewayList"
+                :key="gatewayItem.value"
+                :style="radioStyle"
+                :value="gatewayItem.value"
+              >
+                {{ gatewayItem.label }}
+              </a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item label="id" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input :value="currentSelect.gid" disabled />
+          </a-form-item>
+          <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              v-decorator="[
+                'info[nodeName]',
+                {
+                  initialValue: currentSelect.nodeName,
+                  rules: [
+                    { min: 2, message: $t('请输入至少两个字符') },
+                    { max: 10, message: $t('请输入少于10个字符') },
+                    { required: true, message: $t('请输入节点名称') }
+                  ]
+                }
+              ]"
+              :placeholder="$t('请输入节点名称')"
+              @change="nodeNameChange"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-textarea
+              v-model="currentSelect.remarks"
+              :autoSize="{ minRows: 6, maxRows: 10 }"
+              :placeholder="$t('请输入备注')"
+            />
+          </a-form-item>
+        </a-form>
+      </a-spin>
+    </template>
+    <flow-attr-arc-condition ref="flowAttrArcCondition" :params.sync="currentSelect" />
+    <flow-attr-arc-event ref="flowAttrArcEvent" :params.sync="currentSelect" />
+    <div slot="footer">
+      <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      <a-button @click="onClose">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-modal>
+</template>
+
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    FlowAttrTransition: () => import('./FlowAttrTransition'),
+    FlowAttrArcCondition: () => import('./FlowAttrArcCondition'),
+    FlowAttrArcEvent: () => import('./FlowAttrArcEvent'),
+    Codemirror: () => import('@/views/admin/Formula/Codemirror'),
+    FlowAttrTriggerEvent: () => import('./FlowAttrTriggerEvent'),
+    FlowAttrVisualized: () => import('./FlowAttrVisualized')
+  },
+  // eslint-disable-next-line vue/require-prop-types
+  props: ['plumb', 'flowData', 'select', 'workflowId'],
+  data () {
+    return {
+      visible: false,
+      drawerFixedWidth: 900,
+      drawerHeight: null,
+      form: this.$form.createForm(this),
+      gatewayForm: this.$form.createForm(this),
+      title: '',
+      myEvent: {},
+      myCondition: {},
+      currentSelect: {},
+      formItemLayout: {
+        labelCol: { span: 7 },
+        wrapperCol: { span: 17 }
+      },
+      gatewayList: [{
+        label: this.$t('排他拆分'),
+        value: 'gateway_explicit'
+      }, {
+        label: this.$t('并行拆分'),
+        value: 'gateway_andsplit'
+      }, {
+        label: this.$t('并行合并'),
+        value: 'gateway_andjoin'
+      }, {
+        label: this.$t('后置排他拆分'),
+        value: 'gateway_implicit'
+      }, {
+        label: this.$t('排他合并'),
+        value: 'gateway_orjoin'
+      }],
+      radioStyle: {
+        display: 'block',
+        height: '30px',
+        lineHeight: '30px'
+      },
+      activeKey: 'flow',
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      processSubStatusData: [],
+      processStatusData: [],
+      quoteId: '',
+      thisTableField: []
+    }
+  },
+  watch: {
+    currentSelect: {
+      handler (val) {
+        if (['start', 'end', 'event'].includes(this.currentSelect.type)) {
+          // 库所
+          this.activeKey = 'place'
+          this.title = `${this.$t('库所设置')}：${this.currentSelect.nodeName}`
+          this.drawerFixedWidth = 600
+          this.drawerHeight = '400px'
+        } else if (['user_transition', 'time_transition', 'auto_transition', 'quote_transition', 'child-flow', 'x-lane', 'y-lane'].includes(this.currentSelect.type)) {
+          // 变迁
+          this.activeKey = 'transition'
+          this.title = `${this.$t('变迁设置')}：${this.currentSelect.nodeName}`
+          this.drawerFixedWidth = this.currentSelect.quoteId ? 600 : 1200
+          this.drawerHeight = null
+        } else if (this.currentSelect.type === 'link') {
+          // 向弧
+          this.activeKey = 'arc'
+          this.title = this.currentSelect.label ? `${this.$t('连线设置')}：${this.currentSelect.label}` : this.$t('连线设置')
+          if (!this.currentSelect.priority) {
+            this.$set(this.currentSelect, 'priority', 0)
+          }
+          this.drawerFixedWidth = 1200
+          this.drawerHeight = null
+        } else if (['gateway_explicit', 'gateway_andsplit', 'gateway_andjoin', 'gateway_implicit', 'gateway_orjoin'].includes(this.currentSelect.type)) {
+          // 网关
+          this.activeKey = 'gateway'
+          this.title = `${this.$t('网关设置')}：${this.currentSelect.nodeName}`
+          this.drawerFixedWidth = 600
+          this.drawerHeight = '400px'
+        } else {
+          // 流程属性
+          this.activeKey = 'flow'
+          this.title = this.$t('流程属性设置')
+        }
+        if (this.currentSelect.type === 'link') {
+          this.myCondition = {
+            tableId: this.flowData.params.tableId,
+            data: this.currentSelect.arcCondition,
+            currentSelect: this.currentSelect,
+            flowData: this.flowData,
+            workflowId: this.workflowId
+          }
+          this.myEvent = {
+            tableId: this.flowData.params.tableId,
+            data: this.currentSelect.arcEvents,
+            currentSelect: this.currentSelect,
+            flowData: this.flowData
+          }
+        }
+      },
+      immediate: true
+    },
+    myCondition (newVal, oldVal) {
+      console.log(newVal, oldVal)
+    }
+  },
+  methods: {
+    show (val) {
+      this.visible = true
+      this.currentSelect = val.val || {}
+      this.currentSelect.gid = this.currentSelect.id
+      if (this.currentSelect.type === 'end') {
+        this.axios({
+          url: '/admin/dict/initData',
+          data: {
+            dictCategoryNumber: 'process-status-' + this.workflowId
+          }
+        }).then(res => {
+          this.processStatusData = res.result
+        })
+      } else if (this.currentSelect.type === 'link') {
+        this.axios({
+          url: '/admin/dict/initData',
+          data: {
+            dictCategoryNumber: 'process-sub-status-' + this.workflowId
+          }
+        }).then(res => {
+          this.processSubStatusData = res.result
+        })
+      }
+
+      // 请求某个表单的所有字段
+      this.axios({
+        url: '/admin/field/init',
+        data: {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'ascend',
+          tableId: this.flowData.params.tableId
+        }
+      }).then(res => {
+        this.thisTableField = res.result.data
+      })
+    },
+    nodeNameChange (e) {
+      this.currentSelect.nodeName = e.target.value
+    },
+    linkLabelChange (e) {
+      const that = this
+      const label = e.target.value
+      that.currentSelect.label = label
+    },
+    handleTransition () {
+      this.$refs.flowAttrTransition.show({
+        title: this.$t('变迁设置'),
+        currentSelect: this.currentSelect,
+        flowData: this.flowData
+      })
+    },
+    handleArcCondition () {
+      this.$refs.flowAttrArcCondition.show({
+        title: this.$t('向弧条件设置'),
+        currentSelect: this.currentSelect,
+        flowData: this.flowData
+      })
+    },
+    handleArcEvent () {
+      this.$refs.flowAttrArcEvent.show({
+        title: this.$t('向弧触发事件设置'),
+        tableId: this.flowData.params.tableId
+      })
+    },
+    gatewayChange (e, option) {
+      this.currentSelect.nodeName = this.gatewayList.find(item => item.value === e.target.value).label
+      this.currentSelect.type = e.target.value
+    },
+    // 关闭
+    onClose () {
+      this.visible = false
+      this.$emit('close')
+    },
+    // 变迁保存
+    handleFlowAttrTransition (val) {
+      this.visible = false
+      this.$emit('ok', val.currentSelect)
+    },
+    // 网关保存
+    handleSubmit () {
+      if (this.activeKey === 'gateway') {
+        this.gatewayForm.validateFields((errors, values) => {
+          if (!errors) {
+            this.visible = false
+            this.currentSelect.arcCondition = this.$refs.arcCondition ? this.$refs.arcCondition.getValue() : this.currentSelect.arcCondition
+            this.currentSelect.arcEvents = this.$refs.arcEvents ? this.$refs.arcEvents.getValue() : this.currentSelect.arcEvents
+            this.axios({
+              url: '/admin/workflow/saveNode',
+              data: { setting: JSON.stringify(this.currentSelect), nodeId: this.currentSelect.id, workflowId: this.workflowId, nodeType: this.currentSelect.type }
+            }).then(res => {
+              if (!res.code) {
+                this.$message.success(this.$t(res.message))
+              } else {
+                this.$message.warning(this.$t(res.message))
+              }
+            })
+            this.$emit('ok', this.currentSelect)
+          } else {
+            this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改 '))
+          }
+        })
+      } else if (this.activeKey !== 'arc') {
+        if (this.activeKey === 'transition' && !this.currentSelect.quoteId && ['user_transition', 'time_transition', 'auto_transition'].includes(this.currentSelect.type)) {
+          this.$refs.flowAttrTransition.handleSubmit()
+        } else {
+          this.visible = false
+          this.currentSelect.arcCondition = this.$refs.arcCondition ? this.$refs.arcCondition.getValue() : this.currentSelect.arcCondition
+          this.currentSelect.arcEvents = this.$refs.arcEvents ? this.$refs.arcEvents.getValue() : this.currentSelect.arcEvents
+          // 新的数据提交方式
+          this.axios({
+            url: '/admin/workflow/saveNode',
+            data: { setting: JSON.stringify(this.currentSelect), nodeId: this.currentSelect.id, workflowId: this.workflowId, nodeType: this.currentSelect.type }
+          }).then(res => {
+            if (!res.code) {
+              this.$message.success(this.$t(res.message))
+            } else {
+              this.$message.warning(this.$t(res.message))
+            }
+          })
+          this.$emit('ok', this.currentSelect)
+        }
+      } else {
+        this.form.validateFields((errors, values) => {
+          if (!errors) {
+            const data = this.$refs.flowAttrVisualized.data
+            data.simpleCondition.forEach(item => {
+              item.tableFields = item.ruleFieldList = item.form = item.setting = item.settings = item.conditionArr = undefined
+              if (item.condition && item.condition.length > 0) {
+                item.condition.forEach(item2 => {
+                  if (item2.type === 'empty') {
+                    item2.include = item2.include === 'em' ? 'equal' : 'ne'
+                  }
+                  item2.conditionArr = undefined
+                })
+              }
+            })
+            this.currentSelect.arcCondition = data || this.currentSelect.arcCondition // 条件设置
+            // 验证触发事件 的 必填项
+            this.$refs.arcEvents.form.validateFields((errors1, values1) => {
+              if (!errors1) {
+                const arcEventdata = this.$refs.arcEvents.eventData || {}
+                arcEventdata.forEach((item, index) => {
+                  item.tableTitle = values1['eventData' + index].pattern
+                  item.table.forEach(tableItem => {
+                    // 目标数据表里面的 所有字段列表 不提交
+                    tableItem.targetFieldList = undefined
+                  })
+                  item.simpleCondition.forEach(conditionItem => {
+                    conditionItem.ruleFieldList = conditionItem.conditionArr = conditionItem.fieldid = conditionItem.fieldtype = conditionItem.form = conditionItem.formtype = conditionItem.option = conditionItem.ruleModel = conditionItem.src = undefined
+                    if (conditionItem.condition && conditionItem.condition.length > 0) {
+                      conditionItem.condition.forEach(item2 => {
+                        if (item2.type === 'empty') {
+                          item2.include = item2.include === 'em' ? 'equal' : 'ne'
+                        }
+                        item2.conditionArr = undefined
+                      })
+                    }
+                  })
+                })
+                this.currentSelect.arcEvents = arcEventdata || this.currentSelect.arcEvents // 触发事件
+                const ifBoolean = []
+                const data = JSON.parse(JSON.stringify(this.currentSelect.arcEvents))
+                data.forEach((item, index) => {
+                  if (!item.conditionType) {
+                    item.conditionType = 'if'
+                  }
+                  if (index === 0) {
+                    ifBoolean.push(item.conditionType === 'if')
+                  } else if (index > 0) {
+                    if (item.conditionType === 'else') {
+                      if (data[index + 1] && data[index + 1].conditionType === 'elseif') {
+                        ifBoolean.push(false)
+                      } else if (data[index - 1].conditionType === 'else') {
+                        ifBoolean.push(false)
+                      } else {
+                        ifBoolean.push(true)
+                      }
+                    } else if (item.conditionType === 'elseif') {
+                      if (data[index - 1].conditionType === 'else') {
+                        ifBoolean.push(false)
+                      } else {
+                        ifBoolean.push(true)
+                      }
+                    }
+                  }
+                })
+                if (!ifBoolean.every(item => item)) {
+                  this.$message.error('触发事件逻辑存在问题,请注意排查')
+                  return
+                }
+                delete this.currentSelect.all
+                this.axios({
+                  url: '/admin/workflow/saveNode',
+                  data: { setting: JSON.stringify(this.currentSelect), nodeId: this.currentSelect.id, workflowId: this.workflowId, nodeType: this.currentSelect.type }
+                }).then(res => {
+                  if (!res.code) {
+                    this.$message.success(this.$t(res.message))
+                  } else {
+                    this.$message.warning(this.$t(res.message))
+                  }
+                })
+                this.$emit('ok', this.currentSelect)
+                this.visible = false
+              } else {
+                this.$message.warning('表单填写不符合要求，请参考页面内具体提示修改 ')
+              }
+            })
+          } else {
+            this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改 '))
+          }
+        })
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.flow-attr /deep/ .ant-form {
+  padding: 10px;
+}
+.ant-form-item .ant-form-item-label {
+  text-align: right;
+}
+.flow-attr /deep/ .ant-tabs-bar {
+  display: none;
+}
+</style>

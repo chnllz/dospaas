@@ -1,0 +1,274 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="bankSearch" @keyup.enter="bankSearch">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('题库名称')">
+              <a-input v-model.trim="queryParam.subject" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('创建人')">
+              <a-input v-model.trim="queryParam.inputUser" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('创建时间')">
+              <a-range-picker
+                v-model="queryParam.inputshowtime"
+                :ranges="{
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                :show-time="{ format: 'HH:mm:ss' }"
+                format="YYYY-MM-DD HH:mm:ss"
+                style="width: 100%"
+                @change="getinputtime"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:add icon="plus" type="primary" @click="handleAdd">{{ $t('添加') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      class="table-fill"
+      :scroll="{ y: true }"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      size="small"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <span slot="subject" slot-scope="text, record">
+        <template v-if="!record.namestatus">
+          <span>
+            {{ record.subject }}
+          </span>
+        </template>
+        <template v-else>
+          <a-input v-model.trim="record.subject" size="small" />
+        </template>
+      </span>
+      <div slot="action" slot-scope="text, record, index">
+        <a @click="setting(record)">{{ $t('题目设置') }}</a>
+        <a-divider type="vertical" />
+        <a @click="edit(record, index)">
+          <span v-if="!record.namestatus">{{ $t('编辑') }}</span>
+          <span v-else>{{ $t('保存') }}</span>
+        </a>
+        <a-divider type="vertical" />
+        <a @click="handleDelete(record)">{{ $t('删除') }}</a>
+      </div>
+    </s-table>
+    <bank-set ref="questionbankSet" @ok="refresh" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('exam'),
+  components: {
+    BankSet: () => import('./QuestionbankSet')
+  },
+  data () {
+    return {
+      advanced: false,
+      // 搜索参数
+      queryParam: {},
+      dataSource: [],
+      colLayout: { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 },
+      form: this.$form.createForm(this),
+      titleArray: [],
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 200,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 40,
+        sorter: true
+      }, {
+        title: this.$t('题库名称'),
+        dataIndex: 'subject',
+        width: 250,
+        scopedSlots: { customRender: 'subject' }
+      }, {
+        title: this.$t('试题数'),
+        dataIndex: 'questionTotal'
+      }, {
+        title: this.$t('单选题'),
+        dataIndex: 'single'
+      }, {
+        title: this.$t('多选题'),
+        dataIndex: 'multiple'
+      }, {
+        title: this.$t('判断题'),
+        dataIndex: 'judge'
+      }, {
+        title: this.$t('填空题'),
+        dataIndex: 'fills'
+      }, {
+        title: this.$t('简答题'),
+        dataIndex: 'answer'
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser'
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 140
+      }],
+      keyword: 0,
+      editable: 0
+    }
+  },
+  methods: {
+    // 数据渲染
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/exam/subject/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        this.titleArray = []
+        res.result.data.forEach(item => {
+          item.namestatus = false
+          this.titleArray.push(item.subject)
+          item.questionTotal = Number(item.answer) + Number(item.fills) + Number(item.judge) + Number(item.multiple) + Number(item.single)
+        })
+        if (res.result.data.length > 0) {
+          res.result.data[0].namestatus = this.keyword === 1
+          this.keyword = 0
+        }
+        return res.result
+      })
+    },
+    // 题目管理页面
+    setting (record) {
+      this.$refs.questionbankSet.show({
+        data: record,
+        title: this.$t('题目管理')
+      })
+    },
+    // 数据添加
+    handleAdd () {
+      const table = this.$refs.table
+      const newData = {
+        action: 'add',
+        id: '',
+        info: {
+          subject: '未命名' + (new Date()).getTime(),
+          remarks: ''
+        }
+      }
+      this.axios({
+        url: '/exam/subject/action',
+        data: newData
+      }).then((res) => {
+        table.refresh()
+        this.keyword = 1
+        this.editable = 1
+      })
+    },
+    // 搜索
+    bankSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 删除数据
+    handleDelete (record) {
+      const id = record && record.id || this.selectedRowKeys
+      const self = this
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          self.axios({
+            url: '/exam/subject/action',
+            data: { id: id, action: 'delete' }
+          }).then(res => {
+            self.$message.success(self.$t('删除成功'))
+            self.refresh()
+            self.editable = 0
+          })
+        }
+      })
+    },
+    // 修改当行
+    edit (record, key) {
+      if (record.subject === this.titleArray[key]) {
+        this.titleArray.splice(key, 1)
+      }
+      if (this.editable === 1 && !record.namestatus) {
+        this.$message.warning(this.$t('请先保存上一个题库名称'))
+        return false
+      }
+      if (record.namestatus) {
+        const value = record.subject
+        if (!value) {
+          this.$message.warning(this.$t('请输入题库名称'))
+          return
+        }
+        if (value.length > 20) {
+          this.$message.warning(this.$t('题库名称不得大于20个字符'))
+          return
+        }
+        if (this.titleArray.includes(value)) {
+          this.$message.warning(this.$t('题库名称重复'))
+          return
+        }
+        record.namestatus = !record.namestatus
+        if (!record.namestatus) {
+          const values = {
+            action: 'edit',
+            id: record.id,
+            info: {
+              subject: record.subject,
+              remarks: record.remarks
+            }
+          }
+          this.axios({
+            url: '/exam/subject/action',
+            data: values
+          }).then(res => {
+            this.editable = 0
+            this.refresh()
+            this.$message.success(res.message)
+          })
+        }
+      } else {
+        record.namestatus = !record.namestatus
+        this.editable = 1
+      }
+    },
+    getinputtime (date, dateString) {
+      this.queryParam.inputTime = dateString[0] ? dateString : null
+      this.queryParam.inputshowtime = date
+    },
+    refresh () {
+      this.$refs.table.refresh()
+    }
+  }
+}
+</script>

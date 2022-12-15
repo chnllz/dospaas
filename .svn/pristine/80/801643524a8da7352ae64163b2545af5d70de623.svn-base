@@ -1,0 +1,286 @@
+<template>
+  <div class="page">
+    <a-row style="margin-bottom: 8px">
+      <a-col :span="20">
+        <a-space>
+          <a-form layout="inline">
+            <a-form-item :label="$t('工作流名称')">
+              <a-input v-model="queryParam.workflowName" />
+            </a-form-item>
+          </a-form>
+          <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button v-action:add icon="plus" type="primary" @click="handleAdd">{{ $t('添加') }}</a-button>
+          <a-button @click="handleSettingPriv">{{ $t('流程筛选组设置') }}</a-button>
+        </a-space>
+      </a-col>
+      <a-col :span="4" style="text-align: right">
+        <a-popover v-model="helpVisible" trigger="click" :arrowPointAtCenter="true" placement="bottomRight">
+          <template slot="content">
+            <div style="width: 350px" class="helpText">
+              <div v-dompurify-html="helpNotes" v-viewer></div>
+            </div>
+          </template>
+          <a-icon
+            type="question-circle"
+            style="font-size: 16px; margin-right: 8px; color: rgba(0, 0, 0, 0.65)"
+            @click="getHelp"
+          ></a-icon>
+        </a-popover>
+      </a-col>
+    </a-row>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <template slot="createType" slot-scope="text">
+        <span v-if="text == 'auto'">{{ $t('自动') }}</span>
+        <span v-else-if="text == 'handle'">{{ $t('手动') }}</span>
+      </template>
+      <template slot="status" slot-scope="text">
+        <a-badge v-if="text == '1'" status="success" :text="$t('启用')" />
+        <a-badge v-else status="error" :text="$t('禁用')" />
+      </template>
+      <template slot="action" slot-scope="text, record">
+        <a :disabled="record.accessLevel === 2" @click="flowDesign(record)">{{ $t('设计') }}</a>
+        <a-divider type="vertical" />
+        <a :disabled="record.accessLevel === 2" @click="handleEdit(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a-dropdown>
+          <a class="ant-dropdown-link">
+            {{ $t('更多') }}
+            <a-icon type="down" />
+          </a>
+          <a-menu slot="overlay">
+            <a-menu-item>
+              <a @click="handleList(record)">{{ $t('查看') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="handlePriv(record)">{{ $t('权限') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="handleStatus(record)">
+                <template v-if="record.status == 1">{{ $t('禁用') }}</template>
+                <template v-else>{{ $t('启用') }}</template>
+              </a>
+            </a-menu-item>
+            <a-menu-item>
+              <a :disabled="!!record.accessLevel" @click="handleDelete(record)">{{ $t('删除') }}</a>
+            </a-menu-item>
+          </a-menu>
+        </a-dropdown>
+      </template>
+    </s-table>
+    <workflow-form ref="workflowForm" :key="editKey" @ok="handleOk" />
+    <workflow-design-form ref="workflowDesignForm" :key="indexKey" @ok="handleOk" />
+    <workflow-priv ref="workflowPriv" @ok="handleOk" />
+    <fast-filter-permissions ref="fastFilterPermissions" />
+    <workflow-add-modal ref="workflowAddModal" @ok="handleOk" />
+    <drawio ref="drawio" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    WorkflowForm: () => import('./WorkflowForm'),
+    WorkflowDesignForm: () => import('./WorkflowDesignForm'),
+    WorkflowPriv: () => import('./WorkflowPriv'),
+    FastFilterPermissions: () => import('@/views/admin/Table/FastFilterPermissions'),
+    WorkflowAddModal: () => import('@/views/admin/WorkflowAddModal'),
+    Drawio: () => import('@/views/admin/Flow/Drawio.vue')
+  },
+  data () {
+    return {
+      workflowData: {},
+      indexKey: 0,
+      editKey: 'editKey',
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 160,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('工作流名称'),
+        dataIndex: 'workflowName',
+        width: 120
+      }, {
+        title: this.$t('工作流ID'),
+        width: 240,
+        dataIndex: 'workflowId'
+      }, {
+        title: this.$t('流程对应数据表'),
+        dataIndex: 'tableName'
+      }, {
+        title: this.$t('创建模式'),
+        dataIndex: 'createType',
+        width: 80,
+        scopedSlots: { customRender: 'createType' }
+      }, {
+        title: this.$t('工作流状态'),
+        dataIndex: 'status',
+        width: 100,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('业务回调方法'),
+        width: 240,
+        dataIndex: 'callbackName'
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'workflowDesc'
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        width: 150
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        width: 150
+      }],
+      graph: null,
+      helpVisible: false,
+      helpNotes: ''
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/workflow/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        for (const i in res.result.data) {
+          res.result.data[i].callbackName = res.result.data[i].setting.callbackName
+        }
+        return res.result
+      })
+    },
+    flowDesign (record) {
+      this.$refs.drawio.showDrawio(record.workflowId)
+    },
+    getHelp () {
+      this.$setLoading({ spinning: true })
+      this.helpVisible = false
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: '22041616465808'
+        }
+      }).then(res => {
+        this.$setLoading({ spinning: false })
+        if (!res.code) {
+          const obj = res.result
+          if (obj.displayMode === 'drawer') {
+            this.helpVisible = false
+            this.$showDocument({ visible: true, content: obj.content })
+          } else {
+            this.helpVisible = true
+            this.helpNotes = obj.content
+          }
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    handleAdd () {
+      this.$refs.workflowAddModal.show({
+        title: this.$t('添加'),
+        parent: this
+      })
+    },
+    handleEdit (record) {
+      this.editKey = this.editKey === 'editKey' ? 'editKey_1' : 'editKey'
+      this.$nextTick(() => {
+        this.$refs.workflowForm.show({
+          action: 'edit',
+          title: `${this.$t('编辑')}: ${record.workflowName}`,
+          url: '/admin/workflow/edit',
+          record: record
+        })
+      })
+    },
+    handlePriv (record) {
+      this.$refs.workflowPriv.show({
+        title: `${this.$t('权限设置')}: ${record.workflowName}`,
+        url: '/admin/workflow/priv',
+        record: record
+      })
+    },
+    handleDelete (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/workflow/delete',
+            data: { workflowId: record.workflowId }
+          }).then(res => {
+            that.$refs.table.refresh()
+          })
+        }
+      })
+    },
+    handleList (record) {
+      this.indexKey = this.indexKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowDesignForm.show({
+          action: 'design',
+          title: `${this.$t('流程查看')}：${record.workflowName}`,
+          record: record
+        })
+      })
+    },
+    handleStatus (record) {
+      const that = this
+      this.$confirm({
+        title: record.status === '1' ? this.$t('您确定要禁用该工作流吗？') : this.$t('您确定要启用该工作流吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/workflow/enable',
+            data: { workflowId: record.workflowId, status: record.status }
+          }).then(res => {
+            if (res.code) {
+              that.$message.warning(res.message, 6)
+            } else {
+              that.$refs.table.refresh()
+            }
+          })
+        }
+      })
+    },
+    handleSettingPriv () {
+      this.$refs.fastFilterPermissions.show({
+        title: this.$t('流程筛选组设置'),
+        type: 'workflow'
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    }
+  }
+}
+</script>

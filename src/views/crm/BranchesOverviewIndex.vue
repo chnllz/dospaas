@@ -1,0 +1,576 @@
+<template>
+  <a-spin :spinning="loading" style="height: 100%">
+    <div class="all">
+      <div class="one">
+        <div class="title">
+          <span class="animate">{{ $t('今日须知（公告内容）') }}</span>
+        </div>
+        <div class="gutter-example">
+          <a-row :gutter="32">
+            <a-col class="gutter-row" :span="6">
+              <div
+                class="gutter-box"
+                :style="{ background: 'url(' + gutterRowImg[3].img + ') repeat center' }"
+                @click="menuJump('nohandle')"
+              >
+                <div class="text">
+                  <div>{{ $t('未接数') }}</div>
+                  <div>{{ homeMonitorRes.backlogWorkOrder || '0' }}</div>
+                </div>
+                <img src="../monitor/assets/image/Cirlce6.png" alt="" />
+              </div>
+            </a-col>
+            <a-col class="gutter-row" :span="6">
+              <div
+                class="gutter-box"
+                :style="{ background: 'url(' + gutterRowImg[2].img + ') repeat center' }"
+                @click="menuJump('handle')"
+              >
+                <div class="text">
+                  <div>{{ $t('通话总数') }}</div>
+                  <div>{{ homeMonitorRes.finishedWorkOrder || '0' }}</div>
+                </div>
+                <img src="../monitor/assets/image/abnormal3.png" alt="" style="border-radius: 12px" />
+              </div>
+            </a-col>
+            <a-col class="gutter-row" :span="6">
+              <div
+                class="gutter-box"
+                :style="{ background: 'url(' + gutterRowImg[1].img + ') repeat center' }"
+                @click="menuJump('finish')"
+              >
+                <div class="text">
+                  <div>{{ $t('平均通话时长') }}</div>
+                  <!-- <div>{{ homeMonitorRes.averageReplyFirst || '00:00:00' }}</div> -->
+                  <div>02:25:36</div>
+                </div>
+                <img src="../monitor/assets/image/abnormal2.png" alt="" />
+              </div>
+            </a-col>
+            <a-col class="gutter-row" :span="6">
+              <div
+                class="gutter-box"
+                :style="{ background: 'url(' + gutterRowImg[0].img + ') repeat center' }"
+                @click="menuJump('total_num')"
+              >
+                <div class="text">
+                  <div>{{ $t('通话总时长') }}</div>
+                  <!-- <div>{{ homeMonitorRes.averageEndWorkOrder || '00:00:00' }}</div> -->
+                  <div>03:35:21</div>
+                </div>
+                <img src="../monitor/assets/image/abnormal1.png" alt="" />
+              </div>
+            </a-col>
+          </a-row>
+        </div>
+      </div>
+      <div v-if="!['e846247fdc4d235ec2ae088e2d831040'].includes(userInfo.roleId)" class="three">
+        <a-row class="itemRow">
+          <a-col :span="7" style="margin-bottom: 16px">
+            <a-row class="firstCol" style="margin-bottom: 8px">
+              <a-col :span="20">{{ $t('今日待办数排名') }}</a-col>
+              <a-col :span="4" style="text-align: center">
+                <a-tooltip :title="$t('更多')">
+                  <a-icon type="ellipsis" class="moreClass" @click="getMore('backlog', dealtColumns)" />
+                </a-tooltip>
+              </a-col>
+            </a-row>
+            <a-table
+              ref="table"
+              :pagination="false"
+              size="small"
+              rowKey="userName"
+              :columns="dealtColumns"
+              :data-source="dealtData"
+            >
+              <template slot="realName" slot-scope="text, record">
+                <div class="table_title">{{ `${record.userName}(${text})` }}</div>
+              </template>
+            </a-table>
+          </a-col>
+          <a-col :span="8" :offset="1" style="margin-bottom: 16px">
+            <a-row class="firstCol" style="margin-bottom: 8px">
+              <a-col :span="20">{{ $t('今日已结束排名') }}</a-col>
+              <a-col :span="4" style="text-align: center">
+                <a-tooltip :title="$t('更多')">
+                  <a-icon type="ellipsis" class="moreClass" @click="getMore('finished', endColumns)" />
+                </a-tooltip>
+              </a-col>
+            </a-row>
+            <a-table
+              ref="table"
+              :pagination="false"
+              size="small"
+              rowKey="userName"
+              :columns="endColumns"
+              :data-source="endData"
+            >
+              <template slot="realName" slot-scope="text, record">
+                <div class="table_title">{{ `${record.userName}(${text})` }}</div>
+              </template>
+            </a-table>
+          </a-col>
+          <a-col :span="7" :offset="1" style="margin-bottom: 16px">
+            <a-row class="firstCol" style="margin-bottom: 8px">
+              <a-col :span="20">{{ $t('平均首响时长排名') }}</a-col>
+              <a-col :span="4" style="text-align: center">
+                <a-tooltip :title="$t('更多')">
+                  <a-icon type="ellipsis" class="moreClass" @click="getMore('reply', responseColumns)" />
+                </a-tooltip>
+              </a-col>
+            </a-row>
+            <a-table
+              ref="table"
+              :pagination="false"
+              size="small"
+              rowKey="userName"
+              :columns="responseColumns"
+              :data-source="responseData"
+            >
+              <template slot="realName" slot-scope="text, record">
+                <div class="table_title">{{ `${record.userName}(${text})` }}</div>
+              </template>
+            </a-table>
+          </a-col>
+        </a-row>
+      </div>
+      <div class="three">
+        <a-row class="itemRow">
+          <a-calendar :header-render="headerRender">
+            <ul slot="dateCellRender" slot-scope="value" class="events" style="list-style: none; padding: 0">
+              <li v-for="(item, index) in getListData(value)" :key="index">
+                <div
+                  v-for="(itemCont, indexCont) in item.content"
+                  :key="indexCont"
+                  :style="{ color: itemCont.includes('请假') ? '#ff0000' : itemCont.includes('日程') ? '#0043ff' : '' }"
+                >
+                  {{ itemCont }}
+                </div>
+              </li>
+            </ul>
+          </a-calendar>
+        </a-row>
+      </div>
+      <branches-overview-more ref="more"></branches-overview-more>
+    </div>
+  </a-spin>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import { calendar } from 'ant-design-vue'
+import Vue from 'vue'
+Vue.use(calendar)
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    BranchesOverviewMore: () => import('./BranchesOverviewMore')
+  },
+
+  data () {
+    return {
+      // 待办表头
+      dealtColumns: [{
+        title: this.$t('排名'),
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('客服名称'),
+        dataIndex: 'realName',
+        scopedSlots: { customRender: 'realName' }
+      }, {
+        title: this.$t('待办工单数'),
+        dataIndex: 'backlogWorkOrder'
+      }],
+      dealtData: [],
+      // 结束表头
+      endColumns: [{
+        title: this.$t('排名'),
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('客服名称'),
+        dataIndex: 'realName',
+        scopedSlots: { customRender: 'realName' }
+      }, {
+        title: this.$t('已结束工单数'),
+        dataIndex: 'finishedWorkOrder'
+      }],
+      endData: [],
+      // 响应时长表头
+      responseColumns: [{
+        title: this.$t('排名'),
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('客服名称'),
+        dataIndex: 'realName',
+        scopedSlots: { customRender: 'realName' }
+      }, {
+        title: this.$t('平均首响时长'),
+        dataIndex: 'averageReplyFirst',
+        customRender: (text) => {
+          const result = parseInt(text)
+          if (result > 0) {
+            return this.format(result)
+          } else {
+            return '00:00:00'
+          }
+        }
+      }],
+      responseData: [],
+      data: {},
+      homeMonitorRes: {},
+      loading: false,
+      gutterRowImg: [{
+        img: require('../monitor/assets/image/pattern1.png')
+      }, {
+        img: require('../monitor/assets/image/pattern2.png')
+      }, {
+        img: require('../monitor/assets/image/pattern3.png')
+      }, {
+        img: require('../monitor/assets/image/pattern4.png')
+      }],
+      caleData: {},
+      selectedMonth: -1,
+      dataList: [],
+      dataColumns: [],
+      Interval: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  activated () {
+    this.runtime()
+  },
+  created () {
+    this.getData()
+    this.selectedMonth = new Date().getMonth() + 1
+  },
+  // 销毁定时器
+  deactivated () {
+    clearInterval(this.Interval)
+  },
+  methods: {
+    runtime () {
+      this.Interval = setInterval(() => {
+        this.getData()
+      }, 5000 * 60)
+    },
+    headerRender ({ value, type, onChange, onTypeChange }) {
+      const start = 0
+      const end = 12
+      const monthOptions = []
+
+      const current = value.clone()
+      const localeData = value.localeData()
+      const months = []
+      for (let i = 0; i < 12; i++) {
+        current.month(i)
+        months.push(localeData.monthsShort(current))
+      }
+
+      for (let index = start; index < end; index++) {
+        monthOptions.push(
+          <a-select-option class="month-item" key={`${index}`}>
+            {months[index]}
+          </a-select-option>
+        )
+      }
+      const month = value.month()
+
+      const year = value.year()
+      const options = []
+      for (let i = year - 10; i < year + 10; i += 1) {
+        options.push(
+          <a-select-option key={i} value={i} class="year-item">
+            {i}
+          </a-select-option>
+        )
+      }
+      return (
+        <div style={{ padding: '10px', textAlign: 'right' }}>
+          {new Date().getFullYear()}
+          <a-select
+            style={{ paddingLeft: '5px' }}
+            size="small"
+            dropdownMatchSelectWidth={false}
+            value={String(month)}
+            onChange={selectedMonth => {
+              const newValue = value.clone()
+              newValue.month(parseInt(selectedMonth, 10))
+              this.changeMonth(selectedMonth)
+              onChange(newValue)
+            }}
+          >
+            {monthOptions}
+          </a-select>
+
+        </div>
+      )
+    },
+    changeMonth (selectedMonth) {
+      const y = this.moment().get('year')
+      this.selectedMonth = parseInt(selectedMonth) + 1
+      selectedMonth = this.selectedMonth
+      if (selectedMonth < 10) {
+        selectedMonth = '0' + selectedMonth
+      }
+      const time = `${y}-${selectedMonth}-20`
+      this.axios({
+        url: '/crm/report/getServicePbxx',
+        data: {
+          month: time
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.caleData = res.result.data[this.userInfo.username]
+        }
+      })
+    },
+    getListData (value) {
+      let listData = []
+      const m = this.moment(value).get('month') + 1
+      if (m !== this.selectedMonth || !this.caleData) {
+        return listData
+      }
+      let date = value.date()
+      if (date && date < 10) {
+        date = '0' + value.date()
+      }
+      switch (date) {
+        case date:
+          let arr = []
+          if (this.caleData[date]) {
+            const content = this.caleData[date].includes('OFF') ? this.caleData[date].replace(/OFF/g, '休息') : this.caleData[date]
+            if (content.includes(' ')) {
+              arr = content.split(' ')
+            } else {
+              arr.push(content)
+            }
+            listData = [{
+              type: 'success',
+              content: arr
+            }]
+          }
+      }
+      return listData || []
+    },
+    format (seconds) {
+      const hour = Math.floor(seconds / 3600) >= 10 ? Math.floor(seconds / 3600) : '0' + Math.floor(seconds / 3600)
+      seconds -= 3600 * hour
+      const minutes = Math.floor(seconds / 60) >= 10 ? Math.floor(seconds / 60) : '0' + Math.floor(seconds / 60)
+      seconds -= 60 * minutes
+      const sec = seconds >= 10 ? seconds : '0' + seconds
+      return hour + ':' + minutes + ':' + sec
+    },
+    getData () {
+      // this.axios({
+      //   url: '/crm/report/getHomeMonitoring',
+      //   data: {
+      //     month: this.moment().format('YYYY-MM-DD')
+      //   }
+      // }).then(res => {
+      //   if (res.code === 0) {
+      //     this.data = res.result
+      //     this.homeMonitorRes = this.data.homeMonitorRes || {}
+      //     if (Object.keys(this.homeMonitorRes).length > 0) {
+      //       for (const i in this.homeMonitorRes) {
+      //         const sec = parseInt(this.homeMonitorRes[i])// 秒
+      //         if (['averageReplyFirst', 'averageEndWorkOrder'].includes(i)) {
+      //           this.homeMonitorRes[i] = this.format(sec)
+      //         }
+      //       }
+      //     }
+      //     this.dealtData = res.result.nowBacklog.slice(0, 5)
+      //     this.endData = res.result.nowFinished.slice(0, 5)
+      //     this.responseData = res.result.averageReplyFirst.slice(0, 5)
+      //     this.caleData = res.result.workforceManagement[this.userInfo.username]
+      //   }
+      // })
+    },
+    getMore (type, obj) {
+      obj[0] = {
+        title: this.$t('排名'),
+        dataIndex: 'ranking'
+      }
+      obj[1].customRender = (text, record) => {
+        return `${record.userName}(${text})`
+      }
+      let title = ''
+      if (type === 'backlog') {
+        title = this.$t('今日待办数排名')
+      } else if (type === 'finished') {
+        title = this.$t('今日已结束排名')
+      } else {
+        title = this.$t('平均响应时长排名')
+      }
+
+      this.$refs.more.show({
+        title: title,
+        type: type,
+        dataColumns: obj
+      })
+    },
+    menuJump (type, key) { }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.table_title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  width: 180px;
+}
+.title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  padding-bottom: 20px;
+  width: 100%;
+  overflow: hidden;
+  color: @primary-color;
+}
+.animate {
+  display: inline-block;
+  white-space: nowrap;
+  animation: 10s wordsLoop linear infinite normal;
+}
+@keyframes wordsLoop {
+  0% {
+    transform: translateX(50vw);
+    -webkit-transform: translateX(50vw);
+  }
+  100% {
+    transform: translateX(-50vw);
+    -webkit-transform: translateX(-50vw);
+  }
+}
+@-webkit-keyframes wordsLoop {
+  0% {
+    transform: translateX(50vw);
+    -webkit-transform: translateX(50vw);
+  }
+  100% {
+    transform: translateX(-50vw);
+    -webkit-transform: translateX(-50vw);
+  }
+}
+/deep/.ant-table-small {
+  border: 0;
+}
+.all {
+  padding: 16px;
+  min-height: 100%;
+  .one {
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 10px;
+    .gutter-box {
+      height: 150px;
+      border-radius: 10px;
+      padding: 36px 25px;
+      display: flex;
+      justify-content: space-between;
+      cursor: pointer;
+      align-items: center;
+      .text {
+        div:nth-child(1) {
+          font-size: 16px;
+          color: #ffffff;
+        }
+        div:nth-child(2) {
+          line-height: 50px;
+          font-weight: bold;
+          font-size: 36px;
+          color: #ffffff;
+        }
+      }
+      img {
+        width: 56px;
+        height: 56px;
+      }
+    }
+  }
+  .three {
+    border-radius: 10px;
+    background: #ffffff;
+    margin-top: 30px;
+    padding: 18px 25px 10px 25px;
+    .itemRow {
+      padding: 10px 20px 0 20px;
+      .first {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        .firstCol {
+          font-size: 15px;
+          color: #333333;
+          font-weight: bold;
+          width: 110px;
+          white-space: nowrap;
+          .moreClass {
+            color: #129aa2;
+            font-size: 20px;
+          }
+        }
+      }
+      .firstTwo {
+        display: flex;
+        flex-flow: row wrap;
+      }
+      .tag {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 28px;
+        font-size: 14px;
+      }
+      .first {
+        .tag {
+          color: #ff808b;
+          font-weight: bold;
+        }
+        .activeClassify {
+          background-color: #ff808b !important;
+          color: #ffffff;
+        }
+      }
+      .firstTwoItem {
+        display: flex;
+        align-items: center;
+        color: #129aa2;
+        padding-bottom: 20px;
+        div:nth-child(1) {
+          font-size: 14px;
+          white-space: nowrap;
+          font-weight: bold;
+          width: 150px;
+          text-align: right;
+        }
+        .tag {
+          color: #129aa2;
+          font-weight: bold;
+        }
+        .activeClassifyItem {
+          background-color: #129aa2 !important;
+          color: #ffffff;
+        }
+      }
+    }
+  }
+  .firstCol {
+    font-size: 15px;
+    color: #333333;
+    font-weight: bold;
+    width: auto;
+    white-space: nowrap;
+  }
+}
+</style>

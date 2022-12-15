@@ -1,0 +1,294 @@
+<template>
+  <a-drawer :title="config.title" :width="1050" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :labelCol="labelCol" :wrapperCol="wrapperCol" :form="form">
+        <a-alert
+          :message="
+            $t('您已选择工单{0}条，其中{1}条工单收件人为空，有效收件人{2}条', {
+              0: config.checkList.length,
+              1: nullKey,
+              2: config.checkList.length - nullKey
+            })
+          "
+          type="info"
+        />
+        <a-table
+          style="margin: 8px 0"
+          bordered
+          :columns="columnsOrder"
+          :dataSource="sendInfo"
+          rowKey="workOrderNumber"
+          size="small"
+          :pagination="false"
+          :scroll="{ y: 200 }"
+        ></a-table>
+        <a-form-item label="Subject">
+          <a-input
+            v-decorator="['title', { initialValue: '', rules: [{ required: true, message: $t('请输入Subject') }] }]"
+          />
+        </a-form-item>
+        <a-form-item label="File">
+          <a-upload
+            :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+            :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+            name="upload"
+            listType="text"
+            :fileList="imageFileList"
+            :beforeUpload="
+              (file, fileList) => {
+                return beforeUpload(file, fileList)
+              }
+            "
+            @preview="handleImagePreview"
+            @change="handleImageChange"
+          >
+            <div v-if="imageFileList.length < 10">
+              <a-button>
+                <a-icon type="upload" />
+                {{ $t('上传') }}
+              </a-button>
+            </div>
+          </a-upload>
+        </a-form-item>
+        <a-row align="middle" type="flex" style="margin-bottom: 4px">
+          <a-col :span="12">
+            <a-form-item :colon="false" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+              <a
+                slot="label"
+                @click="$refs.MailTemplate.show({ formData: Object.assign(mailForm, { isOnlyMail: true }) })"
+              >
+                {{ $t('邮件模板') }}
+              </a>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <tiny-mce
+          v-if="tinyVisible"
+          v-model="textContent"
+          :newOptions="{ height: '300px' }"
+          @change="
+            (e) => {
+              textContent = e
+            }
+          "
+        />
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('发送') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('取消') }}</a-button>
+      </div>
+    </a-spin>
+    <mail-template ref="MailTemplate" @ok="getContent" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    MailTemplate: () => import('@/views/mail/MailTemplate'),
+    TinyMce: () => import('@/components/Editor/TinyMce')
+  },
+  data () {
+    return {
+      templateId: '',
+      textContent: '',
+      form: this.$form.createForm(this),
+      imagePreviewVisible: false,
+      imagePreviewUrl: '',
+      tinyVisible: false,
+      config: {
+        checkList: []
+      },
+      visible: false,
+      labelCol: { span: 2 },
+      wrapperCol: { span: 22 },
+      mailForm: {
+        language: '英语'
+      },
+      imageFileList: [],
+      loading: false,
+      scroll: {},
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 150,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('序号'),
+        dataIndex: 'id',
+        align: 'center'
+      }, {
+        title: this.$t('模板名称'),
+        dataIndex: 'mbmc',
+        align: 'center'
+      }, {
+        title: this.$t('站点'),
+        dataIndex: 'zd',
+        align: 'center'
+      }, {
+        title: this.$t('业务场景'),
+        dataIndex: 'ywcj',
+        align: 'center'
+      }, {
+        title: this.$t('使用订单状态'),
+        dataIndex: 'syddzt',
+        align: 'center'
+      }, {
+        title: this.$t('使用次数'),
+        dataIndex: 'sycs',
+        align: 'center'
+      }],
+      templateData: [],
+      // 工单信息
+      sendInfo: [],
+      // 工单信息表头
+      columnsOrder: [{
+        title: this.$t('工单号'),
+        dataIndex: 'workOrderNumber',
+        align: 'center'
+      }, {
+        title: this.$t('订单号'),
+        dataIndex: 'orderNo',
+        align: 'center'
+      }, {
+        title: this.$t('发送人'),
+        dataIndex: 'sender',
+        align: 'center'
+      }, {
+        title: this.$t('收件人'),
+        dataIndex: 'receiver',
+        align: 'center'
+      }],
+      nullKey: 0
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.textContent = ''
+      new Promise((resolve, reject) => {
+        this.loading = true
+        const sendInfo = config.checkList.map(item => {
+          const obj = {
+            workOrderNumber: item.caseNumber,
+            orderNo: item.ddh
+          }
+          return obj
+        })
+        // 获取工单信息收件人以及发件人
+        this.axios({
+          url: '/crm/assist/batchSendMail',
+          data: {
+            action: 'get',
+            sendInfo: sendInfo,
+            sid: this.$store.getters.userInfo.sid
+          }
+        }).then(res => {
+          this.loading = false
+          if (res.code) {
+            this.$message.error(res.message)
+            return
+          }
+          this.sendInfo = res.result
+          res.result.forEach(item => {
+            if (!item.receiver || (item.receiver && !item.receiver.length)) {
+              this.nullKey++
+            }
+          })
+          resolve()
+        })
+      }).then(res => {
+        this.getTemplate()
+      })
+      this.$nextTick(() => {
+        this.tinyVisible = true
+      })
+    },
+    getContent (e) {
+      this.textContent = e.yjnrmb
+      this.form.setFieldsValue({ 'title': e.yjbtmb })
+    },
+    // 获取模板信息
+    getTemplate () {
+      this.loading = true
+      this.axios({
+        url: '/crm/assist/mailTemplateOption',
+        data: this.mailForm
+      }).then(res => {
+        this.loading = false
+        if (res.code) {
+          this.$message.error(res.message)
+          return
+        }
+        this.templateData = res.result
+      })
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.response.result.filePath
+      this.imagePreviewVisible = true
+      const fileName = encodeURIComponent(file.response.result.fileName)
+      const filePath = encodeURIComponent(this.imagePreviewUrl)
+      window.open(this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + filePath + '&fileName=' + fileName)
+    },
+    handleImageChange ({ fileList }) {
+      this.imageFileList = fileList
+    },
+    // 附件限制条件
+    beforeUpload (file) {
+      return new Promise((resolve, reject) => {
+        const fileType = '.png,.jpg,.jpeg,.gif,.bmp,.flv,.swf,.mkv,.avi,.rm,.rmvb,.mpeg,.mpg,.ogg,.ogv,.mov,.wmv,.mp4,.webm,.mp3,.wav,.mid,.rar,.zip,.tar,.gz,.7z,.bz2,.cab,.iso,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.xml'
+        const suffix = file.name.substring(file.name.lastIndexOf('.'), file.name.length)
+        if (!fileType.includes(suffix)) {
+          this.$message.error(this.$t('上传文件格式错误'))
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    selectTemplate (record) {
+      this.textContent = record.yjnrmb || ''
+      this.templateId = record.mbid
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          let imageFileList = []
+          if (this.imageFileList.length > 0) {
+            imageFileList = this.imageFileList.map(item => {
+              const obj = {
+                fileName: item.response.result.fileName,
+                filePath: item.response.result.filePath
+              }
+              return obj
+            })
+          }
+          values.files = imageFileList
+          values.content = this.textContent || ''
+          const sendList = this.sendInfo.filter(item => item.receiver && item.receiver.length && item.sender)
+          this.axios({
+            url: '/crm/assist/batchSendMail',
+            data: {
+              action: 'submit',
+              sendInfo: sendList,
+              mailData: values,
+              sid: this.$store.getters.userInfo.sid
+            }
+          }).then((res) => {
+            if (res.code === 0) {
+              this.visible = false
+              this.$message.success(this.$t('操作成功'))
+              this.$emit('ok', '')
+            } else {
+              this.$message.error(res.message)
+            }
+            this.loading = false
+          })
+        }
+      })
+    }
+  }
+}
+</script>

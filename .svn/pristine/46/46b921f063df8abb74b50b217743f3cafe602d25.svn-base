@@ -1,0 +1,285 @@
+<template>
+  <div>
+    <a-form :form="form">
+      <a-form-item :label="$t('显示级数')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-radio-group
+          v-decorator="[
+            'setting[form][showSeries]',
+            { initialValue: setting.form.showSeries || '1', rules: [{ required: true, message: $t('请选择显示级数') }] }
+          ]"
+          @change="
+            (e) => {
+              backShow = e.target.value
+              setting.form.showSeries = e.target.value
+              if (setting.attribute.required) {
+                form.setFieldsValue({ 'setting[form][reqSeries]': '1' })
+              }
+            }
+          "
+        >
+          <a-radio value="1">{{ $t('省') }}</a-radio>
+          <a-radio value="2">{{ $t('省市') }}</a-radio>
+          <a-radio value="3">{{ $t('省市区') }}</a-radio>
+          <a-radio value="4">{{ $t('省市区街道') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item v-if="backShow !== '1'" :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+        <span slot="label">
+          {{ $t('省回写字段') }}
+          <a-tooltip :title="$t('只能回写到下拉框，且数据源为地址簿(回写)的字段。回写目的字段不要设置到表单视图中')">
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-select
+          v-decorator="['setting[form][province]', { initialValue: setting.form.province || undefined }]"
+          allowClear
+        >
+          <a-select-option v-for="item in writeBackMappings" :key="item.id" :value="item.alias">
+            {{ item.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item v-if="backShow !== '1' && backShow !== '2'" :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+        <span slot="label">
+          {{ $t('市回写字段') }}
+          <a-tooltip :title="$t('只能回写到下拉框，且数据源为地址簿(回写)的字段。回写目的字段不要设置到表单视图中')">
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-select v-decorator="['setting[form][city]', { initialValue: setting.form.city || undefined }]" allowClear>
+          <a-select-option v-for="item in writeBackMappings" :key="item.id" :value="item.alias">
+            {{ item.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item
+        v-if="backShow !== '1' && backShow !== '2' && backShow !== '3'"
+        :labelCol="{ span: 8 }"
+        :wrapperCol="{ span: 16 }"
+      >
+        <span slot="label">
+          {{ $t('区回写字段') }}
+          <a-tooltip :title="$t('只能回写到下拉框，且数据源为地址簿(回写)的字段。回写目的字段不要设置到表单视图中')">
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-select v-decorator="['setting[form][area]', { initialValue: setting.form.area || undefined }]" allowClear>
+          <a-select-option v-for="item in writeBackMappings" :key="item.id" :value="item.alias">
+            {{ item.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item :label="$t('详细地址')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-switch
+          v-decorator="[
+            'setting[form][detailsShow]',
+            { initialValue: setting.form.detailsShow == '1' ? true : false, valuePropName: 'checked' }
+          ]"
+          :un-checked-children="$t('关')"
+          :checked-children="$t('开')"
+          @change="openDetails"
+        />
+      </a-form-item>
+      <a-form-item v-if="detailsShow === '1'" :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+        <span slot="label">
+          {{ $t('详细地址回写字段') }}
+          <a-tooltip :title="$t('只能回写到单行文本。回写目的字段不要设置到表单视图中')">
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-select
+          v-decorator="[
+            'setting[form][details]',
+            {
+              initialValue: setting.form.details || undefined,
+              rules: [{ required: true, message: $t('请选择详细地址回写字段') }]
+            }
+          ]"
+          allowClear
+        >
+          <a-select-option v-for="item in detalisBack" :key="item.id" :value="item.alias">
+            {{ item.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <span slot="label">
+          {{ $t('是否必填') }}
+          <a-tooltip placement="top">
+            <span slot="title">
+              {{ $t('字段在表单视图中默认的“必填”属性，若表单视图中有新的配置，则会覆盖当前的默认配置。') }}
+            </span>
+            <a-icon type="question-circle" />
+          </a-tooltip>
+        </span>
+        <a-switch
+          v-decorator="[
+            'setting[attribute][required]',
+            { initialValue: setting.attribute.required, valuePropName: 'checked' }
+          ]"
+          :un-checked-children="$t('否')"
+          :checked-children="$t('是')"
+          @change="
+            (e) => {
+              $set(setting.attribute, 'required', e)
+            }
+          "
+        />
+      </a-form-item>
+      <a-form-item
+        v-if="setting.attribute.required"
+        :label="$t('必填级数')"
+        :labelCol="labelCol"
+        :wrapperCol="wrapperCol"
+      >
+        <a-radio-group
+          v-decorator="[
+            'setting[form][reqSeries]',
+            { initialValue: setting.form.reqSeries || '1', rules: [{ required: true, message: $t('请选择必填级数') }] }
+          ]"
+        >
+          <a-radio value="1">{{ $t('省') }}</a-radio>
+          <a-radio v-if="backShow !== '1'" value="2">{{ $t('省市') }}</a-radio>
+          <a-radio v-if="backShow !== '1' && backShow !== '2'" value="3">{{ $t('省市区') }}</a-radio>
+          <a-radio v-if="backShow !== '1' && backShow !== '2' && backShow !== '3'" value="4">
+            {{ $t('省市区街道') }}
+          </a-radio>
+        </a-radio-group>
+      </a-form-item>
+    </a-form>
+    <data-linkage ref="dataLinkage" @ok="getDataLinkage" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    DataLinkage: () => import('./DataLinkage')
+  },
+  props: {
+    setting: {
+      type: Object,
+      default: () => { }
+    },
+    tableField: {
+      type: Array,
+      default: () => {
+        return []
+      }
+    },
+    config: {
+      type: Object,
+      default: () => { }
+    },
+    dataOld: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      visibleAddress: false,
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      form: this.$form.createForm(this),
+      defaultValueLink: {},
+      defaultValue: [],
+      detailsShow: '0',
+      backShow: '1',
+      data: {},
+      writeBackMappings: [],
+      detalisBack: [],
+      defaultFlag: false, // 公式编辑
+      defalutTemplates: [
+        { value: '', text: this.$t('不设置') },
+        { value: 'value', text: this.$t('自定义') },
+        { value: 'formula', text: this.$t('公式编辑') },
+        { value: 'linkData', text: this.$t('数据联动') }
+      ],
+      defaultType: 'custom',
+      quoteTypes: [
+        { value: 'insert', text: this.$t('新建时') },
+        { value: 'always', text: this.$t('新建+编辑时') }
+      ]
+    }
+  },
+  watch: {
+    setting: {
+      handler (newVal) {
+        this.data = JSON.parse(JSON.stringify(newVal))
+        this.defaultValueLink = this.data.form.defaultValueLink
+        this.openDetails(this.data.form.detailsShow === '1')
+        this.defaultType = this.data.form.defaultTemplate
+        this.backShow = this.data.form.showSeries ? this.data.form.showSeries : '1'
+      },
+      immediate: true
+    }
+  },
+  mounted () {
+    this.axios({
+      url: '/admin/field/getField',
+      data: { tableId: this.config.tableId, formType: 'combobox' }
+    }).then(res => {
+      this.writeBackMappings = res.result.filter(item => item.setting.attribute.dataSource === 'addressBookBack' || item.setting.attribute.dataSource === 'dictionaryBack')
+    })
+  },
+  methods: {
+    // 选择默认值
+    changeDefault (val) {
+      this.setting.form.defaultTemplate = val
+      this.defaultType = val
+    },
+    getDataLinkage (val) {
+      this.defaultValueLink = val
+    },
+    forcedHandleCodemirror () {
+      this.$refs.formRuleWayCondition.show({
+        tableId: this.config.tableId,
+        data: { wayCondition: this.setting.form.forcedDefaultValue }
+      })
+    },
+    getCondition (data) {
+      this.setting.form.forcedDefaultValue = data
+    },
+    // 默认值数据联动
+    handleDefaultLink () {
+      this.$refs.dataLinkage.show({
+        data: this.data,
+        setting: this.setting,
+        tableField: this.tableField,
+        tableId: this.config.tableId
+      })
+    },
+    openDetails (e) {
+      if (e) {
+        this.detailsShow = '1'
+        this.axios({
+          url: '/admin/field/getField',
+          data: { tableId: this.config.tableId, formType: 'text' }
+        }).then(res => {
+          this.detalisBack = res.result
+        })
+      } else {
+        this.detailsShow = '0'
+      }
+    },
+    handleSubmit () {
+      let val = {}
+      const { validateFields } = this.form
+      validateFields((errors, values) => {
+        if (!errors) {
+          values.setting.form.detailsShow = values.setting.form.detailsShow ? '1' : '0'
+          values.setting.form.defaultValueLink = this.defaultValueLink
+          if (!values.setting.attribute.required) {
+            values.setting.form.reqSeries = '1'
+          }
+          values.setting.form.defaultValue = values.setting.form.defaultTemplate === 'addressSelect' ? this.defaultValue : ''
+          val = values
+        }
+      })
+      return val
+    }
+  }
+}
+</script>

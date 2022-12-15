@@ -1,0 +1,18 @@
+<template>
+  <record-details ref="RecordDetails" :url="url" :roc="roc" />
+</template>
+<script>
+export default {
+  components: {
+    RecordDetails: () => import('./RecordDetails')
+  },
+  data () {
+    return {
+      url: '/quality/inspected/mockInit',
+      roc: true
+    }
+  },
+  methods: {
+  }
+}
+</script>

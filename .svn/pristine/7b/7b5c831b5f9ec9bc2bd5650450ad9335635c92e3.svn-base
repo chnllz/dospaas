@@ -1,0 +1,211 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')" style="width: 100%">
+        <a-space slot="extra">
+          <a-button v-show="!visible" htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            v-show="!visible"
+            @click="
+              () => {
+                queryParam = {}
+                date = null
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+        </a-space>
+        <a-row class="form">
+          <a-col :span="6">
+            <a-form-item :label="$t('呼叫时间')">
+              <a-date-picker v-model="date" @change="getSearchDate"></a-date-picker>
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-show="!visible" v-action:export @click="handleExport()">{{ $t('导出') }}</a-button>
+      <a-button v-show="!visible" @click="handlerGetDayData()">{{ $t('生成今日数据') }}</a-button>
+      <a-button @click="showDrawer">{{ visible ? $t('关闭') : $t('图表展示') }}</a-button>
+    </a-space>
+    <s-table
+      v-show="!visible"
+      ref="table"
+      class="table-fill"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="date"
+      :columns="columns"
+      :data="loadDataTable"
+      :showPagination="false"
+    ></s-table>
+    <div v-show="visible" ref="main" style="height: 400px"></div>
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+import echarts from 'echarts'
+export default {
+  i18n: window.lang('callcenter'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      visible: false,
+      // 时间组件
+      date: null,
+      mychartData: [],
+      flag: 0,
+      // 搜索参数
+      queryParam: {
+        'startTime': null,
+        'endTime': null
+      },
+      // 表头
+      columns: [{
+        title: this.$t('呼叫总量'),
+        dataIndex: 'total'
+      }, {
+        title: this.$t('呼入百分比(%)'),
+        dataIndex: 'inboundPercent'
+      }, {
+        title: this.$t('呼出百分比(%)'),
+        dataIndex: 'outboundPercent'
+      }, {
+        title: this.$t('呼入'),
+        children: [{
+          title: this.$t('呼入总量'),
+          dataIndex: 'inboundTotal'
+        }, {
+          title: this.$t('坐席接通量'),
+          dataIndex: 'inboundAnswered'
+        }, {
+          title: this.$t('坐席振铃未接量'),
+          dataIndex: 'inboundUnanswered'
+        }, {
+          title: this.$t('其他'),
+          dataIndex: 'inboundOther'
+        }]
+      }, {
+        title: this.$t('呼出'),
+        children: [{
+          title: this.$t('呼出总量'),
+          dataIndex: 'outboundTotal'
+        }, {
+          title: this.$t('呼出接通量'),
+          dataIndex: 'outboundAnswered'
+        }, {
+          title: this.$t('呼出未接量'),
+          dataIndex: 'outboundUnanswered'
+        }]
+      }]
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/callcenter/callRecordSummary/overviewHour',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        this.timefieldHeader = res.result.timefieldHeader
+        if (this.flag === 0) {
+          this.columns.unshift(this.timefieldHeader)
+          this.flag++
+        }
+        this.mychartData = res.result.chartData
+        return res.result
+      })
+    },
+    showDrawer () {
+      this.visible = !this.visible
+      setTimeout(() => {
+        this.myEcharts()
+      }, 100)
+    },
+    onClose () {
+      this.visible = false
+    },
+    getSearchDate (date, dateString) {
+      this.queryParam.startTime = dateString
+      this.queryParam.endTime = dateString
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportCallRecStatsTask',
+        parameter: {
+          condition: {
+            req: this.queryParam,
+            type: 'exportCallRecordHour'
+          }
+        }
+      })
+    },
+    handlerGetDayData () {
+      const time = new Date().toLocaleTimeString()
+      const me = this
+      this.$confirm({
+        title: this.$t('确认生成今日上午 00:00 至 {0} 点前的数据？', { 0: time }),
+        onOk () {
+          me.axios({
+            url: '/callcenter/callRecordSummary/generateTodayData'
+          }).then((res) => {
+            if (res.code === 0) {
+              me.$message.success(me.$t('操作成功'))
+            } else {
+              me.$message.error(res.message)
+            }
+            me.$refs.table.refresh()
+          })
+        }
+      })
+    },
+    myEcharts () {
+      const myChart = echarts.init(this.$refs.main)
+      const option = {
+        tooltip: {
+          trigger: 'axis'
+        },
+        grid: {
+          x: 50,
+          y: 80,
+          x2: 50,
+          y2: 50,
+          borderWidth: 1
+        },
+        legend: {
+          orient: 'horizontal',
+          x: 'center',
+          y: '30',
+          data: this.mychartData.lengend
+        },
+        calculable: true,
+        xAxis: [{
+          type: 'category',
+          boundaryGap: false,
+          data: this.mychartData.xaxis
+        }],
+        yAxis: [{
+          type: 'value'
+        }],
+        series: this.mychartData.series
+      }
+      myChart.setOption(option)
+    }
+  }
+}
+</script>
+<style scoped>
+.search {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.search button {
+  margin-right: 8px;
+}
+</style>

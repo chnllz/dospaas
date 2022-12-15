@@ -1,0 +1,386 @@
+<template>
+  <div>
+    <a-card size="small" class="table-search" :bordered="false">
+      <a-form :layout="advanced ? 'vertical' : 'inline'" :class="advanced ? 'advanced' : 'normal'" :form="form">
+        <div class="head">
+          <div class="title">{{ $t('过滤') }}</div>
+          <a-space style="margin-left: 8px">
+            <a-button htmlType="submit" type="primary" @click="getData">{{ $t('搜索') }}</a-button>
+            <a-button
+              @click="
+                () => {
+                  form.resetFields()
+                  departmentData = []
+                  queryParam = {}
+                  getData()
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+          </a-space>
+        </div>
+        <a-row :gutter="16">
+          <a-col v-if="advanced" span="24">
+            <div class="divider"></div>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="this.$t('姓名')">
+              <a-input v-model="queryParam.username" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="this.$t('分机')">
+              <a-input v-model="queryParam.extension" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="this.$t('部门')">
+              <data-picker
+                ref="dataPicker"
+                :placeholder="$t('作为一级部门')"
+                name="queryParam[department]"
+                displayType="tree"
+                url="/admin/department/init"
+                searchUrl="/admin/search/departmentSearch"
+                :value="departmentData"
+                :scope="scope"
+                :optionsConversion="optionsConversion"
+                @select="selectDep"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-form>
+    </a-card>
+    <a-row justify="space-between" type="flex">
+      <a-col v-for="(item, index) in cardData" :key="index" style="width: 13.5%">
+        <a-card size="small" :bordered="true" :class="'cardStyle ' + item.type" @click="agentOnShow(item)">
+          <div class="num">
+            <a slot="extra" href="#" class="color">{{ item.num }}</a>
+          </div>
+          <div class="line"></div>
+          <p class="text">{{ $t(item.text) }}</p>
+        </a-card>
+      </a-col>
+    </a-row>
+    <div style="margin: 8px 0">
+      <a-card size="small">
+        <a-button icon="stop" class="btn" @click="handlerControl('setDnd')">{{ $t('示忙') }}</a-button>
+        <a-button icon="check-circle" class="btn" @click="handlerControl('setIdle')">{{ $t('示闲') }}</a-button>
+        <a-button icon="phone" class="btn" @click="handlerControl('call')">{{ $t('呼叫') }}</a-button>
+        <a-button icon="retweet" class="btn" @click="handlerControl('changeoverOrIntrusion', 'zj')">
+          {{ $t('转接') }}
+        </a-button>
+        <a-button icon="swap" class="btn" @click="handlerControl('changeoverOrIntrusion', 'qc')">
+          {{ $t('强插') }}
+        </a-button>
+        <a-button icon="disconnect" class="btn" @click="handlerControl('tollBreakdown')">{{ $t('强拆') }}</a-button>
+        <a-button icon="login" class="btn" @click="handlerControl('monitor')">{{ $t('监听') }}</a-button>
+        <a-button icon="logout" class="btn" @click="handlerControl('cryptolaliaOrHelp', 'my')">
+          {{ $t('密语') }}
+        </a-button>
+        <a-button icon="info-circle" style="width: 100px" @click="handlerControl('cryptolaliaOrHelp', 'qz')">
+          {{ $t('求助') }}
+        </a-button>
+      </a-card>
+    </div>
+    <a-card size="small">
+      <a-card
+        v-for="(item, index) in usersData"
+        v-show="agentShow.includes(item.type)"
+        :key="index"
+        size="small"
+        hoverable
+        :bodyStyle="{ padding: '2px' }"
+        :bordered="false"
+        :style="{ display: 'inline-block' }"
+        class="ant-col ant-col-xs-24 ant-col-sm-24 ant-col-md-12 ant-col-lg-8 ant-col-xl-6 ant-col-xxl-4"
+        @click="SetBorder(item, index)"
+      >
+        <div
+          :class="activeClass == index ? 'active' : 'static'"
+          :style="{ background: item.bg, display: 'flex', padding: '10px', margin: '2px' }"
+        >
+          <a-card-meta>
+            <a-avatar slot="avatar" :src="item.url" class="avatarClass" />
+          </a-card-meta>
+          <div>
+            <div style="width: 120px; margin: 0">{{ $t('状态') }}:{{ $t(item.status) }}</div>
+            <a-tooltip placement="topLeft" :title="'分机: ' + item.extension">
+              <div class="toolClass">{{ $t('分机') }}:{{ $t(item.extension) }}</div>
+            </a-tooltip>
+            <a-tooltip placement="topLeft" :title="'姓名: ' + item.user">
+              <div class="toolClass">{{ $t('姓名') }}:{{ $t(item.user) }}</div>
+            </a-tooltip>
+            <div class="timeClass">{{ $t('持续时间') }}:{{ $t(item.user) }}</div>
+          </div>
+        </div>
+      </a-card>
+    </a-card>
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  components: {
+    DepartmentSearch: () => import('@/views/admin/Department/DepartmentSearch')
+  },
+  data () {
+    return {
+      cardData: [{
+        num: 0,
+        type: 'total',
+        text: this.$t('坐席总数')
+      }, {
+        num: 0,
+        type: 'login',
+        text: this.$t('签入数量')
+      }, {
+        num: 0,
+        type: 'call',
+        text: this.$t('通话数量')
+      }, {
+        num: 0,
+        type: 'ringing',
+        text: this.$t('振铃数量')
+      }, {
+        num: 0,
+        type: 'idle',
+        text: this.$t('空闲数量')
+      }, {
+        num: 0,
+        type: 'busy',
+        text: this.$t('示忙数量')
+      }, {
+        num: 0,
+        type: 'offline',
+        text: this.$t('签出数量')
+      }],
+      usersData: [],
+      activeClass: '-1',
+      advanced: false,
+      form: this.$form.createForm(this),
+      colLayout: {
+        xs: 24,
+        sm: 12,
+        md: 8,
+        lg: 8,
+        xl: 6,
+        xxl: 6
+      },
+      timeOut: null,
+      agentShow: [
+        'total',
+        'login',
+        'call',
+        'ringing',
+        'idle',
+        'busy',
+        'offline'
+      ],
+      queryParam: {},
+      timeId: null,
+      departmentData: [],
+      scope: this,
+      timeout: 10000
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  mounted () {
+    this.getData()
+  },
+  activated () {
+    this.upData()
+  },
+  deactivated () {
+    clearInterval(this.timeId)
+  },
+  methods: {
+    getData () {
+      this.axios({
+        url: '/callcenter/monitor/agent',
+        data: Object.assign(this.queryParam, this.$route.query),
+        timeout: 5 * 60 * 1000
+      }).then(res => {
+        this.cardData.forEach(item => {
+          item.num = res.result.data.cardData[item.type]
+        })
+        this.usersData = res.result.data.usersData
+        this.timeout = res.result.timeout || 10000
+      })
+    },
+    // 组织结构options转换
+    optionsConversion (list, displayType, searchType) {
+      if (searchType) {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.departmentId
+          obj.label = item.fullDepartmentName
+          return obj
+        })
+      } else {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.departmentId
+          obj.label = item.departmentName
+          return obj
+        })
+      }
+    },
+    selectDep (content, node) {
+      this.queryParam.department = content
+    },
+    upData () {
+      const that = this
+      this.timeId = setInterval(() => {
+        that.getData()
+      }, this.timeout)
+    },
+    SetBorder (item, index) {
+      this.activeClass = index
+    },
+    handlerControl (type, select) {
+      const that = this
+      const userExtension = this.userInfo.extension
+      if (type && this.activeClass > -1) {
+        const selectExtension = this.usersData[this.activeClass].extension
+        let params = {}
+        if (['setDnd', 'setIdle', 'tollBreakdown'].includes(type)) {
+          // 示忙 || 示闲 || 强拆
+          params = {
+            // 选中的分机
+            extension: selectExtension
+          }
+        } else if (['call', 'monitor'].includes(type)) {
+          // 呼叫 || 监听
+          params = {
+            // 当前登录用户的分机
+            extension: userExtension,
+            // 选中的分机
+            extensionDst: selectExtension
+          }
+        } else {
+          // 转接/强插 || 密语/求助
+          params = {
+            // 转接为：当前登录用户的分机  ，强插为：选中的分机
+            // 密语为：当前登录用户的分机  ，求助为：选中的分机
+            extension: ['zj', 'my'].includes(select) ? userExtension : selectExtension,
+            // 转接为：选中的分机  ，强插为：当前登录用户的分机
+            // 密语为：选中的分机  ，求助为：当前登录用户的分机
+            extensionDst: ['zj', 'my'].includes(select) ? selectExtension : userExtension
+          }
+        }
+        const data = { ...this.queryParam, ...params }
+        this.axios({
+          url: `callcenter/api/${type}`,
+          data: data
+        }).then(res => {
+          that.getData()
+          this.$message.success(res.message)
+        })
+      } else {
+        this.$message.info('请选择您要操作的坐席')
+      }
+    },
+    agentOnShow (item) {
+      if (item.type === 'all') {
+        this.agentShow = [
+          'all',
+          'zaixian',
+          'tonghua',
+          'zhenling',
+          'kongxian',
+          'shimang',
+          'lixian'
+        ]
+      } else if (item.type === 'zaixian') {
+        this.agentShow = [
+          'zaixian',
+          'tonghua',
+          'zhenling',
+          'kongxian',
+          'shimang'
+        ]
+      } else {
+        this.agentShow = [
+          item.type
+        ]
+      }
+    }
+  }
+}
+</script>
+<style scoped>
+.active {
+  border: 2px solid #722ed1;
+}
+.static {
+  border: 2px solid #ffffff00;
+}
+.btn {
+  margin-right: 10px;
+  width: 100px;
+}
+.cardStyle {
+  flex: 1;
+  text-align: left;
+  font-weight: bold;
+}
+.num {
+  height: 50px;
+  font-size: 30px;
+  margin: 10px 0;
+  color: #fff;
+}
+.line {
+  height: 2px;
+  background: #fff;
+}
+.text {
+  color: #fff;
+  margin-top: 10px;
+}
+.color {
+  color: #fff;
+}
+.total {
+  background: #2ec7c9;
+}
+.login {
+  background: #b6a2de;
+}
+.call {
+  background: #5ab1ef;
+}
+.ringing {
+  background: #ffb980;
+}
+.idle {
+  background: #d87a80;
+}
+.busy {
+  background: #e5cf0d;
+}
+.offline {
+  background: #cccccc;
+}
+.toolClass {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 120px;
+  margin: 5px 0 0 0;
+}
+.timeClass {
+  width: 120px;
+  margin: 5px 0 0 0;
+}
+.avatarClass {
+  width: 80px;
+  height: 80px;
+  margin-top: 12px;
+}
+</style>

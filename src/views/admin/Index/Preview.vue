@@ -1,0 +1,65 @@
+<template>
+  <a-drawer
+    :title="config.title"
+    width="100%"
+    height="100%"
+    :visible="visible"
+    :destroyOnClose="true"
+    placement="top"
+    :zIndex="9999"
+    @close="visible = !visible"
+  >
+    <a-spin :spinning="loading">
+      <iframe
+        v-if="config.data && config.data.fileExtName === '.pdf'"
+        :src="config.data.url"
+        frameborder="0"
+        width="100%"
+        height="100%"
+      ></iframe>
+      <div v-else-if="config.data" style="text-align: center; line-height: 250px">
+        <a-button icon="download" size="large" @click="download">{{ $t('该文件不支持在线预览，点击下载') }}</a-button>
+      </div>
+      <div v-else style="text-align: center; line-height: 250px; font-size: 20px">{{ $t('文件不存在') }}</div>
+      <div class="bbar">
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      config: {
+        title: '',
+        data: {}
+      }
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config.title = config.fileName
+      this.axios({
+        url: '/admin/attachment/preview',
+        data: { authCode: config.authCode }
+      }).then((res) => {
+        this.loading = false
+        this.config.data = res.result
+      })
+    },
+    download () {
+      window.open(`${this.$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/download/?authCode=${this.config.data.authCode}`)
+    }
+  }
+}
+</script>

@@ -1,0 +1,557 @@
+
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="800" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="false">
+      <div style="padding-bottom: 100px">
+        <a-alert v-if="config.action === 'add'" message="切换题型将不会保存当前输入的内容" type="info" show-icon />
+        <br />
+        <a-form :form="form" :label-col="{ span: 4 }" v-bind="formItemLayoutWithOutLabel" @submit="handleSubmit">
+          <a-form-item v-if="config.action === 'add'" label="题型" :wrapper-col="{ span: 20 }">
+            <a-radio-group
+              v-decorator="[
+                'info[type]',
+                { initialValue: questionstype, rules: [{ required: true, message: '请选择题型' }] }
+              ]"
+              button-style="solid"
+              @change="handleChange"
+            >
+              <a-radio value="single">单选题</a-radio>
+              <a-radio value="multiple">多选题</a-radio>
+              <a-radio value="fills">填空题</a-radio>
+              <a-radio value="judge">判断题</a-radio>
+              <a-radio value="answer">简答题</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item v-if="questionstype !== 'fills'" label="题目" :wrapper-col="{ span: 20 }">
+            <a-textarea
+              v-decorator="[
+                'info[title]',
+                {
+                  initialValue: formdata.title,
+                  rules: [
+                    { required: allshow, message: '请输入题目' },
+                    { max: 200, message: '题目长度不得大于200个字符' }
+                  ]
+                }
+              ]"
+              :auto-size="{ minRows: 5, maxRows: 8 }"
+              @blur="validateBlur"
+            />
+          </a-form-item>
+          <div v-if="questionstype === 'fills'">
+            <a-form-item label="题目" :wrapper-col="{ span: 20 }" :required="true">
+              <a-textarea
+                v-decorator="[
+                  'title',
+                  {
+                    initialValue: fillstitle,
+                    rules: [
+                      { required: allshow, message: '请输入题目' },
+                      { max: 200, message: '题目长度不得大于200个字符' }
+                    ]
+                  }
+                ]"
+                :auto-size="{ minRows: 5, maxRows: 8 }"
+              />
+            </a-form-item>
+            <a-col :span="4"></a-col>
+            <span>
+              <a style="padding-right: 5px" @click="pushfills">插入填空项</a>
+              <a-tooltip>
+                <template slot="title">
+                  <div>3个及以上的连续下划线会被视为1个填空项</div>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+              <a class="margin" @click="refreshfills">刷新</a>
+            </span>
+            <div v-for="(item, index) in optionsfill" :key="index">
+              <a-form-item v-bind="index === 0 ? formItemLayout : {}" :required="true">
+                <span v-if="index === 0" slot="label">
+                  答案
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>若一个空有多个正确答案，请用分号分隔</span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-col :span="14">
+                  <a-input
+                    v-decorator="[
+                      'optionsfill[' + index + ']',
+                      { initialValue: optionsfill[index], rules: [{ required: allshow, message: '请输入填空项' }] }
+                    ]"
+                    :placeholder="'填空项' + (index + 1)"
+                  />
+                </a-col>
+              </a-form-item>
+            </div>
+            <a-col v-if="optionsfill.length > 0" :span="4"></a-col>
+            <a-form-item v-if="optionsfill.length > 0" :wrapper-col="{ span: 20 }">
+              <a-checkbox v-model="allow" @change="allowchange">允许答题与答案顺序不一致</a-checkbox>
+            </a-form-item>
+          </div>
+          <div v-if="questionstype === 'single' || questionstype === 'multiple'">
+            <a-col :span="4"></a-col>
+            <a-form-item :wrapper-col="{ span: 20 }">
+              <a-col :span="20">
+                <drag-list
+                  ref="Drag"
+                  style="margin-bottom: 16px"
+                  :data.sync="optionsList.list"
+                  :type="questionstype"
+                  :action="config.action"
+                  :answer="answer ? answer : ''"
+                  @funadd="addOptions"
+                  @getAnswer="getAnswer"
+                  @fundel="delOptions"
+                />
+              </a-col>
+              <a-col :span="4" style="padding-top: 5px">
+                <span><a @click="bulkEdit">批量编辑</a></span>
+              </a-col>
+            </a-form-item>
+            <a-form-item label="答案" :wrapper-col="{ span: 20 }">
+              <a-input
+                v-if="questionstype === 'single'"
+                v-decorator="[
+                  'answerShow',
+                  { initialValue: singleanswer, rules: [{ required: true, message: '请选择正确答案' }] }
+                ]"
+                :read-only="true"
+                placeholder="未设置"
+                style="border: none; box-shadow: 0px 0px 0px 0px"
+              />
+              <a-input
+                v-if="questionstype === 'multiple'"
+                v-decorator="[
+                  'answerShow',
+                  { initialValue: muanswer.toString(), rules: [{ required: true, message: '请选择正确答案' }] }
+                ]"
+                :read-only="true"
+                placeholder="未设置"
+                style="border: none; box-shadow: 0px 0px 0px 0px"
+              />
+            </a-form-item>
+          </div>
+          <a-form-item v-if="questionstype === 'answer'" :wrapper-col="{ span: 20 }">
+            <span slot="label">
+              得分关键词
+              <a-tooltip placement="top">
+                <template slot="title">
+                  <span>
+                    多个关键词请用分号隔开;
+                    <br />
+                    自动判分=(题目分数 ÷ 关键词个数) × 答题命中关键词个数
+                  </span>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-textarea
+              v-decorator="[
+                'setting[answer]',
+                { rules: [{ required: true, message: '请输入得分关键词' }], initialValue: formdata.answer }
+              ]"
+              :auto-size="{ minRows: 5, maxRows: 8 }"
+              @blur="validateBlurForKeyword"
+            />
+          </a-form-item>
+          <a-form-item v-if="questionstype === 'judge'" label="答案" :wrapper-col="{ span: 20 }">
+            <a-radio-group
+              v-decorator="[
+                'setting[answer]',
+                { initialValue: formdata.answer, rules: [{ required: true, message: '请选择正确答案' }] }
+              ]"
+              button-style="solid"
+            >
+              <a-radio value="1">对</a-radio>
+              <a-radio value="0">错</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item label="答案解析" :wrapper-col="{ span: 20 }">
+            <a-textarea
+              v-decorator="['setting[analysis]', { initialValue: formdata.analysis }]"
+              :auto-size="{ minRows: 5, maxRows: 8 }"
+            />
+          </a-form-item>
+        </a-form>
+        <div class="bbar" style="position: absolute; bottom: 0; right: 0; width: 100%; background-color: white">
+          <a-button
+            v-if="config.action === 'add'"
+            type="primary"
+            html-type="submit"
+            @click="handleSubmit($event, 'next')"
+          >
+            添加并继续
+          </a-button>
+          <a-button type="primary" html-type="submit" @click="handleSubmit">
+            {{ config.action === 'edit' ? '保存' : '添加并关闭' }}
+          </a-button>
+          <a-button @click="visible = !visible">关闭</a-button>
+        </div>
+        <!-- 批量修改 -->
+        <a-drawer :title="configEdit.title" :width="600" :visible="visiblebulk" @close="visiblebulk = !visiblebulk">
+          <a-form>
+            <a-form-item>
+              <a-textarea v-model="bulkdata" :auto-size="{ minRows: 10, maxRows: 25 }" />
+            </a-form-item>
+          </a-form>
+          <div class="bbar">
+            <a-button type="primary" @click="bulksubmit">保存</a-button>
+            <a-button @click="visiblebulk = !visiblebulk">关闭</a-button>
+          </div>
+        </a-drawer>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  components: {
+    DragList: () => import('./QuestionaddDragList')
+  },
+  data () {
+    return {
+      actions: {},
+      formdata: {},
+      length: {},
+      questionstype: '',
+      disabled: true,
+      visible: false,
+      loading: false,
+      visiblebulk: false,
+      allshow: true,
+      // 多行文本框行高
+      shortAnswer: false,
+      // 批量编辑
+      batch: true,
+      // 简答题文本框最小行数
+      min: 2,
+      max: '',
+      judge: false,
+      singleanswer: '',
+      muanswer: [],
+      // 填空
+      fill: false,
+      answer: '',
+      fillstitle: '',
+      optionsfill: [],
+      checked: false,
+      config: {
+        action: this.actions,
+        data: {}
+      },
+      configEdit: {
+        action: 'bulkEdit',
+        title: '批量编辑',
+        url: '',
+        data: {}
+      },
+      form: this.$form.createForm(this, { name: 'coordinated' }),
+      formItemLayoutWithOutLabel: {
+        wrapperCol: {
+          xs: { span: 24, offset: 0 },
+          sm: { span: 20, offset: 4 }
+        }
+      },
+      color: '#777',
+      formItemLayout: {
+        labelCol: {
+          xs: { span: 24 },
+          sm: { span: 4 }
+        },
+        wrapperCol: {
+          xs: { span: 24 },
+          sm: { span: 20 }
+        }
+      },
+      optionsList: {
+        list: ['']
+      },
+      bulkdata: '',
+      underline: [],
+      allow: false
+    }
+  },
+  watch: {
+    underline () {
+      const fillsdata2 = /___/
+      const underlinedata = []
+      for (const i in this.underline) {
+        if (fillsdata2.test(this.underline[i]) === true) {
+          underlinedata.push('')
+        }
+      }
+      if (this.config.action !== 'edit') {
+        this.optionsfill = underlinedata
+      }
+    }
+  },
+  methods: {
+    // 接收传参
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.questionstype = config.type
+      this.subjectId = config.data.subjectId
+      this.formdata = config.data
+      this.fillstitle = ''
+
+      if (config.action === 'add') {
+        this.$nextTick(() => {
+          this.form.setFieldsValue({
+            answerShow: ''
+          })
+          this.optionsfill = []
+          // this.$refs.Drag.chiose = []
+          // this.$refs.Drag.multiple = []
+        })
+      }
+      this.singleanswer = ''
+      this.muanswer = []
+      if (config.action !== 'add' && (config.type === 'single' || config.type === 'multiple')) {
+        this.optionsList.list = JSON.parse(config.data.setting).list
+        const data = []
+        for (const i in this.optionsList.list) {
+          data.push(this.optionsList.list[i])
+        }
+        this.optionsList.list = data
+        this.answer = JSON.parse(config.data.setting).answer.toString()
+      } else if (config.type === 'single' || config.type === 'multiple') {
+        this.answer = this.answer.toString()
+        this.optionsList.list = ['']
+      }
+      if (this.questionstype === 'fills') {
+        this.fillstitle = config.data.title
+        this.optionsfill = JSON.parse(config.data.setting).answer
+        this.allow = JSON.parse(config.data.setting).allow === '1'
+      }
+      if (this.questionstype === 'judge') {
+        this.formdata.answer = JSON.parse(config.data.setting).answer
+      }
+      if (this.questionstype === 'answer') {
+        this.formdata.answer = JSON.parse(config.data.setting).answer
+      }
+      this.formdata.analysis = config.data.setting ? JSON.parse(config.data.setting).analysis : ''
+    },
+    // 添加选项
+    addOptions (key) {
+      this.optionsList.list.splice(key + 1, 0, '')
+      this.color = 'red'
+    },
+    // 删除选项
+    delOptions (key) {
+      if (this.optionsList.list.length === 1) {
+        return false
+      } else {
+        this.optionsList.list.splice(key, 1)
+      }
+      this.iconcolor()
+    },
+    iconcolor () {
+      if (this.optionsList.list.length === 1) {
+        this.color = '#777'
+      } else {
+        this.color = 'red'
+      }
+    },
+    // 接收答案选择
+    getAnswer (answer) {
+      if (this.questionstype === 'single') {
+        this.singleanswer = answer
+        this.form.setFieldsValue({
+          answerShow: this.singleanswer
+        })
+      }
+      if (this.questionstype === 'multiple') {
+        this.muanswer = answer
+        this.form.setFieldsValue({
+          answerShow: this.muanswer.toString()
+        })
+      }
+    },
+    // 批量修改
+    bulkEdit () {
+      this.visiblebulk = true
+      this.bulkdata = this.optionsList.list.join('\n')
+    },
+    // 批量修改提交
+    bulksubmit () {
+      this.visiblebulk = false
+      this.optionsList.list = this.bulkdata.split('\n').filter(item => item)
+    },
+    // 插入填空项
+    pushfills () {
+      const title = this.form.getFieldsValue().title + '___'
+      this.form.setFieldsValue({
+        title: title
+      })
+      const fillsdata = /[^_]/
+      this.underline = this.form.getFieldsValue().title.split(fillsdata)
+      if (this.config.action === 'edit') {
+        this.optionsfill.push('')
+      }
+    },
+    // 填空题刷新
+    refreshfills () {
+      const fillsdata = /[^_]/
+      this.underline = this.form.getFieldsValue().title.split(fillsdata)
+    },
+    allowchange (e) {
+      this.allow = e.target.checked
+    },
+    validateBlur (e) {
+      const reg = /^\s*$/
+      if (e.target.value && reg.test(e.target.value)) {
+        const arr = [{
+
+          message: '内容不能仅为空格!',
+
+          field: 'info[title]'
+
+        }]
+        this.form.setFields({ 'info[title]': { value: e.target.value, errors: arr } })
+      }
+    },
+    validateBlurForKeyword (e) {
+      const reg = /^\s*$/
+      if (e.target.value && reg.test(e.target.value)) {
+        const arr = [{
+
+          message: '内容不能仅为空格!',
+
+          field: 'info[title]'
+
+        }]
+        this.form.setFields({ 'setting[answer]': { value: e.target.value, errors: arr } })
+      }
+    },
+    // 数据提交
+    handleSubmit (e, type) {
+      e.preventDefault()
+      const self = this
+      this.form.validateFields((err, values) => {
+        values.setting = values.setting ? values.setting : {}
+        values.action = this.config.action
+        values.id = this.formdata.id
+        if (this.questionstype === 'fills') {
+          const fillsdata = /[^_]/
+          this.underline = this.form.getFieldsValue().title.split(fillsdata)
+          if (!values.info) {
+            values.info = {}
+          }
+          values.info.title = values.title
+          values.setting.allow = this.allow ? '1' : '0'
+          values.setting.answer = values.optionsfill
+          const down = /_/
+          if (!down.test(this.underline)) {
+            err = '请插入填空项'
+          }
+        }
+        values.info.subjectId = this.subjectId
+        if (this.questionstype === 'single' || this.questionstype === 'multiple') {
+          values['setting']['answer'] = this.questionstype === 'single' ? this.singleanswer : this.muanswer
+          const data = {}
+          this.optionsList.list.forEach((item, index) => {
+            data[String.fromCharCode(65 + index)] = item
+          })
+          values['setting']['list'] = data
+        }
+        // todo 校验空字符串
+        const reg = /^\s*$/
+        if (reg.test(values.info.title)) {
+          err = '标题不能仅为空格'
+        }
+        const arr = []
+        if (values.setting.list) {
+          for (const item in values.setting.list) {
+            arr.push(item)
+            if (!values.setting.list[item]) {
+              err = '选项内容不能为空'
+            }
+          }
+          if (arr.length < 2) {
+            err = '请添加至少两个以上的选项'
+          }
+        }
+        if (!err) {
+          values.id = this.formdata.id
+          if (this.config.action === 'edit') {
+            self.axios({
+              url: '/exam/question/action',
+              data: values
+            }).then(res => {
+              this.visible = false
+              self.$emit('on-show', '')
+              return res.result
+            })
+          } else if (type === 'next') {
+            self.axios({
+              url: '/exam/question/action',
+              data: values
+            }).then(res => {
+              this.formdata = {}
+              this.optionsfill = []
+              this.fillstitle = ''
+              this.optionsList = {}
+              this.optionsList.list = ['']
+              this.singleanswer = ''
+              this.muanswer = []
+              self.$emit('on-show', '')
+              this.form.resetFields()
+              if (this.questionstype === 'single' || this.questionstype === 'multiple') {
+                if (this.$refs.Drag.chiose) {
+                  this.$refs.Drag.chiose = []
+                }
+                if (this.$refs.Drag.multiple) {
+                  this.$refs.Drag.multiple = []
+                }
+              }
+              return res.result
+            })
+          } else {
+            self.axios({
+              url: '/exam/question/action',
+              data: values
+            }).then(res => {
+              this.visible = false
+              self.$emit('on-show', '')
+              return res.result
+            })
+          }
+        } else {
+          this.$message.warning(err)
+        }
+      })
+    },
+    // 题型变化
+    handleChange (e) {
+      this.questionstype = `${e.target.value}`
+      if (this.questionstype === 'single' || this.questionstype === 'multiple') {
+        this.$nextTick(() => {
+          this.form.setFieldsValue({
+            answerShow: ''
+          })
+          if (this.$refs.Drag.chiose) {
+            this.$refs.Drag.chiose = []
+          }
+          if (this.$refs.Drag.multiple) {
+            this.$refs.Drag.multiple = []
+          }
+          this.optionsList.list = ['']
+        })
+      }
+    },
+    refresh () {
+      this.$refs.table.refresh()
+    }
+  }
+}
+</script>
+<style scoped>
+.margin {
+  margin-left: 15px;
+}
+</style>

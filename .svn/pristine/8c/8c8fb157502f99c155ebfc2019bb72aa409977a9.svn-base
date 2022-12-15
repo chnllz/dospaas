@@ -1,0 +1,849 @@
+<template>
+  <div>
+    <a-form :form="form">
+      <a-space direction="vertical" :style="{ width: '100%' }">
+        <a-card size="small" :title="$t('评价样式')">
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('评价模式')">
+            <a-space direction="vertical">
+              <a-radio-group
+                v-decorator="['info[commentGrade]', { initialValue: parent.commentGrade }]"
+                :options="options"
+                @change="onGradeChange"
+              />
+              <a-row v-if="parent.commentGrade == 'forth' || parent.commentGrade == 'fifth'" class="satisfaction">
+                <a-col :span="5">
+                  <a-rate v-model="verySatisfied" disabled :count="countNumber" />
+                  <div>{{ $t('非常满意') }}</div>
+                </a-col>
+                <a-col :span="4">
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][verySatisfiedCheckTag]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.verySatisfiedCheckTag }
+                    ]"
+                  >
+                    {{ $t('标签必填') }}
+                  </a-checkbox>
+                  <br />
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][verySatisfiedCheckRemarks]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.verySatisfiedCheckRemarks }
+                    ]"
+                  >
+                    {{ $t('备注必填') }}
+                  </a-checkbox>
+                </a-col>
+                <a-col :span="15" :style="{ 'text-align': 'left' }">
+                  <template v-for="tag in commentGradeData.verySatisfiedTags">
+                    <a-tooltip v-if="tag.length > 20" :key="tag" :title="tag">
+                      <a-tag :key="tag" :closable="true" @close="() => handleClose(tag, 'verySatisfied')">
+                        {{ `${tag.slice(0, 20)}...` }}
+                      </a-tag>
+                    </a-tooltip>
+                    <a-tag v-else :key="tag" :closable="true" @close="() => handleClose(tag, 'verySatisfied')">
+                      {{ tag }}
+                    </a-tag>
+                  </template>
+                  <a-input
+                    v-if="commentGradeData.verySatisfiedVisible"
+                    ref="verySatisfiedInput"
+                    type="text"
+                    size="small"
+                    :style="{ width: '78px' }"
+                    :value="commentGradeData.verySatisfiedValue"
+                    @change="
+                      (e) => {
+                        handleInputChange(e, 'verySatisfied')
+                      }
+                    "
+                    @blur="handleInputConfirm('verySatisfied')"
+                    @keyup.enter="handleInputConfirm('verySatisfied')"
+                  />
+                  <a-tag v-else style="background: #fff; borderstyle: dashed" @click="showInput('verySatisfied')">
+                    <a-icon type="plus" />
+                    {{ $t('标签') }}
+                  </a-tag>
+                </a-col>
+              </a-row>
+              <a-row class="satisfaction">
+                <a-col :span="5">
+                  <a-rate v-model="satisfied" disabled :count="countNumber">
+                    <a-icon v-if="parent.commentGrade == 'second'" slot="character" type="like" />
+                  </a-rate>
+                  <div>{{ $t('满意') }}</div>
+                </a-col>
+                <a-col :span="4">
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][satisfiedCheckTag]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.satisfiedCheckTag }
+                    ]"
+                  >
+                    {{ $t('标签必填') }}
+                  </a-checkbox>
+                  <br />
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][satisfiedCheckRemarks]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.satisfiedCheckRemarks }
+                    ]"
+                  >
+                    {{ $t('备注必填') }}
+                  </a-checkbox>
+                </a-col>
+                <a-col :span="15" :style="{ 'text-align': 'left' }">
+                  <template v-for="tag in commentGradeData.satisfiedTags">
+                    <a-tooltip v-if="tag.length > 20" :key="tag" :title="tag">
+                      <a-tag :key="tag" :closable="true" @close="() => handleClose(tag, 'satisfied')">
+                        {{ `${tag.slice(0, 20)}...` }}
+                      </a-tag>
+                    </a-tooltip>
+                    <a-tag v-else :key="tag" :closable="true" @close="() => handleClose(tag, 'satisfied')">
+                      {{ tag }}
+                    </a-tag>
+                  </template>
+                  <a-input
+                    v-if="commentGradeData.satisfiedVisible"
+                    ref="satisfiedInput"
+                    type="text"
+                    size="small"
+                    :style="{ width: '78px' }"
+                    :value="commentGradeData.satisfiedValue"
+                    @change="
+                      (e) => {
+                        handleInputChange(e, 'satisfied')
+                      }
+                    "
+                    @blur="handleInputConfirm('satisfied')"
+                    @keyup.enter="handleInputConfirm('satisfied')"
+                  />
+                  <a-tag v-else style="background: #fff; borderstyle: dashed" @click="showInput('satisfied')">
+                    <a-icon type="plus" />
+                    {{ $t('标签') }}
+                  </a-tag>
+                </a-col>
+              </a-row>
+              <a-row v-if="parent.commentGrade == 'third' || parent.commentGrade == 'fifth'" class="satisfaction">
+                <a-col :span="5">
+                  <a-rate v-model="commonly" disabled :count="countNumber" />
+                  <div>{{ $t('一般') }}</div>
+                </a-col>
+                <a-col :span="4">
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][commonlyCheckTag]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.commonlyCheckTag }
+                    ]"
+                  >
+                    {{ $t('标签必填') }}
+                  </a-checkbox>
+                  <br />
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][commonlyCheckRemarks]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.commonlyCheckRemarks }
+                    ]"
+                  >
+                    {{ $t('备注必填') }}
+                  </a-checkbox>
+                </a-col>
+                <a-col :span="15" :style="{ 'text-align': 'left' }">
+                  <template v-for="tag in commentGradeData.commonlyTags">
+                    <a-tooltip v-if="tag.length > 20" :key="tag" :title="tag">
+                      <a-tag :key="tag" :closable="true" @close="() => handleClose(tag, 'commonly')">
+                        {{ `${tag.slice(0, 20)}...` }}
+                      </a-tag>
+                    </a-tooltip>
+                    <a-tag v-else :key="tag" :closable="true" @close="() => handleClose(tag, 'commonly')">
+                      {{ tag }}
+                    </a-tag>
+                  </template>
+                  <a-input
+                    v-if="commentGradeData.commonlyVisible"
+                    ref="commonlyInput"
+                    type="text"
+                    size="small"
+                    :style="{ width: '78px' }"
+                    :value="commentGradeData.commonlyValue"
+                    @change="
+                      (e) => {
+                        handleInputChange(e, 'commonly')
+                      }
+                    "
+                    @blur="handleInputConfirm('commonly')"
+                    @keyup.enter="handleInputConfirm('commonly')"
+                  />
+                  <a-tag v-else style="background: #fff; borderstyle: dashed" @click="showInput('commonly')">
+                    <a-icon type="plus" />
+                    {{ $t('标签') }}
+                  </a-tag>
+                </a-col>
+              </a-row>
+              <a-row class="satisfaction">
+                <a-col :span="5">
+                  <a-rate v-model="dissatisfied" disabled :count="countNumber">
+                    <a-icon v-if="parent.commentGrade == 'second'" slot="character" type="dislike" />
+                  </a-rate>
+                  <div>{{ $t('不满意') }}</div>
+                </a-col>
+                <a-col :span="4">
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][dissatisfiedCheckTag]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.dissatisfiedCheckTag }
+                    ]"
+                  >
+                    {{ $t('标签必填') }}
+                  </a-checkbox>
+                  <br />
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][dissatisfiedCheckRemarks]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.dissatisfiedCheckRemarks }
+                    ]"
+                  >
+                    {{ $t('备注必填') }}
+                  </a-checkbox>
+                </a-col>
+                <a-col :span="15" :style="{ 'text-align': 'left' }">
+                  <template v-for="tag in commentGradeData.dissatisfiedTags">
+                    <a-tooltip v-if="tag.length > 20" :key="tag" :title="tag">
+                      <a-tag :key="tag" :closable="true" @close="() => handleClose(tag, 'dissatisfied')">
+                        {{ `${tag.slice(0, 20)}...` }}
+                      </a-tag>
+                    </a-tooltip>
+                    <a-tag v-else :key="tag" :closable="true" @close="() => handleClose(tag, 'dissatisfied')">
+                      {{ tag }}
+                    </a-tag>
+                  </template>
+                  <a-input
+                    v-if="commentGradeData.dissatisfiedVisible"
+                    ref="dissatisfiedInput"
+                    type="text"
+                    size="small"
+                    :style="{ width: '78px' }"
+                    :value="commentGradeData.dissatisfiedValue"
+                    @change="
+                      (e) => {
+                        handleInputChange(e, 'dissatisfied')
+                      }
+                    "
+                    @blur="handleInputConfirm('dissatisfied')"
+                    @keyup.enter="handleInputConfirm('dissatisfied')"
+                  />
+                  <a-tag v-else style="background: #fff; borderstyle: dashed" @click="showInput('dissatisfied')">
+                    <a-icon type="plus" />
+                    {{ $t('标签') }}
+                  </a-tag>
+                </a-col>
+              </a-row>
+              <a-row v-if="parent.commentGrade == 'forth' || parent.commentGrade == 'fifth'" class="satisfaction">
+                <a-col :span="5">
+                  <a-rate v-model="veryDissatisfied" disabled :count="countNumber" />
+                  <div>{{ $t('非常不满意') }}</div>
+                </a-col>
+                <a-col :span="4">
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][veryDissatisfiedCheckTag]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.veryDissatisfiedCheckTag }
+                    ]"
+                  >
+                    {{ $t('标签必填') }}
+                  </a-checkbox>
+                  <br />
+                  <a-checkbox
+                    v-decorator="[
+                      'info[commentGradeData][veryDissatisfiedCheckRemarks]',
+                      { valuePropName: 'checked', initialValue: commentGradeData.veryDissatisfiedCheckRemarks }
+                    ]"
+                  >
+                    {{ $t('备注必填') }}
+                  </a-checkbox>
+                </a-col>
+                <a-col :span="15" :style="{ 'text-align': 'left' }">
+                  <template v-for="tag in commentGradeData.veryDissatisfiedTags">
+                    <a-tooltip v-if="tag.length > 20" :key="tag" :title="tag">
+                      <a-tag :key="tag" :closable="true" @close="() => handleClose(tag, 'veryDissatisfied')">
+                        {{ `${tag.slice(0, 20)}...` }}
+                      </a-tag>
+                    </a-tooltip>
+                    <a-tag v-else :key="tag" :closable="true" @close="() => handleClose(tag, 'veryDissatisfied')">
+                      {{ tag }}
+                    </a-tag>
+                  </template>
+                  <a-input
+                    v-if="commentGradeData.veryDissatisfiedVisible"
+                    ref="veryDissatisfiedInput"
+                    type="text"
+                    size="small"
+                    :style="{ width: '78px' }"
+                    :value="commentGradeData.veryDissatisfiedValue"
+                    @change="
+                      (e) => {
+                        handleInputChange(e, 'veryDissatisfied')
+                      }
+                    "
+                    @blur="handleInputConfirm('veryDissatisfied')"
+                    @keyup.enter="handleInputConfirm('veryDissatisfied')"
+                  />
+                  <a-tag v-else style="background: #fff; borderstyle: dashed" @click="showInput('veryDissatisfied')">
+                    <a-icon type="plus" />
+                    {{ $t('标签') }}
+                  </a-tag>
+                </a-col>
+              </a-row>
+            </a-space>
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="{ span: 3 }" :label="$t('是否解决')">
+            <a-select v-decorator="['info[commentProblemSolve]', { initialValue: parent.commentProblemSolve }]">
+              <a-select-option value="0">{{ $t('关闭') }}</a-select-option>
+              <a-select-option value="1">{{ $t('开启，非必填') }}</a-select-option>
+              <a-select-option value="2">{{ $t('开启，必填') }}</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('评价备注提示')">
+            <a-input
+              v-decorator="[
+                'info[commentRemarksTips]',
+                { initialValue: parent.commentRemarksTips || $t('请输入评价备注') }
+              ]"
+            />
+          </a-form-item>
+        </a-card>
+        <a-card size="small" :title="$t('评价文案')">
+          <a-divider orientation="left">{{ $t('评价邀请文案') }}</a-divider>
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('invite')">{{ $t('添加') }}</a-button>
+          </div>
+          <a-table
+            ref="commentInvite"
+            rowKey="id"
+            :columns="inviteColumns"
+            :dataSource="commentInvite"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'invite')">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'invite')">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+            <div slot="group" slot-scope="text">
+              {{ groupList.find((item) => item.id === text) ? groupList.find((item) => item.id === text)['name'] : '' }}
+            </div>
+          </a-table>
+          <br />
+          <a-divider orientation="left">{{ $t('评价感谢文案') }}</a-divider>
+          <div class="table-operator">
+            <a-button icon="plus" @click="handleAdd('thank')">{{ $t('添加') }}</a-button>
+          </div>
+          <a-table
+            ref="commentThank"
+            rowKey="id"
+            :columns="thankColumns"
+            :dataSource="commentThank"
+            size="small"
+            :pagination="false"
+          >
+            <div slot="action" slot-scope="text, record, index">
+              <a @click="handleEdit(record, 'thank')">{{ $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a-popconfirm :title="$t('您确认要删除该记录吗？')" @confirm="handleDelete(index, 'thank')">
+                <a :disabled="record.id == 1">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </div>
+            <div slot="group" slot-scope="text">
+              {{ groupList.find((item) => item.id === text) ? groupList.find((item) => item.id === text)['name'] : '' }}
+            </div>
+          </a-table>
+        </a-card>
+        <a-card size="small" :title="$t('满意度评价其他设置')">
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('客服邀评')">
+            <a-switch
+              v-decorator="[
+                `info[commentServiceInvite]`,
+                { valuePropName: 'checked', initialValue: parent.commentServiceInvite }
+              ]"
+            />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('访客评价入口') }}
+              <a-tooltip :title="$t('访客手动评价时，受{评价限制}中的所有因素限制。')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                `info[commentVisitorEntry]`,
+                { valuePropName: 'checked', initialValue: parent.commentVisitorEntry }
+              ]"
+              @change="(e) => (parent.commentVisitorEntry = e)"
+            />
+            <a-form-item
+              v-if="parent.commentVisitorEntry"
+              :labelCol="{ span: 4 }"
+              :wrapperCol="wrapperCol"
+              :label="$t('消息数不达标提示语')"
+            >
+              <a-input
+                v-decorator="[
+                  'info[belowStandardMessage]',
+                  {
+                    initialValue: parent.belowStandardMessage || $t('会话消息数未达到评价要求，请再聊一会后重试'),
+                    rules: [{ required: true, message: $t('消息数不达标提示语') }]
+                  }
+                ]"
+              />
+            </a-form-item>
+          </a-form-item>
+
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('自动邀评场景')">
+            {{ $t('客服手动结束') }}
+            <a-switch
+              v-decorator="[
+                'info[commentServerCancel]',
+                { valuePropName: 'checked', initialValue: parent.commentServerCancel }
+              ]"
+            />
+            <br />
+            {{ $t('访客手动结束') }}
+            <a-switch
+              v-decorator="[
+                'info[commentVisitorCancel]',
+                { valuePropName: 'checked', initialValue: parent.commentVisitorCancel }
+              ]"
+            />
+            <br />
+            {{ $t('系统结束会话') }}
+            <a-tooltip :title="$t('在满足{评价限制}的前提下，仅限：访客超时未回复结束、客服离线结束')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+            <a-switch
+              v-decorator="[
+                'info[commentSysCancel]',
+                { valuePropName: 'checked', initialValue: parent.commentSysCancel }
+              ]"
+              style="margin-left: 8px"
+            />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('评价限制')">
+            {{ $t('会话结束后') }}
+            <a-input-number
+              v-decorator="['info[commentTimeLimit]', { initialValue: parent.commentTimeLimit || 10 }]"
+              :min="10"
+              :max="480"
+            />
+            {{ $t('分钟内') }}
+            <a-tooltip :title="$t('访客只能在设定的时间内评价，超时后无法评价。默认值10，设置范围10~480')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+            <br />
+            <a-row type="flex">
+              <a-col flex="260px">
+                {{ $t('访客发送消息不少于') }}
+                <a-form-item style="display: inline-block">
+                  <a-input-number
+                    v-decorator="[
+                      'info[commentVistorSends]',
+                      {
+                        initialValue: parent.commentVistorSends || 3,
+                        rules: [{ required: true, message: $t('请输入条数') }]
+                      }
+                    ]"
+                    style="margin: 0px 8px"
+                    :min="0"
+                    :max="10"
+                  />
+                </a-form-item>
+                {{ $t('条，') }}
+              </a-col>
+              <a-col flex="auto">
+                {{ $t('且客服发送消息不少于') }}
+                <a-form-item style="display: inline-block">
+                  <a-input-number
+                    v-decorator="[
+                      'info[commentServerSends]',
+                      {
+                        initialValue: parent.commentServerSends || 3,
+                        rules: [{ required: true, message: $t('请输入条数') }]
+                      }
+                    ]"
+                    style="margin: 0px 8px"
+                    :min="0"
+                    :max="10"
+                  />
+                </a-form-item>
+                {{ $t('条') }}
+                <a-tooltip
+                  :title="
+                    $t(
+                      '发送消息数低于设定值时，所有自动邀评场景不生效，访客主动评价提示{消息数不达标提示语}。默认值：3，设置范围：0~10。'
+                    )
+                  "
+                >
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </a-col>
+            </a-row>
+            {{ $t('是否允许多次评价') }}
+            <a-tooltip :title="$t('开启后，访客可在设定的时间内对本次会话进行多次评价，系统将记录最后一次评价。')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+            <a-switch
+              v-decorator="[
+                `info[commentNumberLimit]`,
+                {
+                  valuePropName: 'checked',
+                  initialValue: parent.commentNumberLimit
+                }
+              ]"
+              style="margin-left: 8px"
+            />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('评价结果客服可见') }}
+              <a-tooltip :title="$t('开启后，系统将向客服推送访客的评价结果')">
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-switch
+              v-decorator="[
+                `info[commentResultDisplay]`,
+                {
+                  valuePropName: 'checked',
+                  initialValue: parent.commentResultDisplay
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-card>
+        <a-button type="primary" class="chatSettingSubmit" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      </a-space>
+    </a-form>
+    <setting-satisfaction-form ref="settingSatisfactionForm" @func="getLists" />
+  </div>
+</template>
+<script>
+import { Rate } from 'ant-design-vue'
+import Vue from 'vue'
+Vue.use(Rate)
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    SettingSatisfactionForm: () => import('./SettingSatisfactionForm')
+  },
+  props: {
+    parent: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    groupList: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      labelCol: { span: 3 },
+      wrapperCol: { span: 15 },
+      form: this.$form.createForm(this),
+      formEval: this.$form.createForm(this),
+      formTime: this.$form.createForm(this),
+      options: [{
+        label: this.$t('二级满意度'),
+        value: 'second'
+      }, {
+        label: this.$t('三级满意度'),
+        value: 'third'
+      }, {
+        label: this.$t('四级满意度'),
+        value: 'forth'
+      }, {
+        label: this.$t('五级满意度'),
+        value: 'fifth'
+      }],
+      commentGrade: '',
+      inviteColumns: [{
+        title: this.$t('操作'),
+        width: 120,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('评价邀请文案'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      thankColumns: [{
+        title: this.$t('操作'),
+        width: 120,
+        dataIndex: 'action',
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('模板名称'),
+        width: 200,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('适用技能组'),
+        dataIndex: 'group',
+        width: 300,
+        customRender: (text, record) => {
+          let list
+          if (text) {
+            list = []
+            text.forEach(textItem => {
+              if (this.groupList.find(item => item.id === textItem)) {
+                list.push(this.groupList.find(item => item.id === textItem)['name'])
+              }
+            })
+          } else {
+            list = ''
+          }
+          return list.length ? list.join(',') : '--'
+        }
+      }, {
+        title: this.$t('评价感谢文案'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('备注'),
+        width: 300,
+        dataIndex: 'remarks'
+      }],
+      // 邀请列表
+      commentInvite: this.parent.commentInvite && this.parent.commentInvite !== '[]' ? JSON.parse(this.parent.commentInvite) : [{ id: 1, name: '默认', group: [], content: '我是您的专属顾问${' + 'nickName}，请对我本次服务进行评价', remarks: '系统默认文案，不可删除' }],
+      dataInvite: {},
+      // 感谢列表
+      commentThank: this.parent.commentThank && this.parent.commentThank !== '[]' ? JSON.parse(this.parent.commentThank) : [{ id: 1, name: '默认', group: [], content: '感谢您的评价', remarks: '系统默认文案，不可删除' }],
+      dataThank: {},
+      formRemarks: this.$form.createForm(this),
+      formLimit: this.$form.createForm(this),
+      verySatisfied: 0,
+      satisfied: 1,
+      commonly: 0,
+      dissatisfied: 0,
+      veryDissatisfied: 1,
+      countNumber: 1,
+      commentGradeData: {
+        verySatisfiedTags: [],
+        verySatisfiedVisible: false,
+        verySatisfiedValue: '',
+        satisfiedTags: [],
+        satisfiedVisible: false,
+        satisfiedValue: '',
+        commonlyTags: [],
+        commonlyVisible: false,
+        commonlyValue: '',
+        dissatisfiedTags: [],
+        dissatisfiedVisible: false,
+        dissatisfiedValue: '',
+        veryDissatisfiedTags: [],
+        veryDissatisfiedVisible: false,
+        veryDissatisfiedValue: ''
+      }
+    }
+  },
+  mounted () {
+    this.show()
+  },
+  methods: {
+    show () {
+      if (this.parent.commentGrade.length === 0 || !this.parent.commentGrade) {
+        this.parent.commentGrade = 'second'
+      }
+      this.commentGrade = this.parent.commentGrade
+      if (this.parent.commentGradeData && this.parent.commentGradeData.length > 0) {
+        this.commentGradeData = Object.assign(this.commentGradeData, JSON.parse(this.parent.commentGradeData))
+      }
+      this.changeGrade(this.commentGrade)
+    },
+    handleClose (removedTag, type) {
+      const tags = this.commentGradeData[type + 'Tags'].filter(tag => tag !== removedTag)
+      this.commentGradeData[type + 'Tags'] = tags
+    },
+    showInput (type) {
+      this.commentGradeData[type + 'Visible'] = true
+      this.$nextTick(function () {
+        this.$refs[type + 'Input'].focus()
+      })
+    },
+    handleInputChange (e, type) {
+      this.commentGradeData[type + 'Value'] = e.target.value
+    },
+    handleInputConfirm (type) {
+      const inputValue = this.commentGradeData[type + 'Value']
+      const tags = this.commentGradeData[type + 'Tags']
+      if (inputValue && inputValue.trim() && tags.indexOf(inputValue) === -1) {
+        this.commentGradeData[type + 'Tags'] = [...tags, inputValue]
+      }
+      this.commentGradeData[type + 'Visible'] = false
+      this.commentGradeData[type + 'Value'] = ''
+    },
+    changeGrade (e) {
+      if (e === 'second') {
+        this.countNumber = 1
+        this.satisfied = 1
+        this.dissatisfied = 0
+      } else if (e === 'third') {
+        this.satisfied = 3
+        this.commonly = 2
+        this.dissatisfied = 1
+        this.countNumber = 3
+      } else if (e === 'forth') {
+        this.countNumber = 4
+        this.verySatisfied = 4
+        this.satisfied = 3
+        this.dissatisfied = 2
+        this.veryDissatisfied = 1
+      } else {
+        this.countNumber = 5
+        this.verySatisfied = 5
+        this.satisfied = 4
+        this.commonly = 3
+        this.dissatisfied = 2
+        this.veryDissatisfied = 1
+      }
+    },
+    handleAdd (type) {
+      this.$nextTick(() => {
+        this.$refs.settingSatisfactionForm.show({
+          action: 'add',
+          title: this.$t('添加'),
+          type,
+          groupList: this.groupList,
+          contentLabel: type === 'invite' ? this.$t('评价邀请文案') : this.$t('评价感谢文案'),
+          commentLists: type === 'invite' ? this.commentInvite : this.commentThank,
+          data: {
+            id: (new Date()).valueOf(),
+            name: '',
+            group: '',
+            content: '',
+            remarks: ''
+          }
+        })
+      })
+    },
+    handleEdit (record, type) {
+      this.$nextTick(() => {
+        this.$refs.settingSatisfactionForm.show({
+          action: 'edit',
+          title: this.$t('编辑：'),
+          type,
+          groupList: this.groupList,
+          contentLabel: type === 'invite' ? this.$t('评价邀请文案') : this.$t('评价感谢文案'),
+          commentLists: type === 'invite' ? this.commentInvite : this.commentThank,
+          data: record
+        })
+      })
+    },
+    handleDelete (index, type) {
+      if (type === 'invite') {
+        this.commentInvite.splice(index, 1)
+      } else {
+        this.commentThank.splice(index, 1)
+      }
+    },
+    getLists (data, type) {
+      if (type === 'invite') {
+        this.commentInvite = data
+      } else {
+        this.commentThank = data
+      }
+    },
+    onGradeChange (e) {
+      this.parent.commentGrade = e.target.value
+      this.changeGrade(e.target.value)
+    },
+    handleSubmit () {
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          values.info.commentGradeData = JSON.stringify(Object.assign(values.info.commentGradeData, {
+            verySatisfiedTags: this.commentGradeData.verySatisfiedTags,
+            satisfiedTags: this.commentGradeData.satisfiedTags,
+            commonlyTags: this.commentGradeData.commonlyTags,
+            dissatisfiedTags: this.commentGradeData.dissatisfiedTags,
+            veryDissatisfiedTags: this.commentGradeData.veryDissatisfiedTags
+          }))
+          values.info = Object.assign(values.info, { commentInvite: JSON.stringify(this.commentInvite), commentThank: JSON.stringify(this.commentThank) })
+          this.axios({
+            url: '/chat/setting/save',
+            data: Object.assign(values, { action: 'submit' })
+          }).then(res => {
+            if (res.code === 0) {
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.satisfaction {
+  width: 900px;
+  border: 1px solid #eaeaea;
+  text-align: center;
+}
+.remarks {
+  border: 1px solid #eaeaea;
+  border-left: 0;
+  height: 76px;
+  width: 100%;
+  padding: 0 15px;
+}
+.borderBox {
+  border: 1px solid #eaeaea;
+  padding: 10px 15px;
+  margin-bottom: 20px;
+  margin-right: 24px;
+}
+.bottomDistance {
+  margin: 20px 0;
+}
+/deep/.formChildren {
+  .ant-form-item-children {
+    display: flex;
+  }
+}
+</style>

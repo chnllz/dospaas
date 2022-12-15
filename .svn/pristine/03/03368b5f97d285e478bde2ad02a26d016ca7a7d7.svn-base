@@ -1,0 +1,480 @@
+<template>
+  <div class="page">
+    <a-spin :spinning="loading">
+      <a-tabs v-model="currentTab" :animated="false" @change="handleTabChange">
+        <a-tab-pane v-for="parentItem in tabList" :key="parentItem.key" :tab="parentItem.title">
+          <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }" class="search">
+            <a-card size="small" :title="$t('搜索')">
+              <a-space slot="extra">
+                <a-button htmlType="submit" @click="getDataList()">{{ $t('搜索') }}</a-button>
+                <a-button @click="reset">{{ $t('重置') }}</a-button>
+                <a v-if="parentItem.key === 'time'" @click="advancedChange">
+                  {{ advanced ? $t('收起') : $t('展开') }}
+                  <a-icon :type="advanced ? 'up' : 'down'" />
+                </a>
+              </a-space>
+              <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+                <a-col :span="6">
+                  <a-form-item :label="$t('会话开始时间')">
+                    <a-range-picker
+                      v-if="['day', 'time'].includes(parentItem.key)"
+                      v-model="showObj['sessionTime' + parentItem.key]"
+                      :allowClear="false"
+                      :disabled-date="disabledDate"
+                      :ranges="{
+                        [$t('昨天')]: [
+                          moment().startOf('day').subtract('day', 1),
+                          moment().endOf('day').subtract('day', 1)
+                        ],
+                        [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                        [$t('最近七天')]: [moment().subtract(6, 'days'), moment()],
+                        [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                        [$t('最近31天')]: [moment().subtract(30, 'days'), moment()]
+                      }"
+                      format="YYYY-MM-DD"
+                      style="width: 100%"
+                      @change="getInputTime"
+                      @openChange="onOpenChange"
+                      @calendarChange="onCalendarChange"
+                    />
+                    <a-range-picker
+                      v-else-if="parentItem.key == 'month'"
+                      v-model="showObj['sessionTime' + parentItem.key]"
+                      style="width: 100%"
+                      :allowClear="false"
+                      format="YYYY-MM"
+                      :ranges="{
+                        [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                        [$t('上个月')]: [
+                          moment().startOf('month').subtract('month', 1),
+                          moment().endOf('month').subtract('month', 1)
+                        ],
+                        [$t('最近3个月')]: [moment().subtract(2, 'month'), moment()]
+                      }"
+                      :mode="modeMonth"
+                      :open="openMonth"
+                      @change="
+                        (date, dateString) => {
+                          queryParam.startTime = dateString[0] + '-01'
+                          queryParam.endTime = dateString[1] + '-01'
+                        }
+                      "
+                      @openChange="openMonthChange"
+                      @panelChange="handlePanelChange"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col v-if="parentItem.key === 'time'" :span="6">
+                  <a-form-item :label="$t('时间段')">
+                    <a-select v-model="showObj['period' + parentItem.key]" style="width: 100%">
+                      <a-select-option v-for="(item, index) in timeIntervalData" :key="index" :value="item.value">
+                        {{ item.label }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('技能组')">
+                    <a-select
+                      v-model="showObj['groupId' + parentItem.key]"
+                      mode="multiple"
+                      allowClear
+                      showSearch
+                      option-filter-prop="children"
+                      style="width: 100%"
+                    >
+                      <a-select-option v-for="item in groupList" :key="item.id" :value="item.id">
+                        {{ item.name }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('渠道')">
+                    <a-select
+                      v-model="showObj['channel' + parentItem.key]"
+                      style="width: 100%"
+                      mode="multiple"
+                      allowClear
+                      showSearch
+                      option-filter-prop="children"
+                    >
+                      <a-select-option v-for="item in channelLists" :key="item.value" :value="item.value">
+                        {{ item.label }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('自定义接通时长')">
+                    <div style="display: flex; margin-top: 4px">
+                      <a-input-number
+                        v-model="showObj['second_' + parentItem.key]"
+                        style="width: 100%; margin-right: -1px"
+                        :min="0"
+                        :max="120"
+                        @change="
+                          (e) => {
+                            if (!e) {
+                              queryParam.second = 0
+                            }
+                          }
+                        "
+                      ></a-input-number>
+                      <a-button style="display: inline-block">{{ $t('秒') }}</a-button>
+                    </div>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </a-card>
+          </a-form>
+          <a-row type="flex" justify="space-between" align="middle" style="margin-bottom: 8px">
+            <a-col>
+              <a-space>
+                <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+              </a-space>
+            </a-col>
+            <a-col>
+              <a-popover placement="left">
+                <template slot="content">
+                  <div v-dompurify-html="content.replace(/。/g, `。 <br />`)" style="width: 300px"></div>
+                </template>
+                <a-icon type="question-circle" style="font-size: 16px" />
+              </a-popover>
+            </a-col>
+          </a-row>
+          <a-table
+            ref="table"
+            :scroll="{ x: true, y: advanced ? windowHeight - 400 : windowHeight - 370 }"
+            class="table-fill"
+            size="small"
+            rowKey="conversationDate"
+            :columns="columns"
+            :dataSource="showTable['dataList' + parentItem.key]"
+            :pagination="false"
+          ></a-table>
+        </a-tab-pane>
+      </a-tabs>
+      <general-export ref="generalExport" />
+    </a-spin>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      loading: false,
+      // 搜索栏显示参数
+      showObj: {
+        sessionTimeday: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+        sessionTimetime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+        sessionTimemonth: [this.moment().startOf('month'), this.moment().startOf('month')],
+        periodtime: '60'
+      },
+      // 表格数据对象
+      showTable: {},
+      showApi: {
+        dayIs: false,
+        monthIs: false,
+        timeIs: false
+      },
+      modeMonth: ['month', 'month'],
+      currentTab: 'day',
+      sessionTime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+      tabList: [{
+        title: this.$t('接通率-按天'),
+        key: 'day'
+      }, {
+        title: this.$t('接通率-按月'),
+        key: 'month'
+      }, {
+        title: this.$t('接通率-按时段'),
+        key: 'time'
+      }],
+      openMonth: false,
+      timeIntervalData: [{
+        label: this.$t('1小时'),
+        value: '60'
+      }, {
+        label: this.$t('30分钟'),
+        value: '30'
+      }, {
+        label: this.$t('15分钟'),
+        value: '15'
+      }],
+      groupList: [],
+      channelLists: [],
+      advanced: false,
+      queryParam: {
+        startTime: this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        endTime: this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        second: 60,
+        sortField: 'conversationDate',
+        sortOrder: 'descend',
+        tab: 'day'
+      },
+      columns: [{
+        title: '#',
+        width: 40,
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('会话开始时间'),
+        dataIndex: 'conversationDate',
+        width: 150,
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : Date.parse(a.conversationDate.replace(/-/g, '/')) - Date.parse(b.conversationDate.replace(/-/g, '/'))
+      }, {
+        title: this.$t('请求人工量'),
+        width: 120,
+        dataIndex: 'artificialNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.artificialNumber - b.artificialNumber
+      }, {
+        title: this.$t('人工接通量'),
+        width: 120,
+        dataIndex: 'accessNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.accessNumber - b.accessNumber
+      }, {
+        title: this.$t('放弃量'),
+        width: 80,
+        dataIndex: 'giveUpNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.giveUpNumber - b.giveUpNumber
+      }, {
+        title: this.$t('接通率'),
+        width: 80,
+        dataIndex: 'connectRate',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : Number(a.connectRate.substring(0, a.connectRate.indexOf('.') + 3)) - Number(b.connectRate.substring(0, b.connectRate.indexOf('.') + 3))
+      }, {
+        title: this.$t('20秒接通量'),
+        width: 120,
+        dataIndex: 'twentyConnectedNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.twentyConnectedNumber - b.twentyConnectedNumber
+      }, {
+        title: this.$t('20秒接通率'),
+        width: 120,
+        dataIndex: 'twentyConnectedRate',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : Number(a.twentyConnectedRate.substring(0, a.twentyConnectedRate.indexOf('.') + 3)) - Number(b.twentyConnectedRate.substring(0, b.twentyConnectedRate.indexOf('.') + 3))
+      }, {
+        title: this.$t('30秒接通量'),
+        width: 120,
+        dataIndex: 'thirtyConnectedNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.thirtyConnectedNumber - b.thirtyConnectedNumber
+      }, {
+        title: this.$t('30秒接通率'),
+        width: 120,
+        dataIndex: 'thirtyConnectedRate',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : Number(a.thirtyConnectedRate.substring(0, a.thirtyConnectedRate.indexOf('.') + 3)) - Number(b.thirtyConnectedRate.substring(0, b.thirtyConnectedRate.indexOf('.') + 3))
+      }, {
+        title: this.$t('自定义时长接通量'),
+        width: 180,
+        dataIndex: 'secondConnectedNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.secondConnectedNumber - b.secondConnectedNumber
+      }, {
+        title: this.$t('自定义时长接通率'),
+        width: 180,
+        dataIndex: 'secondConnectedRate',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : Number(a.secondConnectedRate.substring(0, a.secondConnectedRate.indexOf('.') + 3)) - Number(b.secondConnectedRate.substring(0, b.secondConnectedRate.indexOf('.') + 3))
+      }],
+      yearFormat: 'YYYY',
+      windowHeight: document.documentElement.clientHeight,
+      disabledCurrent: null,
+      content: `${this.$t('会话开始时间：访客接入在线客服系统的时间。')}<br />
+
+                ${this.$t('请求人工量：访客请求人工客服的数量。')}<br />
+
+                ${this.$t('人工接通量：访客被客服接起的数量。')}<br />
+
+                ${this.$t('放弃量：访客进入过排队，最终没有被人工客服接起的数量。')}<br />
+
+                ${this.$t('接通率：人工接通量/请求人工量*100%。')}<br />
+
+                ${this.$t('20秒接通量：访客接入在线客服系统后，20秒内被人工客服接起的数量。')}<br />
+
+                ${this.$t('20秒接通率：20秒接通量/请求人工量*100%。')}<br />
+
+                ${this.$t('30秒接通量：访客接入在线客服系统后，30秒内被人工客服接起的数量。')}<br />
+
+                ${this.$t('30秒接通率：30秒接通量/请求人工量*100%。')}<br />
+
+                ${this.$t('自定义时长接通量：访客接入在线客服系统后，{自定义时长}内被人工客服接起的数量。')}<br />
+
+                ${this.$t('自定义时长接通率：自定义时长接通量/请求人工量*100%。')}`
+    }
+  },
+  created () {
+    this.getGroup()
+    this.getChannel()
+    this.getDataList()
+  },
+  mounted () {
+    const strArr = ['day', 'month', 'time']
+    strArr.forEach(element => {
+      this.$set(this.showObj, ['second_' + element], 60)
+      this.$set(this.showObj, ['groupId' + element], undefined)
+      this.$set(this.showObj, ['channel' + element], undefined)
+    })
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+  },
+  methods: {
+    getDataList () {
+      this.queryParam.groupId = this.showObj['groupId' + this.currentTab]
+      this.queryParam.channel = this.showObj['channel' + this.currentTab]
+      this.queryParam.second = this.showObj['second_' + this.currentTab]
+      this.queryParam.period = this.showObj['period' + this.currentTab]
+      if (this.queryParam.second > 120) {
+        this.$message.warning(this.$t('自定义接通时长不能超过120'))
+        return false
+      }
+      this.loading = true
+      this.axios({
+        url: '/chat/customerReport/init',
+        data: this.queryParam
+      }).then(res => {
+        this.loading = false
+        if (res.code !== 0) {
+          this.$message.error(res.message)
+          return
+        }
+        this.showTable['dataList' + this.currentTab] = res.result.data
+        if (res.result?.total) {
+          const obj = { ...res.result.total, ...{ conversationDate: this.$t('合计') } }
+          this.showTable['dataList' + this.currentTab].push(obj)
+        }
+        this.$forceUpdate()
+      })
+    },
+    // 获取技能组
+    getGroup () {
+      this.axios({
+        url: '/chat/group/groupList'
+      }).then(res => {
+        this.groupList = res.result
+      })
+    },
+    // 获取渠道
+    getChannel () {
+      this.axios({
+        url: '/chat/channel/getChannel'
+      }).then(res => {
+        this.channelLists = res.result
+      })
+    },
+    // 重置
+    reset () {
+      this.showObj['groupId' + this.currentTab] = undefined
+      this.showObj['channel' + this.currentTab] = undefined
+      this.showObj['second_' + this.currentTab] = 60
+      this.showObj['period' + this.currentTab] = this.currentTab === 'time' ? '60' : undefined
+      const startDayTime = this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      const startMonth = this.moment().startOf('month').format('YYYY-MM-DD')
+      const endDayTime = this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      this.queryParam = {
+        startTime: ['day', 'time'].includes(this.currentTab) ? startDayTime : startMonth,
+        endTime: ['day', 'time'].includes(this.currentTab) ? endDayTime : startMonth,
+        second: 60,
+        period: this.currentTab === 'time' ? '60' : undefined,
+        sortField: 'conversationDate',
+        sortOrder: 'descend',
+        tab: this.currentTab
+      }
+      const day = [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)]
+      const month = [this.moment().startOf('month'), this.moment().startOf('month')]
+      this.showObj['sessionTime' + this.currentTab] = ['day', 'time'].includes(this.currentTab) ? day : this.currentTab === 'month' ? month : ''
+      this.getDataList()
+    },
+    advancedChange () {
+      this.advanced = !this.advanced
+    },
+    handleTabChange (activeKey) {
+      this.currentTab = activeKey
+      this.queryParam.tab = activeKey
+      this.advanced = false
+      if (['day', 'month'].includes(activeKey)) {
+        this.$set(this.queryParam, 'period', undefined)
+        this.columns[1].title = this.$t('会话开始时间')
+        this.queryParam.sortOrder = 'descend'
+        if (activeKey === 'month' && !this.showApi.monthIs) {
+          this.getDataList()
+          this.showApi.monthIs = true
+        }
+      } else {
+        this.$set(this.queryParam, 'period', this.showObj['period' + this.currentTab] || '60')
+        this.columns[1].title = this.$t('会话时间段')
+        if (!this.showApi.timeIs) {
+          this.getDataList()
+          this.showApi.timeIs = true
+        }
+      }
+      this.columns[1].sorter = activeKey !== 'time' ? (a, b) => Date.parse(a.conversationDate.replace(/-/g, '/')) - Date.parse(b.conversationDate.replace(/-/g, '/')) : false
+      this.queryParam.startTime = this.showObj['sessionTime' + this.currentTab][0].format('YYYY-MM-DD')
+      this.queryParam.endTime = this.showObj['sessionTime' + this.currentTab][1].format('YYYY-MM-DD')
+    },
+    onOpenChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+    },
+    onCalendarChange (dates) {
+      // 获取手动选择的时间段起始值
+      this.disabledCurrent = dates[0]
+    },
+    disabledDate (current, date) {
+      return current && current < this.moment(this.disabledCurrent).subtract(1, 'year').endOf('day') ||
+        current > this.moment(this.disabledCurrent).add(1, 'years').endOf('day')
+    },
+    getInputTime (date, dateString) {
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    // 控制月份中改变的设置
+    openMonthChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+      this.openMonth = status
+    },
+    handlePanelChange (value, mode) {
+      const chooseTime = value
+      this.modeMonth = [
+        mode[0] === 'date' ? 'month' : mode[0],
+        mode[1] === 'date' ? 'month' : mode[1]
+      ]
+      if (mode[0] === 'date') {
+        this.disabledCurrent = value[0]
+      } else {
+        this.disabledCurrent = null
+      }
+      if (mode[1] === 'date') {
+        this.openMonth = false
+        const time = value[1].diff(value[0], 'month')
+        if (time > 11) {
+          chooseTime[0] = this.moment(value[1]).subtract(11, 'M').startOf('day')
+        }
+      }
+      this.queryParam.startTime = chooseTime[0].format('YYYY-MM-DD')
+      this.queryParam.endTime = chooseTime[1].format('YYYY-MM-DD')
+      this.showObj['sessionTime' + this.currentTab] = chooseTime
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        number: 'SysAnalyze',
+        className: 'ExportChatStatsTask',
+        parameter: {
+          condition: {
+            req: this.queryParam,
+            type: 'analyze'
+          }
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,1597 @@
+<template>
+  <a-form :form="form">
+    <a-tabs default-active-key="urge" tabPosition="left">
+      <a-tab-pane key="urge" tab="催办">
+        <a-alert message="记录催办日志，有效催办会向流程当前办理人发送催办通知" type="info" />
+        <div class="line">
+          <span class="divider-right label">催办总次数限制</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'urge[enableAllCounts]',
+                {
+                  initialValue: workflowOpreation.urge.enableAllCounts || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'urge', 'enableAllCounts')"
+            />
+          </a-form-item>
+          <template v-if="workflowOpreation.urge.enableAllCounts">
+            <span class="divider">流程催办次数超过</span>
+            <a-form-item>
+              <a-input-number
+                v-decorator="[
+                  'urge[allCounts]',
+                  {
+                    initialValue: workflowOpreation.urge.allCounts || 1,
+                    rules: [
+                      { required: true, message: $t('请输入催办总次数限制') },
+                      {
+                        validator: (rule, value, callback) => {
+                          validatorNumber(value, 1, 5000, callback)
+                        }
+                      }
+                    ]
+                  }
+                ]"
+              />
+            </a-form-item>
+            <span class="divider-right">次(含)后，不允许催办，提示语</span>
+            <a-form-item>
+              <a-input
+                v-decorator="[
+                  'urge[allCountsTips]',
+                  { initialValue: workflowOpreation.urge.allCountsTips || '催办失败，催办次数已达到上限' }
+                ]"
+                style="width: 320px"
+                :maxLength="50"
+              />
+            </a-form-item>
+          </template>
+        </div>
+        <div class="line">
+          <span class="divider-right label">催办时间间隔</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'urge[enableTimeInterval]',
+                {
+                  initialValue: workflowOpreation.urge.enableTimeInterval || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'urge', 'enableTimeInterval')"
+            />
+          </a-form-item>
+          <template v-if="workflowOpreation.urge.enableTimeInterval">
+            <span class="divider">离上一次催办≤</span>
+            <a-form-item>
+              <a-input-number
+                v-decorator="[
+                  'urge[timeInterval]',
+                  {
+                    initialValue: workflowOpreation.urge.timeInterval || 1,
+                    rules: [
+                      { required: true, message: $t('请输入催办时间间隔') },
+                      {
+                        validator: (rule, value, callback) => {
+                          validatorNumber(value, 1, 43200, callback)
+                        }
+                      }
+                    ]
+                  }
+                ]"
+              />
+            </a-form-item>
+            <span class="divider-right">分钟(含)，不允许催办，提示语</span>
+            <a-form-item>
+              <a-input
+                v-decorator="[
+                  'urge[timeIntervalTips]',
+                  { initialValue: workflowOpreation.urge.timeIntervalTips || '催办失败，离上次催办时间太短' }
+                ]"
+                style="width: 320px"
+                :maxLength="50"
+              />
+            </a-form-item>
+          </template>
+        </div>
+        <div class="line">
+          <span class="divider-right label">首次催办限制</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'urge[enableFirstAvailable]',
+                {
+                  initialValue: workflowOpreation.urge.enableFirstAvailable || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'urge', 'enableFirstAvailable')"
+            />
+          </a-form-item>
+          <template v-if="workflowOpreation.urge.enableFirstAvailable">
+            <span class="divider">流程创建后</span>
+            <a-form-item>
+              <a-input-number
+                v-decorator="[
+                  'urge[firstAvailable]',
+                  {
+                    initialValue: workflowOpreation.urge.firstAvailable || 1,
+                    rules: [
+                      { required: true, message: $t('请输入首次催办时间限制') },
+                      {
+                        validator: (rule, value, callback) => {
+                          validatorNumber(value, 1, 43200, callback)
+                        }
+                      }
+                    ]
+                  }
+                ]"
+              />
+            </a-form-item>
+            <span class="divider-right">分钟(含)内，不允许催办，提示语</span>
+            <a-form-item>
+              <a-input
+                v-decorator="[
+                  'urge[firstAvailableTips]',
+                  { initialValue: workflowOpreation.urge.firstAvailableTips || '催办失败，未达到允许催办时间' }
+                ]"
+                style="width: 320px"
+                :maxLength="50"
+              />
+            </a-form-item>
+          </template>
+        </div>
+        <div class="line">
+          <span class="divider-right label">催办日历</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'urge[enableWorkCalendar]',
+                {
+                  initialValue: workflowOpreation.urge.enableWorkCalendar || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'urge', 'enableWorkCalendar')"
+            />
+          </a-form-item>
+          <template v-if="workflowOpreation.urge.enableWorkCalendar">
+            <span class="divider">在</span>
+            <a-form-item>
+              <a-input-number
+                v-decorator="[
+                  'urge[workCalendar]',
+                  {
+                    initialValue: workflowOpreation.urge.workCalendar || 1,
+                    rules: [{ required: true, message: $t('请选择时间范围') }]
+                  }
+                ]"
+              />
+            </a-form-item>
+            <span class="divider-right">范围内才能催办，否则不允许催办，提示语</span>
+            <a-form-item>
+              <a-input
+                v-decorator="[
+                  'urge[workCalendarTips]',
+                  { initialValue: workflowOpreation.urge.workCalendarTips || '当前时间不允许催办' }
+                ]"
+                style="width: 320px"
+                :maxLength="50"
+              />
+            </a-form-item>
+          </template>
+        </div>
+        <div class="line">
+          <span class="divider-right label">正常时限限制</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'urge[enableNormalTimeLimit]',
+                {
+                  initialValue: workflowOpreation.urge.enableNormalTimeLimit || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'urge', 'enableNormalTimeLimit')"
+            />
+          </a-form-item>
+          <template v-if="workflowOpreation.urge.enableNormalTimeLimit">
+            <span class="divider">流程变迁在正常时限内时，不允许催办，提示语</span>
+            <a-form-item>
+              <a-input
+                v-decorator="[
+                  'urge[normalTimeLimitTips]',
+                  { initialValue: workflowOpreation.urge.normalTimeLimitTips || '催办失败，流程在正常时限内' }
+                ]"
+                style="width: 320px"
+                :maxLength="50"
+              />
+            </a-form-item>
+          </template>
+        </div>
+        <div class="line">
+          <span class="divider-right label">可【催办】流程状态设置</span>
+          <a-form-item>
+            <a-select
+              v-decorator="[
+                'urge[statusFilter]',
+                {
+                  initialValue: workflowOpreation.urge.statusFilter || 'noset'
+                }
+              ]"
+              class="line-select"
+              @change="onChange($event, 'urge', 'statusFilter')"
+            >
+              <a-select-option value="noset">
+                {{ $t('不限制') }}
+              </a-select-option>
+              <a-select-option value="include">
+                {{ $t('允许催办') }}
+              </a-select-option>
+              <a-select-option value="exclude">
+                {{ $t('不允许催办') }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <span class="divider-right"></span>
+          <a-form-item v-if="workflowOpreation.urge.statusFilter === 'include'">
+            <a-select
+              v-decorator="[
+                'urge[includeStatus]',
+                {
+                  initialValue: workflowOpreation.urge.includeStatus || []
+                }
+              ]"
+              mode="tags"
+              style="width: 320px"
+              placeholder="请选择允许催办的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item v-if="workflowOpreation.urge.statusFilter === 'exclude'">
+            <a-select
+              v-decorator="[
+                'urge[excludeStatus]',
+                {
+                  initialValue: workflowOpreation.urge.excludeStatus || []
+                }
+              ]"
+              style="width: 320px"
+              mode="tags"
+              placeholder="请选择不允许催办的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">流程催办前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'urge[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.urge.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'urge', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.urge.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['urge[remarks]', { initialValue: workflowOpreation.urge.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">催办原因</span>
+          <a-button v-action:add class="divider-right" icon="plus" @click="handleAddSet('urge')">
+            {{ $t('添加') }}
+          </a-button>
+          <a-button icon="edit" class="divider-right" @click="openModal('urge')">{{ $t('批量编辑') }}</a-button>
+          <a-button icon="sort-ascending" class="divider-right" @click="handleSort('urge')">{{ $t('排序') }}</a-button>
+        </div>
+        <div class="line">
+          <a-table
+            :columns="columnsSetUrge"
+            :data-source="urgeReasons"
+            rowKey="id"
+            size="small"
+            :pagination="false"
+            class="marginTop12"
+            style="width: 960px"
+          >
+            <template slot="name" slot-scope="text, record">
+              <span v-if="!record.editable">{{ text }}</span>
+              <a-input v-else v-model="record.name" size="small" />
+            </template>
+            <div slot="action" slot-scope="text, record">
+              <a @click="handleEditSet(record)">{{ record.editable ? $t('保存') : $t('编辑') }}</a>
+              <a-divider type="vertical" />
+              <a @click="handleDeleteSet(record, 'urge')">{{ $t('删除') }}</a>
+            </div>
+          </a-table>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="remarks" tab="备注">
+        <a-alert message="可以对流程进行备注，备注将写入流程日志" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">可【备注】流程状态设置</span>
+          <a-form-item>
+            <a-select
+              v-decorator="[
+                'remarks[statusFilter]',
+                {
+                  initialValue: workflowOpreation.remarks.statusFilter || 'noset'
+                }
+              ]"
+              class="line-select"
+              @change="onChange($event, 'remarks', 'statusFilter')"
+            >
+              <a-select-option value="noset">
+                {{ $t('不限制') }}
+              </a-select-option>
+              <a-select-option value="include">
+                {{ $t('允许备注') }}
+              </a-select-option>
+              <a-select-option value="exclude">
+                {{ $t('不允许备注') }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <span class="divider-right"></span>
+          <a-form-item v-if="workflowOpreation.remarks.statusFilter === 'include'">
+            <a-select
+              v-decorator="[
+                'remarks[includeStatus]',
+                {
+                  initialValue: workflowOpreation.remarks.includeStatus || []
+                }
+              ]"
+              mode="tags"
+              style="width: 320px"
+              placeholder="请选择允许备注的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item v-if="workflowOpreation.remarks.statusFilter === 'exclude'">
+            <a-select
+              v-decorator="[
+                'remarks[excludeStatus]',
+                {
+                  initialValue: workflowOpreation.remarks.excludeStatus || []
+                }
+              ]"
+              style="width: 320px"
+              mode="tags"
+              placeholder="请选择不允许备注的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </div>
+        <div class="line">
+          <span class="divider-right label">备注回写</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'remarks[remarksEvents]',
+                {
+                  initialValue: workflowOpreation.remarks.remarksEvents || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'remarks', 'remarksEvents')"
+            />
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">流程备注后事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'remarks[enableAfterEvent]',
+                {
+                  initialValue: workflowOpreation.remarks.enableAfterEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'remarks', 'enableAfterEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.remarks.enableAfterEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['remarks[remarks]', { initialValue: workflowOpreation.remarks.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+        <div class="line">
+          <span class="divider-right label">备注常用语</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'remarks[commonWords]',
+                {
+                  initialValue: workflowOpreation.remarks.commonWords || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'remarks', 'commonWords')"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="cancel" tab="取消">
+        <a-alert message="强制取消流程，使得流程非正常结束" type="info" />
+        <div class="title marginTop12" :style="{ borderLeft: `2px solid ${themeColor}`, color: themeColor }">
+          <span class="divider-right">取消场景</span>
+          <div class="button-group">
+            <a-button class="divider-right">添加场景</a-button>
+            <a-button class="divider-right">排序</a-button>
+          </div>
+        </div>
+        <div class="content"></div>
+        <div class="title marginTop12" :style="{ borderLeft: `2px solid ${themeColor}`, color: themeColor }">
+          <span class="divider-right">其他设置</span>
+        </div>
+        <div class="content">
+          <div class="line">
+            <span class="divider-right label">取消授权</span>
+            <a-button @click="privShow">
+              <a-badge :status="cancelPermissions.length !== 0 ? 'success' : 'default'" />
+              {{ $t('设置') }}
+            </a-button>
+          </div>
+          <div class="line marginTop12">
+            <span class="divider-right label">流程取消前事件</span>
+            <a-form-item>
+              <a-switch
+                v-decorator="[
+                  'cancel[enableBeforeEvent]',
+                  {
+                    initialValue: workflowOpreation.cancel.enableBeforeEvent || false,
+                    valuePropName: 'checked'
+                  }
+                ]"
+                @change="onChange($event, 'cancel', 'enableBeforeEvent')"
+              />
+            </a-form-item>
+          </div>
+          <div v-if="workflowOpreation.cancel.enableBeforeEvent" class="line-col">
+            <div class="marginTop12">
+              <a-popover trigger="click">
+                <template slot="content">
+                  <p>这是这个事件的说明</p>
+                </template>
+                <a-button>查看事件说明</a-button>
+              </a-popover>
+            </div>
+            <a-form-item>
+              <a-textarea
+                v-decorator="['urge[remarks]', { initialValue: workflowOpreation.cancel.remarks || '' }]"
+                style="width: 320px"
+                placeholder="自定义事件备注"
+                :autoSize="{
+                  minRows: 2,
+                  maxRows: 10
+                }"
+                :maxLength="200"
+                class="marginTop12"
+              />
+            </a-form-item>
+          </div>
+          <div class="line marginTop12">
+            <span class="divider-right label">取消原因</span>
+            <a-button v-action:add class="divider-right" icon="plus" @click="handleAddSet('cancel')">
+              {{ $t('添加') }}
+            </a-button>
+            <a-button icon="edit" class="divider-right" @click="openModal('cancel')">{{ $t('批量编辑') }}</a-button>
+            <a-button icon="sort-ascending" class="divider-right" @click="handleSort('cancel')">
+              {{ $t('排序') }}
+            </a-button>
+          </div>
+          <div class="line">
+            <a-table
+              :columns="columnsSetCancel"
+              :data-source="cancelReasons"
+              rowKey="id"
+              size="small"
+              :pagination="false"
+              class="marginTop12"
+              style="width: 960px"
+            >
+              <template slot="name" slot-scope="text, record">
+                <span v-if="!record.editable">{{ text }}</span>
+                <a-input v-else v-model="record.name" size="small" />
+              </template>
+              <div slot="action" slot-scope="text, record">
+                <a @click="handleEditSet(record)">{{ record.editable ? $t('保存') : $t('编辑') }}</a>
+                <a-divider type="vertical" />
+                <a @click="handleDeleteSet(record, 'urge')">{{ $t('删除') }}</a>
+              </div>
+            </a-table>
+          </div>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="withdraw" tab="重启">
+        <a-alert message="流程在未结束前，将流程重启到开始" type="info" />
+        <div class="line">
+          <span class="divider-right label">重启原因必填</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'withdraw[requireReason]',
+                {
+                  initialValue: workflowOpreation.withdraw.requireReason || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'withdraw', 'requireReason')"
+            />
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">可【重启】流程状态设置</span>
+          <a-form-item>
+            <a-select
+              v-decorator="[
+                'withdraw[statusFilter]',
+                {
+                  initialValue: workflowOpreation.withdraw.statusFilter || 'noset'
+                }
+              ]"
+              class="line-select"
+              @change="onChange($event, 'withdraw', 'statusFilter')"
+            >
+              <a-select-option value="noset">
+                {{ $t('不限制') }}
+              </a-select-option>
+              <a-select-option value="include">
+                {{ $t('允许重启') }}
+              </a-select-option>
+              <a-select-option value="exclude">
+                {{ $t('不允许重启') }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <span class="divider-right"></span>
+          <a-form-item v-if="workflowOpreation.withdraw.statusFilter === 'include'">
+            <a-select
+              v-decorator="[
+                'withdraw[includeStatus]',
+                {
+                  initialValue: workflowOpreation.withdraw.includeStatus || []
+                }
+              ]"
+              mode="tags"
+              style="width: 320px"
+              placeholder="请选择允许重启的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item v-if="workflowOpreation.withdraw.statusFilter === 'exclude'">
+            <a-select
+              v-decorator="[
+                'withdraw[excludeStatus]',
+                {
+                  initialValue: workflowOpreation.withdraw.excludeStatus || []
+                }
+              ]"
+              style="width: 320px"
+              mode="tags"
+              placeholder="请选择不允许重启的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </div>
+        <div class="line">
+          <span class="divider-right label">流程经过某些变迁不允许重启</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'withdraw[enableLimitedTransitions]',
+                {
+                  initialValue: workflowOpreation.withdraw.enableLimitedTransitions || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'withdraw', 'enableLimitedTransitions')"
+            />
+          </a-form-item>
+          <template v-if="workflowOpreation.withdraw.enableLimitedTransitions">
+            <span class="divider">当流程经过</span>
+            <a-form-item>
+              <a-select
+                v-decorator="[
+                  'withdraw[limitedTransitions]',
+                  {
+                    initialValue: workflowOpreation.withdraw.limitedTransitions || []
+                  }
+                ]"
+                mode="tags"
+                style="width: 320px"
+                placeholder="请选择允许重启的流程状态"
+                :allowClear="true"
+                show-search
+                :not-found-content="null"
+                option-filter-prop="children"
+              >
+                <a-select-option v-for="(myitem, myindex) in transitions" :key="myindex" :value="myitem.transitionId">
+                  {{ $t(myitem.transitionName) }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <span class="divider-left">后，不允许重启</span>
+          </template>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">流程重启前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'withdraw[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.withdraw.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'withdraw', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.withdraw.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['withdraw[remarks]', { initialValue: workflowOpreation.withdraw.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="suspend" tab="挂起">
+        <a-alert message="流程在未结束前，将流程重启到开始" type="info" />
+        <div class="line">
+          <span class="divider-right label">挂起原因必填</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'suspend[requireReason]',
+                {
+                  initialValue: workflowOpreation.suspend.requireReason || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'suspend', 'requireReason')"
+            />
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">可【挂起】流程状态设置</span>
+          <a-form-item>
+            <a-select
+              v-decorator="[
+                'suspend[statusFilter]',
+                {
+                  initialValue: workflowOpreation.suspend.statusFilter || 'noset'
+                }
+              ]"
+              class="line-select"
+              @change="onChange($event, 'suspend', 'statusFilter')"
+            >
+              <a-select-option value="noset">
+                {{ $t('不限制') }}
+              </a-select-option>
+              <a-select-option value="include">
+                {{ $t('允许挂起') }}
+              </a-select-option>
+              <a-select-option value="exclude">
+                {{ $t('不允许挂起') }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <span class="divider-right"></span>
+          <a-form-item v-if="workflowOpreation.suspend.statusFilter === 'include'">
+            <a-select
+              v-decorator="[
+                'suspend[includeStatus]',
+                {
+                  initialValue: workflowOpreation.suspend.includeStatus || []
+                }
+              ]"
+              mode="tags"
+              style="width: 320px"
+              placeholder="请选择允许挂起的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item v-if="workflowOpreation.suspend.statusFilter === 'exclude'">
+            <a-select
+              v-decorator="[
+                'suspend[excludeStatus]',
+                {
+                  initialValue: workflowOpreation.suspend.excludeStatus || []
+                }
+              ]"
+              style="width: 320px"
+              mode="tags"
+              placeholder="请选择不允许挂起的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in workflowList" :key="myindex" :value="myitem.dictDataNumber">
+                {{ $t(myitem.dictDataName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">流程挂起前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'suspend[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.suspend.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'suspend', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.suspend.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['suspend[remarks]', { initialValue: workflowOpreation.suspend.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="activate" tab="激活">
+        <a-alert message="将处于暂停的流程激活" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">流程激活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'activate[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.activate.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'activate', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.activate.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['activate[remarks]', { initialValue: workflowOpreation.activate.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="resurrect" tab="复活">
+        <a-alert message="流程结束后，重新启动流程进入运行状态，并流转至某个变迁" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">复活目的地</span>
+          <a-form-item>
+            <a-select
+              v-decorator="[
+                'resurrect[destinationType]',
+                {
+                  initialValue: workflowOpreation.resurrect.destinationType || 'only'
+                }
+              ]"
+              class="line-select"
+              @change="onChange($event, 'resurrect', 'destinationType')"
+            >
+              <a-select-option value="only">
+                {{ $t('仅能复活至变迁') }}
+              </a-select-option>
+              <a-select-option value="range">
+                {{ $t('复活时指定变迁') }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <span class="divider-right"></span>
+          <a-form-item v-if="workflowOpreation.resurrect.destinationType === 'only'">
+            <a-select
+              v-decorator="[
+                'resurrect[onlyDestination]',
+                {
+                  initialValue: workflowOpreation.resurrect.onlyDestination || ''
+                }
+              ]"
+              style="width: 320px"
+              placeholder="请选择允许挂起的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in transitions" :key="myindex" :value="myitem.transitionId">
+                {{ $t(myitem.transitionName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item v-if="workflowOpreation.resurrect.statusFilter === 'range'">
+            <a-select
+              v-decorator="[
+                'resurrect[rangeDestinations]',
+                {
+                  initialValue: workflowOpreation.resurrect.rangeDestinations || []
+                }
+              ]"
+              style="width: 320px"
+              mode="tags"
+              placeholder="请选择不允许挂起的流程状态"
+              :allowClear="true"
+              show-search
+              :not-found-content="null"
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, myindex) in transitions" :key="myindex" :value="myitem.transitionId">
+                {{ $t(myitem.transitionName) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">复活后流程办理人</span>
+          <a-form-item>
+            <a-select
+              v-decorator="[
+                'resurrect[transitionUserType]',
+                {
+                  initialValue: workflowOpreation.resurrect.transitionUserType || 'noset'
+                }
+              ]"
+              class="line-select"
+              @change="onChange($event, 'resurrect', 'transitionUserType')"
+            >
+              <a-select-option value="noset">
+                {{ $t('遵循变迁设置') }}
+              </a-select-option>
+              <a-select-option value="include">
+                {{ $t('复活指定班里人') }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">复活原因必填</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'resurrect[requireReason]',
+                {
+                  initialValue: workflowOpreation.resurrect.requireReason || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'resurrect', 'requireReason')"
+            />
+          </a-form-item>
+        </div>
+        <div class="line marginTop12">
+          <span class="divider-right label">流程复活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'resurrect[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.resurrect.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'resurrect', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.resurrect.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['resurrect[remarks]', { initialValue: workflowOpreation.resurrect.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="jump" tab="流转">
+        <a-alert
+          message="将流程强制流转至某一步变迁。当变迁为并行任务时，跳转其中一个任务会同时取消其它并行的待办任务"
+          type="info"
+        />
+        <div class="line marginTop12">
+          <span class="divider-right label">流程激活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'jump[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.jump.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'jump', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.jump.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['jump[remarks]', { initialValue: workflowOpreation.jump.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="transfer" tab="转办">
+        <a-alert message="将变迁的{当前办理人}设置为其他人" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">流程激活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'transfer[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.transfer.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'transfer', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.transfer.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['transfer[remarks]', { initialValue: workflowOpreation.transfer.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="take" tab="领取领办">
+        <a-alert message="当变迁的{当前办理人}有多个时，可以使用【领取】【领办】功能" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">流程激活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'take[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.take.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'take', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.take.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['take[remarks]', { initialValue: workflowOpreation.take.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="create" tab="流程创建前">
+        <a-alert message="流程创建前事件" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">流程激活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'create[enableBeforeEvent]',
+                {
+                  initialValue: workflowOpreation.create.enableBeforeEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'create', 'enableBeforeEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.create.enableBeforeEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['create[remarks]', { initialValue: workflowOpreation.create.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+      <a-tab-pane key="end" tab="流程结束后">
+        <a-alert message="流程结束后事件" type="info" />
+        <div class="line marginTop12">
+          <span class="divider-right label">流程激活前事件</span>
+          <a-form-item>
+            <a-switch
+              v-decorator="[
+                'end[enableAfterEvent]',
+                {
+                  initialValue: workflowOpreation.end.enableAfterEvent || false,
+                  valuePropName: 'checked'
+                }
+              ]"
+              @change="onChange($event, 'end', 'enableAfterEvent')"
+            />
+          </a-form-item>
+        </div>
+        <div v-if="workflowOpreation.end.enableAfterEvent" class="line-col">
+          <div class="marginTop12">
+            <a-popover trigger="click">
+              <template slot="content">
+                <p>这是这个事件的说明</p>
+              </template>
+              <a-button>查看事件说明</a-button>
+            </a-popover>
+          </div>
+          <a-form-item>
+            <a-textarea
+              v-decorator="['end[remarks]', { initialValue: workflowOpreation.end.remarks || '' }]"
+              style="width: 320px"
+              placeholder="自定义事件备注"
+              :autoSize="{
+                minRows: 2,
+                maxRows: 10
+              }"
+              :maxLength="200"
+              class="marginTop12"
+            />
+          </a-form-item>
+        </div>
+      </a-tab-pane>
+    </a-tabs>
+    <a-button @click="handleSubmit">提交</a-button>
+    <a-modal :title="$t('批量编辑')" :visible="editVisible" @ok="handleOk" @cancel="editVisible = !editVisible">
+      <a-textarea v-model="edits" :auto-size="{ minRows: 7, maxRows: 10 }" :placeholder="$t('请输入')" />
+    </a-modal>
+    <drag-sort ref="dragSort" @ok="getSort" />
+    <priv-visit-form ref="privVisitForm" @func="getPriv" />
+  </a-form>
+</template>
+<script>
+export default {
+  name: 'WorkflowOpreation',
+  components: {
+    PrivVisitForm: () => import('@/views/admin/Table/PrivVisitForm'),
+    DragSort: () => import('@/views/admin/Common/DragSort')
+  },
+  props: {
+    workflowList: {
+      type: Array,
+      default: () => []
+    },
+    opreation: {
+      type: Object,
+      default: () => { return {} }
+    }
+  },
+  data () {
+    return {
+      themeColor: '#1890ff',
+      form: this.$form.createForm(this),
+      workflowOpreation: {
+        urge: {},
+        remarks: {},
+        cancel: {},
+        withdraw: {},
+        suspend: {},
+        activate: {},
+        resurrect: {},
+        jump: {},
+        transfer: {},
+        take: {},
+        create: {},
+        end: {}
+      },
+      statusFilterOptions: [{
+        label: '不限制',
+        value: 'noset'
+      }, {
+        label: '允许',
+        value: 'include'
+      }, {
+        label: '允许',
+        value: 'exclude'
+      }],
+      processOptions: [],
+      columnsSetUrge: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '#',
+        width: 80,
+        dataIndex: 'listOrder'
+      }, {
+        title: this.$t('催办原因'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'name' }
+      }],
+      columnsSetCancel: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '#',
+        width: 80,
+        dataIndex: 'listOrder'
+      }, {
+        title: this.$t('取消原因'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'name' }
+      }],
+      editVisible: false,
+      edits: '',
+      urgeReasons: [],
+      cancelReasons: [],
+      workflowType: '', // terminate取消， urge催办
+      sortType: '', //  terminate取消， urge催办
+      cancelPermissions: [],
+      transitions: []
+    }
+  },
+  watch: {
+    opreation: {
+      handler (newVal) {
+        this.workflowOpreation = newVal
+      }
+    },
+    immediate: true,
+    deep: true
+  },
+  mounted () {
+    const themeColor = localStorage.getItem('WEB-DEFAULT_COLOR')
+    if (themeColor) this.themeColor = themeColor
+
+    // 初始化数据处理
+    this.urgeReasons = this.workflowOpreation.urge.urgeReasons || []
+    this.cancelReasons = this.workflowOpreation.cancel.cancelReasons || []
+    this.cancelPermissions = this.workflowOpreation.cancel.cancelPermissions || []
+
+    // 获取变迁列表
+    this.getTransition()
+  },
+  methods: {
+    getTransition () {
+      this.axios({
+        url: 'admin/transition/init',
+        data: {
+          pageNo: 1,
+          pageSize: 999,
+          sortField: 'id',
+          sortOrder: 'descend',
+          workflowId: '73c6c03972864ed5a7cd6a2217372ca1'
+        }
+      }).then(res => {
+        this.transitions = res.result.data || []
+      })
+    },
+    onChange (value, type, alias) {
+      this.workflowOpreation[type][alias] = value
+    },
+    getProcessOptions () {
+      this.axios({
+        url: '',
+        data: ''
+      }).then(res => {
+        this.processOptions = res.result
+      })
+    },
+    // 数字框验证
+    validatorNumber (value, min, max, callback) {
+      if (value < min || value > max) {
+        callback(this.$t(`请输入${min}~${max}`))
+      } else {
+        callback()
+      }
+    },
+    // 添加行
+    handleAddSet (type) {
+      if (type === 'cancel') {
+        this.cancelReasons.push({
+          id: (new Date()).valueOf(),
+          listOrder: this.cancelReasons.length + 1,
+          name: '',
+          editable: true
+        })
+      } else {
+        this.urgeReasons.push({
+          id: (new Date()).valueOf(),
+          listOrder: this.urgeReasons.length + 1,
+          name: '',
+          editable: true
+        })
+      }
+    },
+    // 打开批量编辑
+    openModal (type) {
+      this.workflowType = type
+      if (type === 'urge') {
+        const urgeReasons = this.urgeReasons
+        const arr = urgeReasons.map(item => item.name)
+        this.edits = arr.join('\n')
+        this.editVisible = true
+      } else if (type === 'cancel') {
+        const arr = this.cancelReasons.map(item => item.name)
+        this.edits = arr.join('\n')
+        this.editVisible = true
+      }
+    },
+    handleSort (type) {
+      this.sortType = type
+      if (type === 'cancel') {
+        this.$refs.dragSort.show({
+          placement: 'right',
+          width: 600,
+          sortData: this.cancelReasons
+        })
+      } else {
+        const sortData = this.urgeReasons
+        this.$refs.dragSort.show({
+          placement: 'right',
+          width: 600,
+          sortData
+        })
+      }
+    },
+    getSort (data, state) {
+      if (this.sortType === 'cancel') {
+        this.cancelReasons = data
+      } else {
+        this.urgeReasons = data
+      }
+    },
+    // 催办原因编辑
+    handleEditSet (record) {
+      record.editable = !record.editable
+    },
+    // 催办原因删除
+    handleDeleteSet (record, type) {
+      if (type === 'cancel') {
+        const dataSource = [...this.cancelReasons]
+        this.cancelReasons = dataSource.filter(item => item.id !== record.id)
+      } else {
+        const dataSource = [...this.urgeReasons]
+        this.urgeReasons = dataSource.filter(item => item.id !== record.id)
+      }
+    },
+    // 批量编辑
+    handleOk () {
+      if (this.workflowType === 'urge') {
+        let arr = this.edits.trim().split('\n')
+        arr = Array.from(new Set(arr))
+        this.urgeReasons = arr.map((item, index) => {
+          return {
+            editable: '',
+            id: new Date().getTime() + index,
+            listOrder: index + 1,
+            name: item
+          }
+        })
+      } else if (this.workflowType === 'cancel') {
+        let arr = this.edits.trim().split('\n')
+        arr = Array.from(new Set(arr))
+        this.cancelReasons = []
+        arr.forEach((item, index) => {
+          const obj = {
+            editable: '',
+            id: new Date().getTime() + index,
+            listOrder: index + 1,
+            name: item
+          }
+          this.cancelReasons.push(obj)
+        })
+      }
+      this.editVisible = false
+    },
+    // 显示授权弹窗
+    privShow () {
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: this.$t('强制取消授权'),
+        record: {
+          cancelPermissions: this.cancelPermissions
+        },
+        index: 0,
+        key: 'cancelPermissions',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    // 获取权限信息
+    getPriv (data) {
+      this.cancelPermissions = data
+    },
+    handleSubmit () {
+      let result = {}
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          // 催办原因编辑字段删除
+          if (this.urgeReasons.length > 0) {
+            values.urge.urgeReasons = this.urgeReasons.map(item => {
+              const { listOrder, name } = item
+              return { listOrder, name }
+            })
+          }
+          if (this.cancelReasons.length > 0) {
+            values.cancel = values.cancel || {}
+            values.cancel.urgeReasons = this.cancelReasons.map(item => {
+              const { listOrder, name } = item
+              return { listOrder, name }
+            })
+          }
+          if (this.cancelPermissions.length > 0) {
+            values.cancel = values.cancel || {}
+            values.cancel.cancelPermissions = this.cancelPermissions
+          }
+          result = values
+        }
+      })
+      return result
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.line {
+  display: flex;
+  align-items: center;
+}
+.line-col {
+  margin-left: 188px;
+}
+.divider-right {
+  margin-right: 8px;
+}
+
+.divider {
+  margin: 0 8px;
+}
+
+.label {
+  width: 180px;
+  text-align: right;
+}
+.line-select {
+  width: 150px;
+}
+.marginTop12 {
+  margin-top: 12px;
+}
+
+.title {
+  padding-left: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.button-group {
+  margin-left: 100px;
+}
+</style>

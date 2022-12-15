@@ -1,0 +1,244 @@
+<template>
+  <a-drawer :title="$t(config.title)" :width="1200" :visible="visible" @close="visible = !visible">
+    <div class="page">
+      <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+        <a-card :title="$t('搜索')" size="small">
+          <a-space slot="extra">
+            <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+              {{ $t('搜索') }}
+            </a-button>
+            <a-button
+              @click="
+                () => {
+                  queryParam = {}
+                  queryParam.taskId = info.id
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+          </a-space>
+          <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+            <a-col :span="6">
+              <a-form-item :label="$t('质检状态')">
+                <a-select v-model.trim="queryParam.qualityStatus" :allowClear="true" show-search>
+                  <a-select-option v-for="item in statusList" :key="item.dictDataNumber" :value="item.dictDataNumber">
+                    {{ item.fullDictDataName }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('质检员')">
+                <a-select v-model.trim="queryParam.qualityUser" :allowClear="true" show-search>
+                  <a-select-option v-for="item in userList" :key="item.id" :value="item.name">
+                    {{ item.name }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('坐席姓名')">
+                <a-select v-model.trim="queryParam.agentRealName" :allowClear="true" show-search>
+                  <a-select-option v-for="item in userList" :key="item.id" :value="item.name">
+                    {{ item.name }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('主叫号码')">
+                <a-input v-model.trim="queryParam.src" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('被叫号码')">
+                <a-input v-model.trim="queryParam.dst" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('质检时间')">
+                <a-range-picker
+                  v-model="searchTime"
+                  :ranges="{
+                    [$t('昨天')]: [
+                      moment().startOf('day').subtract('day', 1),
+                      moment().endOf('day').subtract('day', 1)
+                    ],
+                    [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                    [$t('本周')]: [moment().startOf('day').startOf('week'), moment().endOf('week')],
+                    [$t('最近七天')]: [moment().startOf('day').subtract(7, 'days'), moment().endOf('day')],
+                    [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                    [$t('最近31天')]: [moment().startOf('day').subtract(31, 'days'), moment().endOf('day')]
+                  }"
+                  format="YYYY-MM-DD HH:mm:ss"
+                  style="width: 100%"
+                  @change="getInputTime"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-card>
+      </a-form>
+      <s-table
+        ref="table"
+        class="table-fill"
+        :scroll="{ y: true }"
+        size="small"
+        rowKey="id"
+        :columns="columns"
+        :data="loadDataTable"
+        :sorter="{ field: 'id', order: 'descend' }"
+      >
+        <div slot="action" slot-scope="text, record">
+          <a
+            :style="record.qualityStatus === '未质检' ? '' : { opacity: 0.2, cursor: 'default' }"
+            @click="record.qualityStatus === '未质检' ? handleRemark(record) : 'return false'"
+          >
+            {{ $t('评分') }}
+          </a>
+        </div>
+      </s-table>
+    </div>
+    <record-form ref="recordForm" @ok="$refs.table.refresh(true)" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  components: {
+    RecordForm: () => import('./RecordForm')
+  },
+  props: {
+    statusList: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      advanced: false,
+      searchTime: [],
+      userList: [],
+      // 搜索参数
+      parameter: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      queryParam: {
+        qualityStatus: '0'
+      },
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('坐席姓名'),
+        dataIndex: 'agentRealName'
+      }, {
+        title: this.$t('主叫号码'),
+        dataIndex: 'source',
+        width: 150
+      }, {
+        title: this.$t('被叫号码'),
+        dataIndex: 'destination',
+        width: 150
+      }, {
+        title: this.$t('挂断方'),
+        dataIndex: 'hangup'
+      }, {
+        title: this.$t('呼叫时间'),
+        dataIndex: 'callTime',
+        width: 150
+      }, {
+        title: this.$t('通话时长'),
+        dataIndex: 'billsec'
+      }, {
+        title: this.$t('质检状态'),
+        dataIndex: 'qualityStatus'
+      }, {
+        title: this.$t('分配人'),
+        dataIndex: 'distributeUser'
+      }, {
+        title: this.$t('分配时间'),
+        dataIndex: 'distributeTime',
+        width: 150
+      }]
+    }
+  },
+  watch: {
+    visible: {
+      handler (newVal) {
+        if (!newVal) {
+          this.$emit('visible', newVal)
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.info = config.data
+      this.queryParam.taskId = this.info.id
+      this.getUserName()
+    },
+    // 页面数据渲染
+    loadDataTable (parameter) {
+      this.parameter = parameter
+      return this.axios({
+        url: 'quality/toInspected/view',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 获取质检员、坐席信息
+    getUserName () {
+      return this.axios({
+        url: '/quality/data/getUserArr'
+      }).then(res => {
+        const obj = res.result
+        for (const key in obj) {
+          this.userList.push({
+            id: key,
+            name: obj[key]
+          })
+        }
+      })
+    },
+    // 选择时间
+    getInputTime (date, dateString) {
+      this.queryParam.qualityBeginTime = dateString[0]
+      this.queryParam.qualityEndTime = dateString[1]
+    },
+    handleRemark (record) {
+      this.axios({
+        url: '/quality/toInspected/score',
+        params: { id: record.id }
+      }).then(res => {
+        record.setting = JSON.stringify(res.result)
+        this.$refs.recordForm.show({
+          data: record,
+          title: this.$t('评分'),
+          action: 'remark'
+        })
+      })
+    }
+  }
+}
+</script>

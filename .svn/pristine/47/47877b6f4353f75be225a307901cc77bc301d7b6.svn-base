@@ -1,0 +1,647 @@
+<template>
+  <div>
+    <a-drawer :visible="visible" :width="1400" :title="$t('搜索框设置')" @close="visible = !visible">
+      <a-spin :spinning="false">
+        <a-form :form="form">
+          <a-row>
+            <a-col span="6">
+              <a-form-item :label="$t('搜索框提示语')" :labelCol="{ span: 8 }" :wrapperCol="{ span: 14 }">
+                <a-input v-model="conditionSet.text" :placeholder="$t('请输入搜索关键词')"></a-input>
+              </a-form-item>
+            </a-col>
+            <a-col span="3">
+              <a-form-item :label="$t('清除按钮')" :labelCol="{ span: 12 }" :wrapperCol="{ span: 6 }">
+                <a-switch v-model="conditionSet.allowClear"></a-switch>
+              </a-form-item>
+            </a-col>
+            <a-col span="3">
+              <a-form-item :label="$t('排序与筛选')" :labelCol="{ span: 12 }" :wrapperCol="{ span: 6 }">
+                <a-switch
+                  v-model="conditionSet.sortAndSearch"
+                  @change="
+                    (val) => {
+                      if (val) {
+                        // 初始化
+                        conditionSet.layout = true
+                      } else {
+                        // 切换时，筛选排序参数置空
+                        conditionSet.sortData = {
+                          list: [],
+                          config: {}
+                        }
+                        conditionSet.sortAndSearchList = []
+                      }
+                    }
+                  "
+                ></a-switch>
+              </a-form-item>
+            </a-col>
+            <a-col v-if="conditionSet.sortAndSearch" span="12">
+              <a-form-item :label="$t('排序与筛选样式')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-radio-group
+                  v-model="conditionSet.layout"
+                  @change="
+                    () => {
+                      if (conditionSet.layout) {
+                        conditionSet.sortAndSearchList = []
+                      } else {
+                        conditionSet.sortData = {
+                          list: [],
+                          config: {}
+                        }
+                        initSortAndSearch()
+                      }
+                    }
+                  "
+                >
+                  <a-radio :value="true">{{ $t('单选框，在【搜索】后面') }}</a-radio>
+                  <a-radio :value="false">{{ $t('多个按钮，在搜索框下一行') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-tabs default-active-key="field">
+            <a-tab-pane key="field" :tab="$t('搜索框字段')">
+              <a-row :gutter="10">
+                <a-col span="12">
+                  <a-row :gutter="10" style="margin-bottom: 10px">
+                    <a-col span="8">
+                      <a-select :placeholder="$t('请选择分类')">
+                        <a-select-option key="1" value="1">1</a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col span="16">
+                      <a-input-search :placeholder="$t('请输入字段名称搜索')" @search="searchFiled"></a-input-search>
+                    </a-col>
+                  </a-row>
+                  <a-table :columns="columnsField" :data-source="dataSource" rowKey="alias" :pagination="false">
+                    <div slot="action" slot-scope="text, record, index">
+                      <a @click="selectField(record, index)">{{ $t('选择') }}</a>
+                    </div>
+                  </a-table>
+                </a-col>
+                <a-col span="12">
+                  <a-row type="flex" justify="space-between" style="margin-bottom: 10px">
+                    <a-col>{{ $t('已选择') + conditionSet.searchFields.length }}</a-col>
+                    <a-col>
+                      <a-button @click="deleteAllField">
+                        {{ $t('清空') }}
+                      </a-button>
+                    </a-col>
+                  </a-row>
+                  <a-table
+                    :columns="selectedColumnsField"
+                    :data-source="conditionSet.searchFields"
+                    rowKey="alias"
+                    :pagination="false"
+                  >
+                    <div slot="action" slot-scope="text, record, index">
+                      <a @click="deleteField(record, index)">{{ $t('删除') }}</a>
+                    </div>
+                  </a-table>
+                </a-col>
+              </a-row>
+            </a-tab-pane>
+            <a-tab-pane v-if="conditionSet.sortAndSearch" key="sortAndSearch" :tab="$t('排序与筛选')">
+              <a-tabs
+                v-if="!conditionSet.layout && sortAndSearchList.length > 1"
+                v-model="activeKey"
+                type="editable-card"
+                @edit="onEdit"
+              >
+                <a-tab-pane
+                  v-for="(pane, index) in sortAndSearchList"
+                  :key="pane.key"
+                  :tab="$t('按钮') + (index + 1)"
+                  :closable="pane.closable"
+                >
+                  <a-form-item :label="$t('按钮方案')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 6 }">
+                    <a-select
+                      v-model="pane.type"
+                      @change="
+                        (val) => {
+                          if (['排序方案组', '搜索模板组', '筛选'].indexOf(val) !== -1) {
+                            pane.name = ''
+                            pane.sortFiled = ''
+                            pane.sortRule = 1
+                          }
+                          if (['点击排序', '搜索模板组', '筛选'].indexOf(val) !== -1) {
+                            pane.groupBtn = [
+                              {
+                                btnName: '',
+                                sortFiled: '',
+                                sortRule: ''
+                              }
+                            ]
+                            pane.groupBtnName = ''
+                          }
+                          if (['点击排序', '排序方案组', '筛选'].indexOf(val) !== -1) {
+                            pane.groupSearch = [
+                              {
+                                searchTemplateName: '',
+                                setCondition: false,
+                                searchConditionSet: []
+                              }
+                            ]
+                            pane.groupSearchName = ''
+                          }
+                          if (['点击排序', '排序方案组', '搜索模板组'].indexOf(val) !== -1) {
+                            pane.sortData = {
+                              list: [],
+                              config: {}
+                            }
+                          }
+                        }
+                      "
+                    >
+                      <a-select-option key="点击排序" value="点击排序">{{ $t('点击排序') }}</a-select-option>
+                      <a-select-option key="排序方案组" value="排序方案组">{{ $t('排序方案组') }}</a-select-option>
+                      <a-select-option key="搜索模板组" value="搜索模板组">{{ $t('搜索模板组') }}</a-select-option>
+                      <a-select-option key="筛选" value="筛选">{{ $t('筛选') }}</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                  <template v-if="pane.type === '点击排序'">
+                    <a-form-item :label="$t('按钮名称')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 6 }">
+                      <a-input v-model="pane.name"></a-input>
+                    </a-form-item>
+                    <a-form-item :label="$t('排序字段')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 6 }">
+                      <a-select v-model="pane.sortFiled">
+                        <a-select-option v-for="item in fieldColumns" :key="item.alias" :values="item.alias">
+                          {{ item.name }}
+                        </a-select-option>
+                      </a-select>
+                    </a-form-item>
+                    <a-form-item :label="$t('初始化排序方案')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 6 }">
+                      <a-select v-model="pane.sortRule">
+                        <a-select-option :key="0" :value="0">{{ $t('默认') }}</a-select-option>
+                        <a-select-option :key="1" :value="1">{{ $t('升序') }}</a-select-option>
+                        <a-select-option :key="2" :value="2">{{ $t('降序') }}</a-select-option>
+                      </a-select>
+                    </a-form-item>
+                  </template>
+                  <template v-else-if="pane.type === '排序方案组'">
+                    <a-form-item :label="$t('排序按钮名称')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 6 }">
+                      <a-input v-model="pane.groupBtnName"></a-input>
+                    </a-form-item>
+                    <div style="position: relative">
+                      <a-button
+                        type="link"
+                        style="position: absolute; top: 3px; left: 100px; z-index: 2"
+                        @click="
+                          () => {
+                            pane.groupBtn.push({
+                              btnName: '',
+                              sortFiled: '',
+                              sortRule: true
+                            })
+                          }
+                        "
+                      >
+                        {{ $t('添加') }}
+                      </a-button>
+                      <a-form-item :label="$t('排序方案')" :labelCol="{ span: 2 }"></a-form-item>
+                      <draggable
+                        v-model="pane.groupBtn"
+                        animation="200"
+                        handle=".handle"
+                        :style="{
+                          'flex-grow': 1,
+                          overflow: 'auto',
+                          display: 'flex',
+                          'flex-flow': 'column wrap',
+                          'align-content': 'flex-start'
+                        }"
+                        @start="drag = true"
+                        @end="drag = false"
+                      >
+                        <a-card
+                          v-for="(groupBtnItem, groupBtnItemIndex) in pane.groupBtn"
+                          :key="groupBtnItemIndex"
+                          style="width: 550px; margin-bottom: 10px"
+                        >
+                          <a-row>
+                            <a-col span="2">
+                              <a-icon type="drag" class="handle" style="cursor: pointer" />
+                            </a-col>
+                            <a-col span="22">
+                              <a-row :gutter="10">
+                                <a-col span="16">
+                                  <a-input v-model="groupBtnItem.btnName" :placeholder="$t('排序方案名称')"></a-input>
+                                </a-col>
+                                <a-col span="8">
+                                  <a-icon
+                                    type="delete"
+                                    style="color: red; margin-left: 10px; cursor: pointer"
+                                    @click="
+                                      () => {
+                                        pane.groupBtn.splice(i, 1)
+                                      }
+                                    "
+                                  />
+                                </a-col>
+                                <a-col span="16" style="line-height: 48px">
+                                  <a-select v-model="groupBtnItem.sortFiled" :placeholder="$t('请选择排序字段')">
+                                    <a-select-option
+                                      v-for="item in fieldColumns"
+                                      :key="item.alias"
+                                      :values="item.alias"
+                                    >
+                                      {{ item.name }}
+                                    </a-select-option>
+                                  </a-select>
+                                </a-col>
+                                <a-col span="8">
+                                  <a-radio-group
+                                    v-model="groupBtnItem.sortRule"
+                                    button-style="solid"
+                                    style="margin: 10px 10px"
+                                  >
+                                    <a-radio-button :value="1">{{ $t('升序') }}</a-radio-button>
+                                    <a-radio-button :value="2">{{ $t('降序') }}</a-radio-button>
+                                  </a-radio-group>
+                                </a-col>
+                              </a-row>
+                            </a-col>
+                          </a-row>
+                        </a-card>
+                      </draggable>
+                    </div>
+                  </template>
+                  <template v-else-if="pane.type === '搜索模板组'">
+                    <a-form-item :label="$t('搜索模板组名称')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 6 }">
+                      <a-input v-model="pane.groupSearchName" :placeholder="$t('模板名称')"></a-input>
+                    </a-form-item>
+                    <div style="position: relative">
+                      <a-button
+                        type="link"
+                        style="position: absolute; top: 3px; left: 100px; z-index: 2"
+                        @click="
+                          () => {
+                            pane.groupSearch.push({
+                              searchTemplateName: '',
+                              setCondition: false,
+                              searchConditionSet: []
+                            })
+                          }
+                        "
+                      >
+                        {{ $t('添加') }}
+                      </a-button>
+                      <a-form-item :label="$t('搜索模板')" :labelCol="{ span: 2 }"></a-form-item>
+                      <draggable
+                        v-model="pane.groupSearch"
+                        animation="200"
+                        handle=".handle"
+                        :style="{
+                          'flex-grow': 1,
+                          overflow: 'auto',
+                          display: 'flex',
+                          'flex-flow': 'column wrap',
+                          'align-content': 'flex-start'
+                        }"
+                        @start="drag = true"
+                        @end="drag = false"
+                      >
+                        <a-card
+                          v-for="(groupSearchItem, groupSearchItemIndex) in pane.groupSearch"
+                          :key="groupSearchItemIndex"
+                          style="width: 550px; margin-bottom: 10px"
+                        >
+                          <a-row :gutter="10">
+                            <a-col span="2"><a-icon type="drag" class="handle" style="cursor: pointer" /></a-col>
+                            <a-col span="20">
+                              <a-row>
+                                <a-col style="margin-bottom: 10px">
+                                  <a-input
+                                    v-model="groupSearchItem.searchTemplateName"
+                                    :placeholder="$t('请输入模板名称')"
+                                  ></a-input>
+                                </a-col>
+                                <a-col>
+                                  <a-tag
+                                    style="width: 415px; height: 28px; text-align: center; line-height: 28px"
+                                    :color="groupSearchItem.setCondition ? 'green' : ''"
+                                    @click="showConditionModal(groupSearchItem, groupSearchItem.searchConditionSet)"
+                                  >
+                                    {{ $t('条件设置') }}
+                                  </a-tag>
+                                </a-col>
+                              </a-row>
+                            </a-col>
+                            <a-col span="2">
+                              <a-icon
+                                type="delete"
+                                style="color: red; margin-left: 10px; cursor: pointer"
+                                @click="
+                                  () => {
+                                    pane.groupSearch.splice(i, 1)
+                                  }
+                                "
+                              />
+                            </a-col>
+                          </a-row>
+                        </a-card>
+                      </draggable>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <!-- 多选按钮下的表单设计 -->
+                    <div style="height: calc(100vh - 210px)">
+                      <a-form-design
+                        ref="checkboxFormDesign"
+                        :fieldColumns="fieldColumns"
+                        :myTemplate="pane.sortData.list"
+                        :entranceType="'sortAndSearch'"
+                        :formdata="{}"
+                        :setting="{}"
+                        :fields="componentsList"
+                      />
+                    </div>
+                  </template>
+                </a-tab-pane>
+              </a-tabs>
+              <template v-else>
+                <!-- 单选按钮下的表单设计 -->
+                <div style="height: calc(100vh - 210px)">
+                  <a-form-design
+                    ref="radioFormDesign"
+                    :fieldColumns="fieldColumns"
+                    :myTemplate="conditionSet.sortData.list"
+                    :entranceType="'sortAndSearch'"
+                    :formdata="{}"
+                    :setting="{}"
+                    :fields="componentsList"
+                  />
+                </div>
+              </template>
+            </a-tab-pane>
+          </a-tabs>
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" @click="setCondition">
+            {{ $t('保存') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                visible = !visible
+              }
+            "
+          >
+            {{ $t('关闭') }}
+          </a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+    <conditionModal ref="conditionModal" :key="conditionModalKey" :fieldColumns="fieldColumns" />
+  </div>
+</template>
+
+<script>
+import Vue from 'vue'
+import AFormDesign from '@/views/admin/AppFormDesign/packages/index'
+const initSortAndSearchList = {
+  key: '1',
+  type: '点击排序',
+  name: '',
+  sortFiled: '',
+  sortRule: 1,
+  groupBtnName: '',
+  groupSearchName: '',
+  // 排序方案组
+  groupBtn: [{
+    btnName: '',
+    sortFiled: '',
+    sortRule: 1
+  }],
+  // 搜索模板组
+  groupSearch: [{
+    searchTemplateName: '',
+    setCondition: false,
+    searchConditionSet: []
+  }],
+  // 筛选
+  sortData: {
+    list: [],
+    config: {}
+  },
+  closable: true
+}
+Vue.use(AFormDesign)
+export default {
+  components: {
+    draggable: () => import('vuedraggable'),
+    conditionModal: () => import('./conditionModal')
+  },
+  props: {
+    conditionSetProps: {
+      type: Object,
+      default: () => { }
+    },
+    fieldColumns: {
+      type: Array,
+      default: () => []
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      form: this.$form.createForm(this),
+      columnsField: [{
+        title: '#',
+        width: 60,
+        customRender: (text, record, index) => index + 1
+      }, {
+        title: this.$t('字段名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('字段系统名'),
+        dataIndex: 'alias'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 130,
+        scopedSlots: { customRender: 'action' }
+      }],
+      selectedColumnsField: [{
+        title: this.$t('字段名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('字段系统名'),
+        dataIndex: 'alias'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 130,
+        scopedSlots: { customRender: 'action' }
+      }],
+      dataSource: [],
+      filterDataSource: [],
+      sortAndSearchList: [], // 排序与筛选
+      activeKey: 1,
+      conditionModalKey: 'conditionModal_1',
+      conditionSet: {
+        text: '',
+        allowClear: false,
+        sortAndSearch: false,
+        layout: true, // true 单行  false 下一行
+        sortAndSearchList: [],
+        searchFields: [],
+        // 筛选
+        sortData: {
+          list: [],
+          config: {}
+        }
+      },
+      componentsList: [
+        'grid',
+        'gap',
+        'text',
+        'groupBtn',
+        'groupSearch',
+        'alert',
+        'html',
+        'placeholder'
+      ]
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.conditionSet = JSON.parse(JSON.stringify(this.conditionSetProps))
+      this.initSortAndSearch()
+      // 初始化字段数据
+      this.dataSource = this.fieldColumns.filter(item => {
+        return this.conditionSet.searchFields.findIndex(selectedItem => selectedItem.alias === item.alias) === -1
+      })
+      this.filterNoSelectFiled()
+    },
+    selectField (record, index) {
+      const selectItem = this.dataSource.splice(index, 1)
+      this.conditionSet.searchFields = this.sortField(this.fieldColumns, [...this.conditionSet.searchFields, selectItem[0]])
+      this.filterNoSelectFiled()
+    },
+    deleteAllField () {
+      this.dataSource = this.sortField(this.fieldColumns, [...this.dataSource, ...this.conditionSet.searchFields])
+      this.conditionSet.searchFields = []
+      this.filterNoSelectFiled()
+    },
+    deleteField (record, index) {
+      const selectItem = this.conditionSet.searchFields.splice(index, 1)
+      this.dataSource = this.sortField(this.fieldColumns, [...this.dataSource, selectItem[0]])
+      this.filterNoSelectFiled()
+    },
+    searchFiled (val) {
+      this.dataSource = this.filterDataSource.filter(item => item.name.includes(val))
+    },
+    /**
+    * 确保删除所选字段后，右边表格字段排序正常
+    */
+    sortField (orignList, sortList) {
+      const aliasList = sortList.map(item => item.alias)
+      return orignList.filter(item => {
+        return aliasList.includes(item.alias)
+      })
+    },
+    /**
+     *  过滤出非选字段
+     */
+    filterNoSelectFiled () {
+      this.filterDataSource = this.fieldColumns.filter(item => {
+        return this.conditionSet.searchFields.findIndex(selectedItem => selectedItem.alias === item.alias) === -1
+      })
+    },
+    onEdit (targetKey, action) {
+      this[action](targetKey)
+    },
+    remove (targetKey) {
+      let activeKey = this.activeKey
+      let lastIndex
+      this.sortAndSearchList.forEach((pane, i) => {
+        if (pane.key === targetKey) {
+          lastIndex = i - 1
+        }
+      })
+      const panes = this.sortAndSearchList.filter(pane => pane.key !== targetKey)
+      if (panes.length && activeKey === targetKey) {
+        if (lastIndex >= 0) {
+          activeKey = panes[lastIndex].key
+        } else {
+          activeKey = panes[0].key
+        }
+      }
+      this.checkTabClose(panes)
+      this.sortAndSearchList = panes
+      this.activeKey = activeKey
+    },
+    add () {
+      if (this.sortAndSearchList.length === 5) {
+        this.$message.warning(this.$t('最多5个按钮'))
+        return
+      }
+      this.activeKey = new Date().getTime()
+      const sortAndSearchItem = JSON.parse(JSON.stringify(initSortAndSearchList))
+      sortAndSearchItem.key = this.activeKey
+      this.sortAndSearchList.push(sortAndSearchItem)
+      this.checkTabClose(this.sortAndSearchList)
+    },
+    // 按钮至少保存两个
+    checkTabClose (list) {
+      console.log('list', list)
+      if (list.length === 2) {
+        list.forEach(item => {
+          item.closable = false
+        })
+      } else {
+        list.forEach(item => {
+          item.closable = true
+        })
+      }
+    },
+    showConditionModal (groupSearchItem, condition) {
+      this.conditionModalKey = this.conditionModalKey === 'conditionModal_1' ? 'conditionModal_0' : 'conditionModal_1'
+      this.$nextTick(() => {
+        this.$refs.conditionModal.show({
+          data: condition,
+          groupSearchItem: groupSearchItem
+        })
+      })
+    },
+    setCondition () {
+      if (!this.conditionSet.layout) {
+        // 设置多选按钮下的表单设计
+        let initCfdIndex = 0
+        this.sortAndSearchList.forEach((pane, index) => {
+          if (pane.type === '筛选') {
+            const data = this.$refs.checkboxFormDesign[initCfdIndex].data
+            initCfdIndex++
+            pane.sortData = data
+          }
+        })
+      } else {
+        // 设置单选按钮下的表单设计
+        this.$refs.radioFormDesign && (this.conditionSet.sortData = this.$refs.radioFormDesign.data)
+      }
+      this.$emit('setCondition', this.conditionSet)
+      this.visible = !this.visible
+    },
+    // 排序与筛选开启多个按钮，初始化数据
+    initSortAndSearch () {
+      this.sortAndSearchList = this.conditionSet.sortAndSearchList
+      // 开启排序与筛选时，确保至少两个按钮
+      if (!this.conditionSet.layout && this.sortAndSearchList.length < 1) {
+        const initArr = new Array(2).fill(null)
+        initArr.forEach((item, index) => {
+          const initItem = JSON.parse(JSON.stringify(initSortAndSearchList))
+          initItem.key = index
+          this.sortAndSearchList.push(initItem)
+        })
+        this.activeKey = this.sortAndSearchList[0].key
+      }
+      this.checkTabClose(this.sortAndSearchList)
+    }
+  }
+}
+</script>

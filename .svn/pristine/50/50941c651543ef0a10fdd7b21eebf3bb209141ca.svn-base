@@ -1,0 +1,144 @@
+<template>
+  <a-modal :title="$t(config.title)" :width="600" :visible="visible" :destroyOnClose="true" @cancel="handleClose">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('访客名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-row type="flex">
+            <a-col flex="auto">
+              <a-input
+                v-decorator="[
+                  'info[visitorName]',
+                  { initialValue: data.visitorName, rules: [{ message: $t('请输入访客名称') }] }
+                ]"
+              />
+            </a-col>
+            <a-col>
+              <a-button @click="getNumber">{{ $t('随机生成') }}</a-button>
+            </a-col>
+          </a-row>
+        </a-form-item>
+        <a-form-item :label="$t('访客ID')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[visitorId]',
+              { initialValue: data.visitorId, rules: [{ message: $t('请输入访客ID') }] }
+            ]"
+          />
+        </a-form-item>
+      </a-form>
+    </a-spin>
+    <div slot="footer">
+      <a-button type="primary" :loading="loading" @click="handleSubmit()">{{ $t('发起') }}</a-button>
+      <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-modal>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('chat'),
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      visible: false,
+      loading: false,
+      data: {},
+      form: this.$form.createForm(this),
+      imageFileList: [],
+      imageFileCheck: [],
+      visitorAvatar: '',
+      // 预览图片的路径
+      imagePreviewUrl: '',
+      // 控制发送图片预览
+      previewVisible: false
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  methods: {
+    show (config) {
+      this.imageFileList = []
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: this.config.url,
+        data: Object.assign({ action: 'get', id: config.record ? config.record.id : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.data = res.result || {}
+      })
+    },
+    // 随机生成
+    getNumber () {
+      const timeStr = (new Date()).valueOf()
+      this.form.setFieldsValue({ 'info[visitorName]': 'NAME' + timeStr, 'info[visitorId]': 'ID' + timeStr })
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.response.result.filePath
+      this.previewVisible = true
+    },
+    handleImageChange (info) {
+      this.imageFileList = info.fileList
+    },
+    // 取消预览图片
+    handleCancel () {
+      this.previewVisible = false
+    },
+    // 上传图片限制
+    beforeUploadImage (file, fileList, item) {
+      return new Promise((resolve, reject) => {
+        const isImage = file.type
+        if (!isImage.includes('image')) {
+          this.$message.error(this.$t('上传的是非图片格式'))
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    handleClose () {
+      this.visible = !this.visible
+      this.visitorAvatar = ''
+      this.imageFileList = []
+    },
+    handleSubmit (type) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          if (!this.setting.chatNetworkUrl) {
+            this.$message.warning(this.$t('请配置在线客服访客地址'))
+            return
+          }
+          if (this.imageFileList.length > 0) {
+            this.visitorAvatar = this.imageFileList[0].response.result.filePath.substr(1)
+          }
+          const protocol = location.protocol
+          const host = location.host
+          const chatNetworkUrl = this.setting.chatNetworkUrl.indexOf('http') === 0 ? this.setting.chatNetworkUrl : protocol + '//' + host + this.setting.chatNetworkUrl
+          const input = document.createElement('input')
+          document.body.appendChild(input)
+          input.value = `${chatNetworkUrl}#/?channelNumber=${this.config.record.channelNumber || ''}&visitorId=${values.info.visitorId || ''}&visitorName=${values.info.visitorName || ''}` + (this.visitorAvatar ? `&visitorAvatar=${this.visitorAvatar}` : '')
+          input.select()
+          try {
+            if (document.execCommand('copy', false)) {
+              this.$message.success(this.$t('访客连接已经生成并复制到剪切板，请在浏览器中打开访问'))
+            } else {
+              this.$message.error(this.$t('生成失败'))
+            }
+          } catch (error) {
+            console.log(error, 'error')
+          } finally {
+            input.remove()
+          }
+          this.visible = false
+          this.visitorAvatar = ''
+          this.imageFileList = []
+        }
+      })
+    }
+  }
+}
+</script>

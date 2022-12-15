@@ -1,0 +1,395 @@
+<template>
+  <a-modal :destroyOnClose="true" :title="title" :width="600" :visible="visible" @cancel="onClose">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('控件类型')">
+          <a-select
+            v-decorator="[
+              'type',
+              { rules: [{ required: true, message: $t('请选择控件类型') }], initialValue: item ? item.type : 'field' }
+            ]"
+            :disabled="true"
+          >
+            <a-select-option value="field">
+              {{ $t('字段') }}
+            </a-select-option>
+            <a-select-option value="component">
+              {{ $t('组件') }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <template v-if="item.type === 'field'">
+          <a-form-item :label="$t('选择字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-decorator="[
+                'name',
+                {
+                  rules: [{ required: true, message: $t('请选择字段') }],
+                  initialValue: item.value ? item.value : undefined
+                }
+              ]"
+              :placeholder="$t('请选择字段')"
+              show-search
+              option-filter-prop="children"
+            >
+              <a-select-option
+                v-for="(myitem, index) in showName"
+                :key="index"
+                :value="myitem.alias"
+                @click="handleClick(index, myitem)"
+              >
+                {{ myitem.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('字段规则')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-radio-group
+              v-decorator="[
+                'fieldRule',
+                {
+                  rules: [{ required: true, message: $t('请选择字段规则') }],
+                  initialValue: item ? item.fieldRule : 'allow'
+                }
+              ]"
+            >
+              <a-radio value="allow">
+                {{ $t('允许') }}
+              </a-radio>
+              <a-radio value="readonly">
+                {{ $t('只读') }}
+              </a-radio>
+              <a-radio value="hidden">
+                {{ $t('隐藏') }}
+              </a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item :label="$t('列宽')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input-number
+              v-decorator="[
+                'column',
+                { rules: [{ required: true, message: $t('请输入列宽') }], initialValue: item.column ? item.column : 6 }
+              ]"
+              :min="1"
+              :max="24"
+            />
+          </a-form-item>
+          <a-form-item
+            v-if="['text', 'textarea', 'associated', 'serialnumber'].includes(fieldFormType)"
+            :label="$t('比对模式')"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+          >
+            <a-select
+              v-decorator="[
+                'comparison',
+                { rules: [{ required: true, message: $t('请选择比对方式') }], initialValue: item.comparison || 'eq' }
+              ]"
+              :placeholder="$t('请选择字段')"
+              show-search
+              option-filter-prop="children"
+            >
+              <a-select-option v-for="(myitem, index) in condiObj" :key="index" :value="myitem.enName">
+                {{ myitem.cnName }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item
+            :label="$t('修改字段标题')"
+            :labelCol="labelCol"
+            :wrapperCol="wrapperCol"
+            :required="cTitle ? true : false"
+          >
+            <a-row :gutter="5">
+              <a-col :span="3">
+                <a-switch
+                  :defaultChecked="item.changeTitle ? true : false"
+                  @change="
+                    (e) => {
+                      cTitle = e
+                    }
+                  "
+                />
+              </a-col>
+              <a-col v-if="cTitle" :span="21">
+                <a-form-item>
+                  <a-input
+                    v-decorator="[
+                      'changeTitle',
+                      {
+                        rules: [{ required: cTitle ? true : false, message: $t('请输入修改字段标题') }],
+                        initialValue: item.changeTitle
+                      }
+                    ]"
+                  >
+                    <set-lang slot="addonAfter" />
+                  </a-input>
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form-item>
+          <a-form-item :label="$t('输入提示')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input v-decorator="['placeholder', { initialValue: item ? item.placeholder : '' }]" />
+          </a-form-item>
+          <a-form-item :label="$t('帮助说明')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input v-decorator="['help', { initialValue: item ? item.help : '' }]" />
+          </a-form-item>
+        </template>
+        <template v-else>
+          <a-form-item :label="$t('组件名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input
+              v-decorator="[
+                'name',
+                {
+                  rules: [{ required: true, message: $t('请填写组件名称') }],
+                  initialValue: item ? item.name : ''
+                }
+              ]"
+              :placeholder="$t('请输入')"
+            >
+              <set-lang slot="addonAfter" />
+            </a-input>
+          </a-form-item>
+          <a-form-item :label="$t('列宽')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-input-number
+              v-decorator="[
+                'column',
+                { rules: [{ required: true, message: $t('请输入列宽') }], initialValue: item.column ? item.column : 6 }
+              ]"
+              :min="1"
+              :max="24"
+            />
+          </a-form-item>
+          <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <span slot="label">
+              {{ $t('组件设置') }}
+            </span>
+            <a-button type="primary" size="small" @click="codeEditor">{{ $t('设置') }}</a-button>
+            <a-tag v-if="item.attribute != null && item.attribute != ''" color="green" style="margin-left: 8px">
+              {{ $t('已设置') }}
+            </a-tag>
+            <a-tag v-else style="margin-left: 8px">{{ $t('未设置') }}</a-tag>
+          </a-form-item>
+        </template>
+      </a-form>
+    </a-spin>
+    <!-- 附加属性 -->
+    <code-editor ref="codeEditor" @func="getCode" />
+    <div slot="footer" class="bbar">
+      <a-spin :spinning="loading">
+        <span slot="indicator"></span>
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="onClose">{{ $t('关闭') }}</a-button>
+      </a-spin>
+    </div>
+  </a-modal>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    CodeEditor: () => import('@/views/admin/CodeEditor'),
+    SetLang: () => import('@/components/SetLang')
+  },
+  props: {
+    fieldColumns: {
+      type: Array,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    template: {
+      type: Array,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      config: {},
+      item: [], // 设置，父级组件传递的数据
+      title: '',
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      form: this.$form.createForm(this),
+      selectedItems: [],
+      aliasArr: [],
+      cTitle: false,
+      columnWidth: '',
+      choiceIndex: 0,
+      showName: [],
+      value: '',
+      data: [],
+      attrList: [
+        { eventName: 'change', attribute: '' }
+      ], // 附加属性列表
+      dataInit: ['change', 'blur', 'focus', 'click', 'pressEnter', 'search', 'select', 'popupVisibleChange', 'deselect', 'inputKeydown', 'mouseenter', 'mouseleave', 'popupScroll', 'dropdownVisibleChange'],
+      dataSource: ['change', 'blur', 'focus', 'click', 'pressEnter', 'search', 'select', 'popupVisibleChange', 'deselect', 'inputKeydown', 'mouseenter', 'mouseleave', 'popupScroll', 'dropdownVisibleChange'],
+      listIndex: 0, // 被选中
+      minusColor: '#bfbfbf',
+      condiObj: [
+        { enName: 'eq', cnName: this.$t('等于') },
+        { enName: 'ne', cnName: this.$t('不等于') },
+        { enName: 'cn', cnName: this.$t('包含') },
+        { enName: 'nc', cnName: this.$t('不包含') }],
+      fieldFormType: ''
+    }
+  },
+  watch: {
+    attrList (newValue) {
+      this.minusColor = newValue.length !== 1 ? '#ff4d4f' : '#bfbfbf'
+    }
+  },
+  methods: {
+    // 设置页面显示
+    show (config) {
+      this.title = config.title
+      this.config = config
+      this.visible = true
+      const item = config.item
+      this.item = item
+      const obj = {
+        alias: item.value,
+        title: item.name,
+        id: item.fieldId,
+        formType: item.formType
+      }
+      this.fieldFormType = item.formType
+      if (!this.fieldColumns.find(item => item.alias === obj.alias)) {
+        this.fieldColumns.unshift(obj)
+      }
+      this.showName = this.fieldColumns.map((item, index) => {
+        return { id: index, name: item.title, alias: item.alias, formType: item.formType }
+      })
+      this.cTitle = !!this.item.changeTitle
+    },
+    // 选择字段
+    handleClick (index, item) {
+      this.choiceIndex = index
+      this.fieldFormType = item.formType
+      this.item.name = item.name
+      const { setFieldsValue } = this.form
+      if (item.formType === 'web_sub_data_window' || item.formType === 'editor') {
+        setFieldsValue({ 'column': 24 })
+      } else {
+        setFieldsValue({ 'column': 6 })
+      }
+    },
+    // 打开代码编辑器
+    codeEditor (list, index) {
+      this.$refs.codeEditor.show({
+        value: this.item.attribute
+      })
+    },
+    // 获取代码编辑器数据
+    getCode (value) {
+      this.item.attribute = value
+    },
+    // 触发事件的可选值
+    onDropdownVisibleChange () {
+      this.dataSource = JSON.parse(JSON.stringify(this.dataInit))
+      this.attrList.forEach(item => {
+        const index = this.dataSource.indexOf(item.eventName)
+        this.dataSource.splice(index, 1)
+      })
+    },
+    add () {
+      this.attrList.push({
+        eventName: undefined,
+        attribute: ''
+      })
+    },
+    del (index) {
+      if (this.attrList.length !== 1) {
+        this.attrList.splice(index, 1)
+      }
+    },
+    onClose () {
+      this.visible = false
+      this.form.resetFields()
+    },
+    // 数据提交给父组件
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          // 判断办理方式是否存在
+          if (values.type === 'work') {
+            var flag = true
+            this.template.forEach(item => {
+              if (item.type === 'work') {
+                flag = false
+              }
+            })
+            if (this.config.item.type === 'work') {
+              flag = true
+            }
+            if (!flag) {
+              this.$message.error(this.$t('流程办理方式已存在，请勿重复添加'))
+              return false
+            }
+          }
+          // 判断办理备注是否存在
+          if (values.type === 'workRemark') {
+            var remarkFlag = true
+            this.template.forEach(item => {
+              if (item.type === 'workRemark') {
+                remarkFlag = false
+              }
+            })
+            if (this.config.item.type === 'workRemark') {
+              remarkFlag = true
+            }
+            if (!remarkFlag) {
+              this.$message.error(this.$t('流程办理备注已存在，请勿重复添加'))
+              return false
+            }
+          }
+          // 附加属性
+          let attribute = ''
+          attribute = this.item.attribute
+          const obj = {
+            type: values.type,
+            name: values.name ? values.name : '',
+            formType: '',
+            value: '',
+            dividerText: values.dividerText ? values.dividerText : '',
+            dividerDirection: values.dividerDirection ? values.dividerDirection : '',
+            column: values.column,
+            workDivider: '0',
+            fieldRule: values.fieldRule,
+            fieldId: this.item.fieldId,
+            changeTitle: values.changeTitle,
+            comparison: values.comparison,
+            attribute: attribute,
+            placeholder: values.placeholder,
+            help: values.help
+          }
+          switch (values.type) {
+            case 'field':
+              obj.name = this.choiceIndex || this.choiceIndex === 0 ? this.fieldColumns[this.choiceIndex].title : this.item.name
+              obj.formType = this.choiceIndex || this.choiceIndex === 0 ? this.fieldColumns[this.choiceIndex].formType : this.item.formType
+              obj.value = this.choiceIndex || this.choiceIndex === 0 ? this.fieldColumns[this.choiceIndex].alias : this.item.value
+              break
+            case 'component':
+              obj.id = (new Date()).valueOf()
+              break
+            default:
+              break
+          }
+          this.$emit('func', obj)
+          this.visible = false
+          if (this.config.action === 'edit') {
+            this.fieldColumns.shift()
+          }
+          this.form.resetFields()
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,279 @@
+<template>
+  <a-drawer :title="config.title" :width="800" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <div>
+        <a-divider orientation="left">{{ $t('数据显示设置') }}</a-divider>
+        <a-form>
+          <a-row>
+            <a-col :span="14">
+              <a-form-item :label="$t('列锁的起始列数')" :labelCol="{ span: 9 }" :wrapperCol="{ span: 10 }">
+                <span style="margin-right: 10px">{{ $t('从左往右') }}</span>
+                <a-input-number v-model="lockLeft" :min="0" :max="10" />
+              </a-form-item>
+              <a-form-item label=" " :labelCol="{ span: 9 }" :wrapperCol="{ span: 10 }" :colon="false">
+                <span style="margin-right: 10px">{{ $t('从右往左') }}</span>
+                <a-input-number v-model="lockRight" :min="0" :max="10" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="8">
+              <a-form-item :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                <span slot="label">
+                  {{ $t('每页行数') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <span>{{ $t('每页行数 最小为5，最大为50') }}</span>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-input-number v-model="pageSize" :min="5" :max="50" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+        <a-divider orientation="left">{{ $t('字段设置') }}</a-divider>
+        <a-row :gutter="5">
+          <a-col :span="15">
+            <a-card :title="$t('选择字段')" size="small" style="margin-bottom: 20px">
+              <div :style="{ borderBottom: '1px solid #E9E9E9' }">
+                <a-checkbox :indeterminate="indeterminate" :checked="checkAll" @change="onCheckAllChange">
+                  全选
+                </a-checkbox>
+              </div>
+              <br />
+              <a-checkbox-group v-model="checkedList" style="display: flex; flex-flow: wrap" @change="onChange">
+                <div v-for="(value, index) in data" :key="index" style="width: 215px">
+                  <a-checkbox :value="value">
+                    {{ value.title }}
+                  </a-checkbox>
+                </div>
+              </a-checkbox-group>
+            </a-card>
+          </a-col>
+          <a-col :span="9">
+            <a-card :title="$t('当前选定字段')" size="small">
+              <div style="margin-bottom: 10px">
+                <a @click="refresh">{{ $t('按排序值刷新') }}</a>
+              </div>
+              <draggable
+                v-model="checkedList"
+                animation="200"
+                handle=".handle"
+                @start="drag = true"
+                @end="drag = false"
+              >
+                <a-row
+                  v-for="(element, key) in checkedList"
+                  :key="element.id"
+                  class="list-item"
+                  style="margin-bottom: 5px"
+                >
+                  <a-col :span="2" class="handle">
+                    <a-icon type="drag" />
+                  </a-col>
+                  <a-col :span="5" style="margin-right: 10px">
+                    <a-input size="small" :value="(key + 1) * 10" @blur="changesort($event, key)" />
+                  </a-col>
+                  <a-col :span="13" class="text">
+                    <a-tooltip placement="topLeft">
+                      <template slot="title">
+                        {{ element.title }}
+                      </template>
+                      <span>{{ element.title }}</span>
+                    </a-tooltip>
+                  </a-col>
+                </a-row>
+              </draggable>
+            </a-card>
+          </a-col>
+        </a-row>
+      </div>
+      <div class="bbar">
+        <a-button style="float: left" @click="saveTem">{{ $t('保存为我的模板') }}</a-button>
+        <a-button v-if="clearShow" style="float: left" type="danger" @click="clearTem">
+          {{ $t('清空我的模板') }}
+        </a-button>
+        <a-button type="primary" @click="handleSubmit">{{ $t('显示') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    draggable: () => import('vuedraggable')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: [],
+      labelCol: { span: 4 },
+      wrapperCol: { span: 19 },
+      fontsize: [],
+      lockLeft: 0,
+      lockRight: 0,
+      action: {},
+      customColumnsData: {},
+      clearShow: false,
+      pageSize: 20,
+      checkedList: [],
+      setting: [],
+      templateId: '',
+      checkAll: false,
+      indeterminate: false,
+      form: this.$form.createForm(this)
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.loading = true
+      this.data = []
+      this.checkedList = []
+      this.templateId = config.templateId
+      this.axios({
+        url: '/admin/general/init',
+        params: { templateId: config.templateId }
+      }).then(res => {
+        this.loading = false
+        this.data = res.result.columns
+        this.action = this.data.filter(item => item.dataIndex === 'action')
+        this.data = this.data.filter(item => item.dataIndex !== 'action' && item.display !== 'd')
+        this.lockLeft = res.result.lockLeft
+        this.lockRight = res.result.lockRight
+        this.pageSize = res.result.pageSize
+        for (const i in this.data) {
+          if (this.data[i].customTitle) {
+            this.data[i].title = this.data[i].customTitle
+          }
+        }
+        if (res.result.customColumnsData.id) {
+          this.clearShow = true
+          this.customColumnsData = res.result.customColumnsData
+          this.setting = JSON.parse(res.result.customColumnsData.setting)
+          this.lockLeft = JSON.parse(res.result.customColumnsData.setting).lockLeft
+          this.lockRight = JSON.parse(res.result.customColumnsData.setting).lockRight
+          this.pageSize = Number(JSON.parse(res.result.customColumnsData.setting).pageSize)
+        }
+        for (const i in config.data) {
+          for (const j in this.data) {
+            if (this.data[j].dataIndex === config.data[i].dataIndex) {
+              this.checkedList.push(this.data[j])
+            }
+          }
+        }
+        if (this.checkedList.length > 0 && this.checkedList.length !== this.data.length) {
+          this.checkAll = false
+          this.indeterminate = true
+        } else if (this.checkedList.length === this.data.length) {
+          this.checkAll = true
+          this.indeterminate = false
+        } else {
+          this.checkAll = false
+          this.indeterminate = false
+        }
+        this.getSortId()
+      })
+    },
+    // 单选
+    onChange (checkedList) {
+      this.indeterminate = !!checkedList.length && checkedList.length < this.data.length
+      this.checkAll = checkedList.length === this.data.length
+    },
+    // 全选
+    onCheckAllChange (e) {
+      Object.assign(this, {
+        checkedList: e.target.checked ? this.data : [],
+        indeterminate: false,
+        checkAll: e.target.checked
+      })
+    },
+    getSortId () {
+      for (let i = 0; i < this.checkedList.length; i++) {
+        this.checkedList[i]['sortId'] = (i + 1) * 10
+      }
+    },
+    // 改变排序值
+    changesort (e, key) {
+      this.checkedList[key].sortId = Number(e.target.value)
+    },
+    // 比较大小
+    compare (key) {
+      return function (a, b) {
+        var value1 = a[key]
+        var value2 = b[key]
+        return value1 - value2
+      }
+    },
+    // 刷新
+    refresh () {
+      // 排序方法
+      this.checkedList = this.checkedList.sort(this.compare('sortId'))
+      this.getSortId()
+    },
+    handleSubmit () {
+      const data = {
+        data: this.checkedList,
+        lockLeft: this.lockLeft,
+        lockRight: this.lockRight,
+        pageSize: this.pageSize
+      }
+      this.$emit('ok', data)
+      this.visible = false
+    },
+    saveTem () {
+      let action = ''
+      if (this.customColumnsData.id) {
+        action = 'edit'
+      } else {
+        action = 'add'
+      }
+      const data = {
+        lockLeft: this.lockLeft,
+        lockRight: this.lockRight,
+        pageSize: this.pageSize,
+        data: JSON.parse(JSON.stringify(this.checkedList))
+      }
+      data.data.unshift(this.action[0])
+      this.axios({
+        url: '/admin/general/customTemplate',
+        data: {
+          templateId: this.config.templateId,
+          tableId: this.config.tableId,
+          id: this.customColumnsData.id || '',
+          type: 'list_column',
+          data: data,
+          action: action
+        }
+      }).then(res => {
+        this.clearShow = true
+        this.$message.success(this.$t('保存模板成功'))
+      })
+    },
+    clearTem () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要清空模板吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/general/customTemplate',
+            data: {
+              id: that.customColumnsData.id,
+              type: 'list_column',
+              action: 'delete'
+            }
+          }).then(res => {
+            that.clearShow = false
+            that.$message.success(this.$t('模板已清除'))
+          })
+        }
+      })
+    }
+  }
+}
+</script>

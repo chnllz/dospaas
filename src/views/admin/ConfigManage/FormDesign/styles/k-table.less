@@ -1,0 +1,51 @@
+// 表单设计器-表格样式
+.kk-table-9136076486841527 {
+  box-sizing: border-box;
+  width: 100%;
+  border-collapse: collapse;
+  transition: all 0.3s;
+
+  tr {
+    border-collapse: collapse;
+    transition: all 0.3s;
+
+    td {
+      box-sizing: border-box;
+      padding: 12px;
+      vertical-align: top;
+      border-collapse: collapse;
+      transition: all 0.3s;
+    }
+  }
+
+  &.bordered {
+    // 添加边框
+    tr {
+      td {
+        border: 1px solid #e8e8e8 !important;
+      }
+    }
+  }
+
+  &.bright {
+    // 点亮行
+    tr {
+      &:hover > td {
+        background: #e6f7ff;
+      }
+    }
+  }
+
+  &.small {
+    // 紧凑型
+    tr {
+      td {
+        padding: 8px;
+      }
+    }
+  }
+
+  .ant-row.ant-form-item {
+    margin: 0 !important;
+  }
+}

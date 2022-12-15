@@ -1,0 +1,132 @@
+<template>
+  <a-drawer :title="config.title" :width="1200" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <iframe
+        v-if="!loading && config.action == 'add'"
+        :src="data ? data : ''"
+        width="100%"
+        height="100%"
+        scrolling="auto"
+        frameborder="0"
+      ></iframe>
+      <div v-else-if="!loading && config.action == 'detail'" width="100%" height="100%">
+        <a-card :title="$('基本信息')" size="small">
+          <a-form v-bind="formItemLayout">
+            <a-form-item :label="$('授权方昵称：')">
+              <span class="ant-form-text">{{ data.detail.nick_name }}</span>
+            </a-form-item>
+            <a-form-item :label="$('授权方头像：')">
+              <span
+                class="ant-form-text"
+                style="border: 1px dashed #d9d9d9; border-radius: 5px; padding: 5px; display: inline-block"
+                @click="handleImagePreview(data.detail.head_img)"
+              >
+                <img :src="data.detail.head_img" style="width: 64px; height: 64px" :alt="$t('授权方头像')" />
+              </span>
+            </a-form-item>
+            <a-form-item :label="$('授权方类型：')">
+              <span class="ant-form-text">{{ data.detail.service_type_info }}</span>
+            </a-form-item>
+            <a-form-item :label="$('授权方认证类型：')">
+              <span class="ant-form-text">{{ data.detail.verify_type_info }}</span>
+            </a-form-item>
+            <a-form-item :label="$('公众号的主体名称：')">
+              <span class="ant-form-text">{{ data.detail.principal_name }}</span>
+            </a-form-item>
+            <a-form-item :label="$('二维码：')">
+              <span
+                class="ant-form-text"
+                style="border: 1px dashed #d9d9d9; border-radius: 5px; padding: 5px; display: inline-block"
+                @click="handleImagePreview(data.detail.qrcode_url)"
+              >
+                <img :src="data.detail.qrcode_url" style="width: 64px; height: 64px" alt="授权方头像" />
+              </span>
+            </a-form-item>
+            <a-form-item :label="$('解除授权：')">
+              <span class="ant-form-text">
+                <a @click="authorizationVisible = !authorizationVisible">{{ $t('点击解除') }}</a>
+              </span>
+              <a-modal
+                :visible="authorizationVisible"
+                :footer="null"
+                :title="$t('使用帮助')"
+                @cancel="authorizationVisible = !authorizationVisible"
+              >
+                <a-list size="small" bordered :data-source="helpList">
+                  <a-list-item slot="renderItem" slot-scope="item">
+                    {{ item }}
+                  </a-list-item>
+                  <div slot="header">{{ $t('如何解除微信公众号服务授权') }}</div>
+                  <div slot="footer">{{ $t('小程序解除绑定步骤类似') }}</div>
+                </a-list>
+              </a-modal>
+            </a-form-item>
+          </a-form>
+        </a-card>
+        <a-card :title="$t('权限列表')" style="margin-top: 30px" size="small">
+          <a-list size="small" bordered :data-source="data.list">
+            <a-list-item slot="renderItem" slot-scope="item">
+              {{ item }}
+            </a-list-item>
+          </a-list>
+        </a-card>
+      </div>
+      <a-modal :visible="imagePreviewVisible" :footer="null" @cancel="imagePreviewVisible = !imagePreviewVisible">
+        <img alt="example" style="width: 100%" :src="imagePreviewUrl" />
+      </a-modal>
+      <div class="bbar">
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('wechat'),
+  data () {
+    return {
+      formItemLayout: {
+        labelCol: { span: 3 },
+        wrapperCol: { span: 21 }
+      },
+      config: {},
+      visible: false,
+      loading: false,
+      data: {},
+      role: [],
+      department: [],
+      imagePreviewUrl: '',
+      imagePreviewVisible: false,
+      authorizationVisible: false,
+      helpList: [
+        this.$t('1.登录您的微信公众号后台，在左侧菜单栏处找到“设置--公众号设置”'),
+        this.$t('2.进入“公众号设置--授权管理”，点击“查看平台详情”'),
+        this.$t('3.点击“取消授权”按钮即可')
+      ]
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: config.url,
+        data: Object.assign({ id: config.record ? config.record.id : 0 })
+      }).then((res) => {
+        this.data = res.result
+        this.loading = false
+      })
+    },
+    // 图片预览
+    handleImagePreview (text) {
+      this.imagePreviewUrl = text
+      this.imagePreviewVisible = true
+    }
+  }
+}
+</script>

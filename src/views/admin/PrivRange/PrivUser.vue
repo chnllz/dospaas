@@ -1,0 +1,137 @@
+<template>
+  <a-spin :spinning="loading">
+    <a-form :form="form">
+      <a-row type="flex" :gutter="10" style="margin-bottom: 10px">
+        <a-col flex="180px">
+          <a-form-item>
+            <a-select v-model="userParamType" @change="queryParam = {}">
+              <a-select-option value="username">{{ $t('账号') }}</a-select-option>
+              <a-select-option value="department">{{ $t('部门') }}</a-select-option>
+              <a-select-option value="role">{{ $t('角色') }}</a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col flex="auto">
+          <a-form-item v-if="userParamType === 'username'">
+            <a-input-search
+              :placeholder="$t('请输入账号称搜索')"
+              @search="
+                (e) => {
+                  queryParam.username = e
+                  $refs.table.refresh(true)
+                }
+              "
+            />
+          </a-form-item>
+          <a-form-item v-else-if="userParamType === 'department'">
+            <a-input-search
+              :placeholder="$t('请输入部门名称搜索')"
+              @search="
+                (e) => {
+                  queryParam.departmentName = e
+                  $refs.table.refresh(true)
+                }
+              "
+            />
+          </a-form-item>
+          <a-form-item v-else>
+            <a-input-search
+              :placeholder="$t('请输入角色名称搜索')"
+              @search="
+                (e) => {
+                  queryParam.roleName = e
+                  $refs.table.refresh(true)
+                }
+              "
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <s-table
+        ref="table"
+        size="small"
+        rowKey="id"
+        :columns="columns"
+        :data="loadDataTable"
+        :sorter="{ field: 'id', order: 'descend' }"
+      >
+        <a slot="action" slot-scope="text, record" @click="dataSelect(record)">{{ $t('选择') }}</a>
+      </s-table>
+    </a-form>
+  </a-spin>
+</template>
+<script>
+import Vue from 'vue'
+import { TreeSelect } from 'ant-design-vue'
+Vue.use(TreeSelect)
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      loading: false,
+      form: this.$form.createForm(this),
+      userParamType: 'username',
+      queryParam: {}, // 搜索参数
+      columns: [{
+        title: this.$t('账号'),
+        dataIndex: 'username',
+        sorter: true
+      }, {
+        title: this.$t('真实姓名'),
+        dataIndex: 'realName',
+        sorter: true
+      }, {
+        title: this.$t('所属部门'),
+        dataIndex: 'departmentName',
+        sorter: true
+      }, {
+        title: this.$t('所属角色'),
+        dataIndex: 'roleName',
+        sorter: true
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsDepartment: [{
+        title: this.$t('部门'),
+        dataIndex: 'text'
+      }],
+      columnsRole: [{
+        title: this.$t('角色'),
+        dataIndex: 'text'
+      }],
+      columnsFieldUser: [{
+        title: this.$t('用户'),
+        dataIndex: 'username',
+        width: 450
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }]
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/search/userSearch',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 选择用户
+    dataSelect (record) {
+      const obj = {
+        id: record.username,
+        name: record.username,
+        type: 'user'
+      }
+      this.$emit('ok', obj)
+    }
+  }
+}
+</script>

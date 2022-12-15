@@ -1,0 +1,691 @@
+<template>
+  <div class="page">
+    <a-spin :spinning="loading">
+      <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" :colon="false" class="search">
+        <a-card size="small" :title="$t('搜索')">
+          <a-space slot="extra">
+            <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+            <a-button
+              @click="
+                () => {
+                  queryParam = { workflowId: undefined, flowCondition: queryParam.flowCondition, flowDuration: [] }
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+          </a-space>
+          <a-row :class="advanced ? 'advanced' : 'normal'" class="form">
+            <a-col :span="6">
+              <a-form-item :label="$t('流程编号')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input v-model="queryParam.caseNumber" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('客户电话')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input v-model="queryParam.customerPhone" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('流程状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input v-model="queryParam.processStatus" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('流程类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-select v-model="queryParam.workflowId" :allowClear="true" show-search option-filter-prop="children">
+                  <a-select-option v-for="(value, key) in workflow" :key="key" :value="value.value">
+                    {{ value.text }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('发起人')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input v-model="queryParam.startUsername" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('流程发起时间')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-range-picker
+                  v-model="queryParam.startDate"
+                  :showTime="{ defaultValue: [moment('00:00:00', 'HH:mm:ss'), moment('23:59:59', 'HH:mm:ss')] }"
+                  :placeholder="[$t('开始时间'), $t('结束时间')]"
+                  style="width: 100%"
+                  @change="getStartDate"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('摘要')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input v-model="queryParam.caseName" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-card>
+      </a-form>
+      <a-space>
+        <a-radio-group :value="queryParam.flowCondition" button-style="solid" @change="handleSizeChange">
+          <a-tooltip
+            v-for="item in workflowFilters"
+            v-show="item.priv === 'visit'"
+            :key="item.value"
+            :title="item.help"
+          >
+            <a-radio-button :value="item.value">
+              {{ item.customName ? $t(item.customName) : $t(item.name) }}
+            </a-radio-button>
+          </a-tooltip>
+        </a-radio-group>
+        <!-- <a-button icon="download" @click="handleExport">导出</a-button> -->
+      </a-space>
+      <s-table
+        v-if="queryParam.flowCondition"
+        ref="table"
+        style="height: calc(100vh - 335px)"
+        class="table-fill"
+        size="small"
+        rowKey="id"
+        :columns="columns"
+        :data="loadDataTable"
+        :sorter="{ field: 'id', order: 'descend' }"
+        :scroll="{ x: 1570, y: true }"
+      >
+        <div slot="caseName" slot-scope="text">
+          <span v-dompurify-html="text"></span>
+        </div>
+      </s-table>
+      <!-- 数据表单 -->
+      <workflow-handle-form ref="workflowHandleForm" :key="indexKey" @ok="refresh('noRefresh')"></workflow-handle-form>
+      <!-- 转办 -->
+      <user-table-workflow-complaint ref="userTableWorkflowComplaint" :key="complaintKey" @ok="refresh('noRefresh')" />
+      <!-- 办理备注 -->
+      <user-table-workflow-remarks ref="userTableWorkflowRemarks" :key="remarkKey" @ok="refresh('noRefresh')" />
+      <!-- 催办 -->
+      <user-table-workflow-urge ref="userTableWorkflowUrge" :key="urgeKey" @ok="urgeOk" />
+      <!-- 取消工单 -->
+      <user-table-workflow-terminate ref="userTableWorkflowTerminate" :key="terminateKey" @ok="refresh('noRefresh')" />
+      <!-- 流转 -->
+      <user-table-workflow-jump ref="userTableWorkflowJump" :key="jumpKey" @ok="refresh('noRefresh')" />
+      <general-export ref="generalExport" />
+    </a-spin>
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    UserTableWorkflowComplaint: () => import('@/views/admin/General/UserTableWorkflowComplaint'),
+    WorkflowHandleForm: () => import('../WorkflowHandleForm'),
+    UserTableWorkflowRemarks: () => import('../General/UserTableWorkflowRemarks'),
+    UserTableWorkflowUrge: () => import('../General/UserTableWorkflowUrge'),
+    userTableWorkflowTerminate: () => import('../General/UserTableWorkflowTerminate'),
+    UserTableWorkflowJump: () => import('../General/UserTableWorkflowJump'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    workflowFilters: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    flowCondition: {
+      type: String,
+      default () {
+        return ''
+      }
+    }
+  },
+  data () {
+    return {
+      indexKey: 0,
+      remarkKey: 'remark',
+      urgeKey: 'urge',
+      terminateKey: 'terminate',
+      jumpKey: 'jump',
+      complaintKey: 'complaint',
+      advanced: false,
+      // 搜索参数
+      queryParam: { workflowId: undefined, flowDuration: [] },
+      enableDate: null,
+      handleTime: null,
+      labelCol: { style: 'width: 104px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 104px); display: inline-block' },
+      where: '',
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 150,
+        align: 'center',
+        customRender: this.actionRender
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        sorter: true,
+        width: 80
+      }, {
+        title: this.$t('发起人'),
+        dataIndex: 'username',
+        width: 100
+      }, {
+        title: this.$t('摘要'),
+        dataIndex: 'caseName',
+        ellipsis: false,
+        scopedSlots: { customRender: 'caseName' }
+      }, {
+        title: this.$t('流程类型'),
+        dataIndex: 'workflowName',
+        width: 100
+      }, {
+        title: this.$t('流程编号'),
+        dataIndex: 'caseNumber',
+        width: 140
+      }, {
+        title: this.$t('流程发起时间'),
+        dataIndex: 'startDate',
+        sorter: true,
+        width: 130
+      }, {
+        title: this.$t('任务接收时间'),
+        dataIndex: 'enabledDate',
+        width: 130
+      }, {
+        title: this.$t('流程状态'),
+        dataIndex: 'processStatus',
+        width: 100
+      }, {
+        title: this.$t('流程子状态'),
+        dataIndex: 'processSubStatus',
+        width: 150
+      }],
+      colLayout: {},
+      workflow: [],
+      dataWindowButtons: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  watch: {
+    flowCondition (newVal) {
+      if (newVal) {
+        this.loading = false
+        this.queryParam.flowCondition = newVal
+      }
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+    this.loading = true
+    if (this.workflowFilters.length > 0 && this.workflowFilters.filter(item => item.priv === 'visit')[0]) {
+      this.loading = false
+      this.queryParam.flowCondition = this.workflowFilters.filter(item => item.priv === 'visit')[0].value
+    } else {
+      this.queryParam.flowCondition = this.flowCondition
+    }
+  },
+  methods: {
+    actionRender (text, record) {
+      const buttons = this.dataWindowButtons[record.workflowId] || []
+      const menuArr = []
+      const _this = this
+      buttons.map(rowItem => {
+        // const Menu = {
+        //   template: `<span>${rowItem.attribute}</span>`,
+        //   data: () => {
+        //     return {
+        //       parent: this,
+        //       record: record
+        //     }
+        //   }
+        // }
+        const funcStr = `return (_this, record) => {  return ${rowItem.attribute} }`
+        // eslint-disable-next-line no-new-func
+        const func = new Function(funcStr)
+        const obj = func()(_this, record)
+        if (obj.template) {
+          obj.template = obj.template.replace(/[\r\n]/g, '')
+        }
+        const Menu = obj
+        if (parseInt(rowItem.display) === 1) {
+          switch (rowItem.usage) {
+            case 'flow_process':
+              if ((this.queryParam.flowCondition === 'my_process' && record.process_current_user === this.userInfo.username) ||
+                this.queryParam.flowCondition === 'only_process' || this.queryParam.flowCondition === 'all_process') {
+                menuArr.push(Menu)
+              }
+              break
+            case 'flow_takeprocess':
+              if (this.queryParam.flowCondition === 'public_process' || (this.queryParam.flowCondition === 'my_process' && record.process_current_user !== this.userInfo.username)) {
+                menuArr.push(Menu)
+              }
+              break
+            case 'flow_take':
+              if ((this.queryParam.flowCondition === 'my_process' && record.process_current_user !== this.userInfo.username) || this.queryParam.flowCondition === 'public_process') {
+                menuArr.push(Menu)
+              }
+              break
+            default:
+              menuArr.push(Menu)
+              break
+          }
+        }
+      })
+      if (menuArr.length < 4) {
+        return (
+          <div>
+            {
+              menuArr.map((menuItem, menuIndex) => {
+                if (menuIndex === menuArr.length - 1) {
+                  return (
+                    <span>
+                      <menuItem />
+                    </span>
+                  )
+                } else {
+                  return (
+                    <span>
+                      <menuItem />
+                      <a-divider type="vertical" />
+                    </span>
+                  )
+                }
+              })
+            }
+          </div>
+        )
+      } else {
+        return (
+          <span>
+            <span>
+              {
+                menuArr.map((menuItem, menuIndex) => {
+                  if (menuIndex < 2) {
+                    return (
+                      <span>
+                        <menuItem />
+                        <a-divider type="vertical" />
+                      </span>
+                    )
+                  }
+                })
+              }
+            </span>
+            <a-dropdown>
+              <a>{this.$t('更多')} <a-icon type="down" /></a>
+              <a-menu slot="overlay">
+                {
+                  menuArr.map((menuItem, menuIndex) => {
+                    if (menuIndex > 1) {
+                      return (
+                        <a-menu-item>
+                          <menuItem />
+                        </a-menu-item>
+                      )
+                    }
+                  })
+                }
+              </a-menu>
+            </a-dropdown>
+          </span>
+        )
+      }
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/centerflow/init',
+        data: Object.assign(parameter, this.queryParam, { init: String(!this.workflow.length), flowStatus: 'proceed' })
+      }).then(res => {
+        if (this.workflow.length === 0) {
+          this.workflow = res.result.option.workflow
+        }
+        if (res.result.dataWindowButtons) {
+          this.dataWindowButtons = res.result.dataWindowButtons || {}
+        }
+        this.where = res.result.where
+        return res.result
+      })
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'orderExport',
+        parameter: { where: this.where }
+      })
+    },
+    handleSizeChange (e) {
+      this.queryParam.flowCondition = e.target.value
+      if (['my_handle', 'my_create', 'all_flow'].includes(e.target.value)) {
+        this.columns = [{
+          title: this.$t('操作'),
+          dataIndex: 'action',
+          width: 150,
+          align: 'center',
+          customRender: this.actionRender
+        }, {
+          title: 'ID',
+          dataIndex: 'id',
+          sorter: true,
+          width: 80
+        }, {
+          title: this.$t('发起人'),
+          dataIndex: 'username',
+          width: 100
+        }, {
+          title: this.$t('摘要'),
+          dataIndex: 'caseName',
+          ellipsis: false,
+          scopedSlots: { customRender: 'caseName' }
+        }, {
+          title: this.$t('流程类型'),
+          dataIndex: 'workflowName',
+          width: 100
+        }, {
+          title: this.$t('流程编号'),
+          dataIndex: 'caseNumber',
+          width: 140
+        }, {
+          title: this.$t('流程发起时间'),
+          dataIndex: 'startDate',
+          sorter: true,
+          width: 130
+        }, {
+          title: this.$t('流程状态'),
+          dataIndex: 'processStatus',
+          width: 100
+        }, {
+          title: this.$t('流程子状态'),
+          dataIndex: 'processSubStatus',
+          width: 150
+        }]
+      } else {
+        this.columns = [{
+          title: this.$t('操作'),
+          dataIndex: 'action',
+          width: 150,
+          align: 'center',
+          customRender: this.actionRender
+        }, {
+          title: 'ID',
+          dataIndex: 'id',
+          sorter: true,
+          width: 80
+        }, {
+          title: this.$t('发起人'),
+          dataIndex: 'username',
+          width: 100
+        }, {
+          title: this.$t('摘要'),
+          dataIndex: 'caseName',
+          ellipsis: false,
+          scopedSlots: { customRender: 'caseName' }
+        }, {
+          title: this.$t('流程类型'),
+          dataIndex: 'workflowName',
+          width: 100
+        }, {
+          title: this.$t('流程编号'),
+          dataIndex: 'caseNumber',
+          width: 140
+        }, {
+          title: this.$t('流程发起时间'),
+          dataIndex: 'startDate',
+          sorter: true,
+          width: 130
+        }, {
+          title: this.$t('任务接收时间'),
+          dataIndex: 'enabledDate',
+          width: 130
+        }, {
+          title: this.$t('流程状态'),
+          dataIndex: 'processStatus',
+          width: 100
+        }, {
+          title: this.$t('流程子状态'),
+          dataIndex: 'processSubStatus',
+          width: 150
+        }]
+      }
+      this.refresh()
+    },
+    // 领取
+    handleTakeFlow (record) {
+      this.$forceUpdate()
+      this.axios({
+        url: '/admin/workitem/processing',
+        data: {
+          handleWay: '领取',
+          operation: 'take_flow',
+          caseId: record.caseId
+        }
+      }).then(res => {
+        this.loading = false
+        this.$forceUpdate()
+        if (res.code === 0) {
+          this.$message.success(this.$t('领取成功'))
+        } else {
+          this.$message.error(res.message)
+        }
+        this.$refs.table.refresh()
+      })
+    },
+    getStartDate (date, dateString) {
+      this.queryParam.startDateFrom = dateString[0]
+      this.queryParam.startDateTo = dateString[1]
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    // 刷新表格
+    refresh (type) {
+      this.$refs.table.refresh(!type)
+    },
+    handleView (record) {
+      this.indexKey = this.indexKey === 1 ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('查看流程'),
+            width: 1200,
+            tplviewUrl: '/admin/centerflow/viewOrder',
+            caseId: record.caseId,
+            flowStatus: 'proceed',
+            flowCondition: this.queryParam.flowCondition,
+            viewType: 'view'
+          },
+          record: record
+        })
+      })
+    },
+    handleProcess (record) {
+      this.indexKey = this.indexKey === 1 ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('办理流程'),
+            width: 1200,
+            tplviewUrl: '/admin/centerflow/handleOrder',
+            url: '/admin/workitem/processing',
+            flowStatus: 'proceed',
+            flowCondition: this.queryParam.flowCondition,
+            caseId: record.caseId,
+            viewType: 'handle'
+          },
+          record: record
+        })
+      })
+    },
+    // 转办
+    handleTransfer (record) {
+      this.complaintKey = this.complaintKey === 'complaint' ? 'complaint_1' : 'complaint'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowComplaint.show({
+          caseId: record.caseId
+        })
+      })
+    },
+    // 办理，领办
+    handleTakeProcess (record) {
+      this.indexKey = this.indexKey === 1 ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.workflowHandleForm.show({
+          config: {
+            title: this.$t('办理流程'),
+            width: 1200,
+            tplviewUrl: '/admin/centerflow/handleOrder',
+            url: '/admin/workitem/processing',
+            caseId: record.caseId,
+            flowStatus: 'proceed',
+            flowCondition: this.queryParam.flowCondition,
+            viewType: 'handle',
+            takeFlow: 1
+          },
+          record: record
+        })
+      })
+    },
+    // 办理备注
+    handleRemarks (record) {
+      this.remarkKey = this.remarkKey === 'remark' ? 'remark_1' : 'remark'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowRemarks.show({
+          caseId: record.caseId
+        })
+      })
+    },
+    // 催办
+    handleUrge (record) {
+      this.urgeKey = this.urgeKey === 'urge' ? 'urge_1' : 'urge'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowUrge.show({
+          caseId: record.caseId,
+          record
+        })
+      })
+    },
+    // 催办成功，2次及以上催办生成弹窗
+    urgeOk (record) {
+      this.refresh('noRefresh')
+      const that = this
+      const { arcUrge, complainNum, khdh1 } = record
+      const { gdbh, wdbh, wdmc, wdlx, sfxm, sfdh, sfyhm } = record
+      const urlObj = {
+        gdlx: 'ts2',
+        Callerid: khdh1,
+        gdbh,
+        wdbh,
+        wdmc,
+        wdlx,
+        sfxm,
+        sfdh,
+        sfyhm
+      }
+      let url = `${process.env.VUE_APP_BASE_URL}CustomPage/?view=crm/Popscreen&Uniqueid=${that.uuid()}`
+      for (const key in urlObj) {
+        if (urlObj[key]) {
+          url = `${url}&${key}=${urlObj[key]}`
+        }
+      }
+      url = url.substr(0, url.length)
+      if (arcUrge > 1) {
+        const content = arcUrge === 2 ? this.$t('催办成功，是否生成投诉单？') : this.$t('催办成功，此前已生成{0}个投诉单，是否新增投诉单', { 0: complainNum })
+        this.$confirm({
+          title: this.$t('提示'),
+          content,
+          okText: this.$t('确定'),
+          cancelText: this.$t('无需'),
+          onOk () {
+            return new Promise((resolve, reject) => {
+              window.open(url)
+              resolve()
+            }).catch()
+          },
+          onCancel () { }
+        })
+      }
+    },
+    // 生成唯一ID
+    uuid (n) {
+      n = 1 // 生成一个唯一id，包含数字和字母
+      var random = function () {
+        // 生成10-12位不等的字符串
+        return Number(
+          Math.random()
+            .toString()
+            .substr(2)
+        ).toString(36) // 转换成十六进制
+      }
+      var arr = []
+      function createId () {
+        var num = random()
+        var _bool = false
+        arr.forEach(v => {
+          if (v === num) _bool = true
+        })
+        if (_bool) {
+          createId()
+        } else {
+          arr.push(num)
+        }
+      }
+      var i = 0
+      while (i < n) {
+        createId()
+        i++
+      }
+      return arr[0] // 将生成的转为我们需要的字符串并赋值
+    },
+    // 撤销
+    handleTerminate (record, type) {
+      if (record.gdbh && record.gdbh.includes('WX') && !type) {
+        type = 'WX'
+      }
+      this.terminateKey = this.terminateKey === 'terminate' ? 'terminate_1' : 'terminate'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowTerminate.show({
+          caseId: record.caseId,
+          record: record,
+          type: type
+        })
+      })
+    },
+    // 办理流转
+    handleJump (record) {
+      this.jumpKey = this.jumpKey === 'jump' ? 'jump_1' : 'jump'
+      this.$nextTick(() => {
+        this.$refs.userTableWorkflowJump.show({
+          caseId: record.caseId
+        })
+      })
+    },
+    // 删除
+    handleDelete (record) {
+      const me = this
+      this.$confirm({
+        title: this.$t('您确认要删除该流程吗？'),
+        onOk () {
+          me.axios({
+            url: '/admin/Wcase/delete',
+            data: { caseId: record.caseId }
+          }).then(res => {
+            me.refresh()
+          })
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,82 @@
+<template>
+  <a-drawer
+    :title="config.title"
+    :width="config.width"
+    :height="height"
+    :placement="config.placement"
+    :visible="visible"
+    :destroyOnClose="true"
+    @close="visible = !visible"
+  >
+    <a-spin :spinning="loading">
+      <drag-list :data.sync="data" :sortName="config.sortName" :sortId="config.sortId" />
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  components: {
+    DragList: () => import('@/components/Drag/DragList')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: [],
+      height: '100%'
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.config.placement = this.config.placement ?? 'top'
+      this.config.title = this.config.title ?? this.$t('排序')
+      if (['top', 'bottom'].includes(this.config.placement)) {
+        this.height = '100%'
+      }
+      if (this.config.sortData) {
+        this.data = this.config.sortData
+      } else {
+        this.loading = true
+        this.axios({
+          url: '/admin/index/getSort',
+          data: {
+            tableName: this.config.tableName,
+            sortName: this.config.sortName,
+            where: this.config.where
+          }
+        }).then(res => {
+          this.loading = false
+          this.data = res.result
+        })
+      }
+    },
+    handleSubmit () {
+      if (this.config.sortData) {
+        this.visible = false
+        this.$emit('ok', this.data)
+      } else {
+        this.loading = true
+        this.axios({
+          url: '/admin/index/setSort',
+          data: {
+            tableName: this.config.tableName,
+            data: this.data
+          }
+        }).then(res => {
+          this.$message.success(res.message)
+          this.visible = false
+          this.loading = false
+          this.$emit('ok', '')
+        })
+      }
+    }
+  }
+}
+</script>

@@ -1,0 +1,284 @@
+<template>
+  <div>
+    <a-card size="small" style="min-height: 300px; overflow: hidden; position: relative">
+      <a-radio-group
+        v-model="showType"
+        button-style="solid"
+        style="margin-bottom: 10px"
+        @change="
+          (e) => {
+            if (e.target.value === '1') queueShow()
+          }
+        "
+      >
+        <a-radio-button value="0">表格展示</a-radio-button>
+        <a-radio-button value="1">图表展示</a-radio-button>
+      </a-radio-group>
+      <a-table
+        v-show="showType === '0'"
+        ref="table"
+        size="small"
+        :columns="columns"
+        rowKey="number"
+        :dataSource="queueData"
+        :pagination="false"
+      >
+        <div slot="queue" slot-scope="text">
+          {{ text || '--' }}
+        </div>
+        <div slot="total" slot-scope="text, record">
+          {{ record.agentsStatus.total }}
+        </div>
+        <div slot="login" slot-scope="text, record">
+          {{ record.agentsStatus.login }}
+        </div>
+        <div slot="idle" slot-scope="text, record">
+          {{ record.agentsStatus.idle }}
+        </div>
+        <div slot="action" slot-scope="text, record">
+          <a @click="handleLook(record)">查看</a>
+        </div>
+      </a-table>
+      <div v-show="showType === '1'">
+        <a-card
+          v-for="(item, index) in queueData"
+          v-show="queueData.length"
+          :key="index"
+          size="small"
+          :title="item.queue"
+          :headStyle="{ background: '#F5F5F6' }"
+          style="
+            width: 370px;
+            height: 250px;
+            padding: 0px;
+            display: inline-block;
+            margin: 0 12px 8px 0;
+            position: relative;
+          "
+        >
+          <div ref="main" style="background: #fff; margin: 0; height: 180px" @loadstart="myEcharts(index, item)"></div>
+        </a-card>
+        <a-empty v-show="!queueData.length" />
+      </div>
+    </a-card>
+    <a-drawer :title="queueTitle" :width="700" :visible="visible" @close="visible = !visible">
+      <a-spin :spinning="false">
+        <a-tabs default-active-key="1">
+          <a-tab-pane key="1">
+            <span slot="tab">坐席详情</span>
+            <a-table
+              ref="table"
+              size="small"
+              rowKey="extension"
+              :columns="agentColumns"
+              :dataSource="agentsData"
+            ></a-table>
+          </a-tab-pane>
+          <a-tab-pane key="2">
+            <span slot="tab">排队详情</span>
+            <a-table ref="table" size="small" rowKey="callerid" :columns="waitColumns" :data-source="waitData">
+              <div slot="action" slot-scope="text, record">
+                <a @click="queuePickup(record)">抢接</a>
+              </div>
+            </a-table>
+          </a-tab-pane>
+        </a-tabs>
+        <div class="bbar">
+          <a-button @click="visible = !visible">关闭</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+import echarts from 'echarts'
+export default {
+  data () {
+    return {
+      // 定时任务
+      timeOut: null,
+      // 队列标题
+      queueTitle: '',
+      // 排队详情
+      waitData: [],
+      // 队列坐席
+      agentsData: [],
+      // 队列数据
+      queueData: [],
+      visible: false,
+      showType: '0',
+      // 队列列表
+      columns: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '队列名称',
+        dataIndex: 'queue',
+        scopedSlots: { customRender: 'queue' }
+      }, {
+        title: '坐席总数',
+        dataIndex: 'agentsTotal',
+        scopedSlots: { customRender: 'total' }
+      }, {
+        title: '签入坐席',
+        dataIndex: 'agentsLogin',
+        scopedSlots: { customRender: 'login' }
+      }, {
+        title: '空闲坐席',
+        dataIndex: 'agentsIdle',
+        scopedSlots: { customRender: 'idle' }
+      }, {
+        title: '等待数量',
+        dataIndex: 'waitNumber'
+      }, {
+        title: '最长等待时间',
+        dataIndex: 'maxWaitTime'
+      }],
+      // 坐席详情列表
+      agentColumns: [{
+        title: '坐席姓名',
+        dataIndex: 'name'
+      }, {
+        title: '分机号码',
+        dataIndex: 'extension'
+      }, {
+        title: '当前状态',
+        dataIndex: 'status'
+      }, {
+        title: '最后通话时间',
+        dataIndex: 'lastCallTime',
+        width: 120
+      }],
+      waitColumns: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '来电号码',
+        dataIndex: 'callerid'
+      }, {
+        title: '客户名称',
+        dataIndex: 'name'
+      }, {
+        title: '客户级别',
+        dataIndex: 'level'
+      }, {
+        title: '等待时间',
+        dataIndex: 'waitTime',
+        width: 120
+      }],
+      timeId: null,
+      timeout: 100000
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  watch: {
+    queueData: function (val) {
+      this.queueData.forEach((item, index) => {
+        this.$nextTick(() => {
+          this.myEcharts(echarts.init(this.$refs.main[index]), this.queueData[index].agentsStatus)
+        })
+      })
+    }
+  },
+  activated () {
+    this.loadData()
+  },
+  deactivated () {
+    clearInterval(this.timeId)
+  },
+  methods: {
+    loadData () {
+      this.axios({
+        url: '/callcenter/monitor/queue',
+        data: this.$route.query
+      }).then(res => {
+        this.queueData = res.result
+        this.timeout = res.result.timeout || 100000
+        clearInterval(this.timeId)
+        this.timeId = setTimeout(() => {
+          this.loadData()
+        }, this.timeout)
+      })
+    },
+    queueShow () {
+      const data = JSON.parse(JSON.stringify(this.queueData))
+      this.queueData = []
+      this.$nextTick(() => {
+        this.queueData = data
+      })
+    },
+    handleLook (record) {
+      this.agentsData = record.agentsDetail
+      this.waitData = record.waitNumberData
+      this.queueTitle = record.queue
+      this.visible = true
+    },
+    queuePickup (record) {
+      var that = this
+      this.axios({
+        url: '/monitor/queue/queuePickup',
+        data: {
+          extension: that.userInfo.extension,
+          channel: record.channel
+        }
+      }).then(res => {
+        this.$message.success(res.message)
+        this.loadData()
+      })
+    },
+    myEcharts (echart, status) {
+      const option = {
+        tooltip: {
+          trigger: 'item',
+          formatter: '{a} <br/>{b} : {c} ({d}%)'
+        },
+        legend: {
+          orient: 'vertical',
+          right: 10,
+          y: 'middle',
+          data: ['空闲', '示忙', '通话', '振铃', '离线']
+        },
+        series: [{
+          name: '坐席状态',
+          type: 'pie',
+          avoidLabelOverlap: false,
+          label: {
+            normal: {
+              show: false
+            }
+          },
+          labelLine: {
+            normal: {
+              show: false
+            }
+          },
+          radius: '55%',
+          center: ['40%', '50%'],
+          data: [
+            { value: status.idle, name: '空闲' },
+            { value: status.busy, name: '示忙' },
+            { value: status.calling, name: '通话' },
+            { value: status.ringing, name: '振铃' },
+            { value: status.loginout, name: '离线' }
+          ],
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          }
+        }]
+      }
+      echart.setOption(option)
+    }
+  }
+}
+</script>

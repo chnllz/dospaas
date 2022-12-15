@@ -1,0 +1,219 @@
+import store from '../../../store/'
+/**
+ * @param {规则中设置的值} value
+ * @param {表单输入的值} inputValue
+ * @param {规则中设置的值，级联选择，地址选择的全值} allValue
+ * @param {表单输入的值，级联选择，地址选择的全值} all
+ */
+const actions = new Map([[
+    '', function (value, inputValue) {
+        return true
+    }], [
+    'contain', function (value, inputValue, allValue, all) {
+        if (all) {
+            if (all.indexOf(allValue) !== -1 && inputValue) {
+                return true
+            } else if (all.indexOf(allValue) === -1) {
+                return false
+            }
+        } else if (!inputValue || (inputValue && inputValue.indexOf(value) === -1)) {
+            return false
+        } else if (inputValue && inputValue.indexOf(value) !== -1) {
+            return true
+        }
+    }], [
+    'nc', function (value, inputValue, allValue, all) {
+        if (all) {
+            if (all.indexOf(allValue) === -1) {
+                return true
+            } else if (all.indexOf(allValue) !== -1) {
+                return false
+            }
+        } else if (!inputValue || (inputValue && inputValue.indexOf(value) === -1)) {
+            return true
+        } else if (inputValue && inputValue.indexOf(value) !== -1) {
+            return false
+        }
+    }], [
+    'equal', function (value, inputValue) {
+        if (inputValue === value) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'great', function (value, inputValue) {
+        if (inputValue > value) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'ne', function (value, inputValue) {
+        if (inputValue && inputValue.length && inputValue !== value) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'lt', function (value, inputValue) {
+        if (inputValue < value) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'ge', function (value, inputValue) {
+        if (inputValue > value || inputValue === value) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'le', function (value, inputValue) {
+        if (inputValue < value || inputValue === value) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'bw', function (value, inputValue) {
+        if (inputValue.indexOf(value) === 0) {
+            return true
+        } else {
+            return false
+        }
+    }], [
+    'ew', function (value, inputValue) {
+        const len = value.length
+        if (inputValue && inputValue.slice(-len) === value) {
+            return true
+        } else {
+            return false
+        }
+    }]])
+export class FormRule {
+    // eslint-disable-next-line space-before-function-paren
+    constructor(fieldRule, config, data) {
+        this.fieldRule = fieldRule // 表单规则
+        this.config = config // 视图配置
+        this.oldConfig = JSON.parse(JSON.stringify(this.config)) // 视图配置初始化
+        this.data = data // 视图数据
+        this.userInfo = store.getters.userInfo // 个人信息
+        this.changeValueField = {} // 被改变值得字段
+    }
+
+    /**
+     * 运行单个表单规则
+     * @param {当前所有的数据} record
+     * @param {改变的字段} field
+     */
+    runRule (record, field) {
+        const fieldRule = JSON.parse(JSON.stringify(this.fieldRule))
+        for (let i = 0; i < fieldRule.length; i++) {
+            const formRule = fieldRule[i]
+            formRule.simpleCondition.forEach((item, index) => {
+                item.condition.forEach((myitem, myindex) => {
+                    if (item.fieldUser === 'currentUser') {
+                        myitem.flag = this.handleUserSimple(this.userInfo.username, myitem.value, item.include)
+                    } else if (item.fieldUser === 'currentDepartment') {
+                        myitem.flag = this.handleUserSimple(this.userInfo.departmentId, myitem.value, item.include)
+                    } else if (item.fieldUser === 'currentRole') {
+                        myitem.flag = this.handleUserSimple(this.userInfo.roleId, myitem.value, item.include)
+                    } else if (item.fieldUser === 'notSet') {
+                        myitem.flag = true
+                    } else {
+                        myitem.flag = this.onChangeValue(item, myitem, record)
+                    }
+                })
+                if (item.logic === 'and') {
+                    item.flag = item.condition.every((myitem, myindex) => {
+                        return myitem.flag
+                    })
+                } else if (item.logic === 'or') {
+                    item.flag = item.condition.some((myitem, myindex) => {
+                        return myitem.flag
+                    })
+                }
+            })
+            if (formRule.logic === 'and') {
+                formRule.flag = formRule.simpleCondition.every((item, index) => {
+                    return item.flag
+                })
+            } else if (formRule.logic === 'or') {
+                formRule.flag = formRule.simpleCondition.some((item, index) => {
+                    return item.flag
+                })
+            }
+            if (!formRule.flag && formRule.simpleCondition.some(item => item.field === field)) {
+                this.recoverConfig(formRule.event)
+            }
+            if (formRule.flag) {
+                this.handleEvent(formRule.event, i)
+            }
+        }
+    }
+    // 判断当前用户，用户所在部门，所属于角色
+    handleUserSimple (current, conditionValue, include) {
+        if (include === 'bl' || !include) {
+            if (conditionValue.indexOf(current) !== -1) {
+                return true
+            } else {
+                return false
+            }
+        } else {
+            if (conditionValue.indexOf(current) !== -1) {
+                return false
+            } else {
+                return true
+            }
+        }
+    }
+    /**
+     *
+     * @param {条件1} item
+     * @param {条件2} myitem
+     * @param {改变的值} changeValue
+     */
+    onChangeValue (item, myitem, record) {
+        let inputValue = ''
+        inputValue = record[item.field]
+        if (myitem && !myitem.value) {
+            myitem.value = ''
+        }
+        if (item.formType === 'number') {
+            myitem.value = parseFloat(myitem.value)
+        }
+        const action = actions.get(`${myitem.include}`)
+        return action(myitem.value, inputValue, myitem.allValue)
+    }
+    /**
+     *
+     * @param {执行事件} event
+     */
+    handleEvent (event, index) {
+        console.log('event', event)
+        event.forEach(item => {
+            if (item.status === 'changeValue') {
+                this.data[item.field] = item.formType === 'number' ? parseFloat(item.changeValue) : item.changeValue
+                this.changeValueField[item.field] = this.data[item.field]
+            } else {
+                const aliasItem = this.config[item.field]
+                aliasItem.setting.attribute.required = item.mandatory === 'true'
+                aliasItem.rule = item.status
+            }
+        })
+    }
+    /**
+     *  还原表单规则
+     * @param {触发的事件} event
+     */
+    recoverConfig (event) {
+        event.forEach(item => {
+            const aliasItem = this.config[item.field]
+            const oldItem = this.oldConfig[item.field]
+            aliasItem.setting.attribute.required = oldItem.setting.attribute.required
+            aliasItem.rule = oldItem.rule
+        })
+    }
+}

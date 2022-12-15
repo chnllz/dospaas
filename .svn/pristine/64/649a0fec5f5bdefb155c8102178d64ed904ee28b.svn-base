@@ -1,0 +1,178 @@
+<template>
+  <a-drawer
+    :title="$t('编辑')"
+    :width="1300"
+    :closable="true"
+    :destroyOnClose="true"
+    :visible="visible"
+    @close="onClose"
+  >
+    <div style="display: flex; flex-direction: column; height: calc(100vh - 90px); padding: 0">
+      <!-- <div style="padding: 0 8px 8px">
+        <a-button type="primary" size="small" @click="handleSubmit('save')">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button size="small" style="margin-left: 8px" @click="onClose">
+          {{ $t('关闭') }}
+        </a-button>
+      </div> -->
+      <!-- 表单视图 -->
+      <div style="flex-grow: 1; overflow: hidden; height: 100%">
+        <a-spin :spinning="loading" class="container">
+          <a-form :form="form">
+            <c-form-design
+              ref="kFormDesign"
+              :fieldColumns="fieldColumns"
+              :myTemplate="myTemplate"
+              :afterInit="afterInit"
+              :beforeSubmit="beforeSubmit"
+              :formdata="data"
+              :setting="setting"
+              :params="{
+                fieldColumns: fieldColumns,
+                tableList: tableList,
+                tableId: config.tableId
+              }"
+            />
+          </a-form>
+        </a-spin>
+      </div>
+    </div>
+    <div class="bbar">
+      <a-button type="primary" size="small" @click="handleSubmit('save')">
+        {{ $t('保存') }}
+      </a-button>
+      <a-button size="small" style="margin-left: 8px" @click="onClose">
+        {{ $t('关闭') }}
+      </a-button>
+    </div>
+  </a-drawer>
+</template>
+<script>
+import Vue from 'vue'
+import CFormDesign from '@/views/admin/ConfigManage/FormDesign/packages/index'
+Vue.use(CFormDesign)
+export default {
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: {},
+      setting: {},
+      afterInit: '',
+      beforeSubmit: '',
+      myTemplate: [],
+      fieldColumns: [],
+      tableList: [],
+      form: this.$form.createForm(this)
+    }
+  },
+  // 祖先级组件数据传递，以及被子孙级组件动态修改
+  provide () {
+    this.theme = Vue.observable({
+      viewData: {}
+    })
+    return {
+      theme: this.theme
+    }
+  },
+  methods: {
+    async showEdit (config) {
+      console.log('this.config', this.config)
+      this.config = config
+      this.visible = true
+      this.loading = true
+      await this.axios({
+        url: 'admin/config/getAllItems'
+      }).then(res => {
+        this.fieldColumns = res.result
+      })
+      await this.axios({
+        url: 'admin/config/getTemplate',
+        params: { id: config.record.id }
+      }).then(res => {
+        this.form.resetFields()
+        this.loading = false
+        this.setting = res.result.setting ? JSON.parse(res.result.setting) : {}
+        this.myTemplate = this.setting && this.setting.template || []
+        this.tableList = res.result.tableList
+        this.afterInit = this.setting && this.setting.templateScript ? this.setting.templateScript.afterInit : ''
+        this.beforeSubmit = this.setting && this.setting.templateScript ? this.setting.templateScript.beforeSubmit : ''
+        // this.theme.viewData = res.result
+        this.data = res.result
+        this.theme.viewData = {
+          data: res.result,
+          setting: this.setting,
+          fieldInfos: this.fieldColumns
+        }
+      })
+    },
+    handleSubmit (e) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          const myTemplate = this.$refs.kFormDesign ? this.$refs.kFormDesign.data.list : this.myTemplate
+          if (!values.setting) {
+            values.setting = {}
+          }
+          if (!values.info) {
+            values.info = {}
+          }
+          values.setting.description = this.setting.description
+          values.setting.template = myTemplate
+          // 获取表单规则
+          values.setting.fieldRule = this.theme.viewData.setting && this.theme.viewData.setting.fieldRule || []
+          // tplSettin初始化
+          values.setting.templateScript = {}
+          values.setting.templateScript.afterInit = this.$refs.kFormDesign ? this.$refs.kFormDesign.initJs : this.initJs
+          values.setting.templateScript.beforeSubmit = this.$refs.kFormDesign ? this.$refs.kFormDesign.verifStr : this.beforeSubmit
+          values.setting.helpText = this.setting.helpText
+          // 帮助说明内容提交
+          // values.info.value = this.config.tableId
+          values.info.module = this.config.record.module
+          // values.info.variable = this.config.variable
+          values.info.id = this.config.record.id
+          values.info.name = this.data.name
+          values.info.remarks = this.data.remarks
+          values.info.accessLevel = this.config.record.accessLevel
+          console.log('values', values)
+          this.loading = true
+          this.axios({
+            url: 'admin/config/editTemplate',
+            data: {
+              ...values.info,
+              setting: values.setting
+            }
+          }).then((res) => {
+            //   if (e !== 'save') {
+            //     this.visible = false
+            //   }
+            this.loading = false
+            this.$emit('refresh')
+            //   // this.$emit('refresh', values, (res.result.id || this.data.id))
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$message.success(res.message)
+              this.onClose()
+              //     if (this.config.action !== 'edit') {
+              //       this.config.action = 'edit'
+              //       this.config.submitUrl = ''
+              //       this.data.id = res.result.id
+              //       this.data.uid = res.result.uid
+              //     }
+            }
+          })
+        } else {
+          this.$refs.kFormDesign.showPropertie = false
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+        }
+      })
+    },
+    onClose () {
+      this.visible = !this.visible
+    }
+  }
+}
+</script>

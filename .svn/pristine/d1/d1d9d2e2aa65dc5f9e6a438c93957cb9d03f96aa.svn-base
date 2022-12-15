@@ -1,0 +1,459 @@
+<template>
+  <a-drawer :title="config.title" :destroyOnClose="true" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-alert type="warning">
+          <template slot="message">
+            {{ $t('1、批量编辑属于危险操作，请谨慎使用。') }}
+            <br />
+            {{ $t('2、批量编辑会影响系统性能，强烈建议在非工作时间使用。') }}
+            <br />
+            {{ $t('3、本次操作将会影响 {0} 条数据。', { 0: config.totalCount }) }}
+          </template>
+        </a-alert>
+        <a-form-item :label="$t('操作字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="['bulkEdit[field]', { rules: [{ required: true, message: $t('请选择操作字段') }] }]"
+            showSearch
+            option-filter-prop="children"
+            @change="onChange"
+          >
+            <a-select-option v-for="(value, key) in fields" :key="key" :value="key" :record="value">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('更新为')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <!-- 单行文本 -->
+          <a-input
+            v-if="
+              ['text', 'location', 'autocomplete', 'associated'].includes(fieldType) ||
+              (fieldType === 'combobox' &&
+                ['addressBookBack', 'dictionaryBack', 'linkData'].includes(fieldData.setting.attribute.dataSource))
+            "
+            v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请输入内容') }] }]"
+            :autoSize="{ minRows: 6, maxRows: 20 }"
+          />
+          <!-- 多行文本 -->
+          <a-textarea
+            v-else-if="fieldType === 'textarea' || fieldType === 'editor'"
+            v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请输入内容') }] }]"
+            :autoSize="{ minRows: 6, maxRows: 20 }"
+          />
+          <!-- 日期 -->
+          <a-date-picker
+            v-else-if="fieldType === 'datetime' || fieldType === 'date'"
+            v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择时间') }] }]"
+            style="width: 100%"
+            format="YYYY-MM-DD"
+            :showTime="{ defaultValue: moment('', 'HH:mm:ss') }"
+          ></a-date-picker>
+          <!-- 下拉框、单选框、复选框 -->
+          <a-select
+            v-else-if="fieldType === 'combobox' || fieldType === 'checkbox'"
+            v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择') }] }]"
+            :mode="fieldType === 'checkbox' ? 'multiple' : 'default'"
+            show-search
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in combobox" :key="key" :value="value.number">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+          <!-- 级联选择 -->
+          <div v-else-if="fieldType === 'cascader'">
+            <a-input
+              v-show="false"
+              v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择级联值') }] }]"
+            />
+            <tabs-select
+              :field="fieldData"
+              :valueKey="fieldData.setting.form.src || ''"
+              alias="bulkEdit[value]"
+              action="add"
+              :writeBack="fieldData.setting.form.writeBack"
+              @send="getcascaderValue"
+            />
+          </div>
+          <!-- 数字 -->
+          <div v-else-if="fieldType === 'number'">
+            <a-input-number
+              v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请输入数字') }] }]"
+              style="width: 100%"
+            />
+          </div>
+          <!-- 地址选择 -->
+          <div v-else-if="fieldType === 'address'">
+            <a-input
+              v-show="false"
+              v-decorator="[
+                fieldalias + '[value[address]]',
+                { rules: [{ required: true, message: $t('请选择地址') }] }
+              ]"
+            />
+            <a-input-group compact>
+              <address-select
+                :alias="fieldalias + '[value[address]]'"
+                :series="fieldData.setting.form.showSeries"
+                :style="{ width: fieldData.setting.form.detailsShow === '1' ? '25%' : '100%' }"
+                @send="getAddress"
+              />
+              <a-form-item
+                v-if="fieldData.setting.form.detailsShow === '1'"
+                :style="{ width: fieldData.setting.form.detailsShow === '1' ? '75%' : '0%' }"
+              >
+                <a-input v-decorator="[fieldalias + '[value[details]]']" :placeholder="$t('请输入详细地址')" />
+              </a-form-item>
+            </a-input-group>
+          </div>
+          <!-- 开关 -->
+          <a-select
+            v-else-if="fieldType === 'switch'"
+            v-decorator="[
+              'bulkEdit[value]',
+              { initialValue: '', rules: [{ required: true, message: $t('请选择开关') }] }
+            ]"
+            :placeholder="$t('请选择')"
+            :allowClear="true"
+          >
+            <a-select-option v-for="(value, key) in combobox" :key="key" :value="value.value">
+              {{ value.label }}
+            </a-select-option>
+          </a-select>
+          <!-- 评分 -->
+          <a-rate
+            v-else-if="fieldType === 'score'"
+            v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择评分') }] }]"
+            :allowHalf="fieldData.setting.attribute.half === '1'"
+            :allowClear="fieldData.setting.attribute.clear === '1'"
+            :tooltips="fieldData.setting.form.writeList"
+          ></a-rate>
+          <!-- 树选择 -->
+          <template v-else-if="fieldType === 'treeselect'">
+            <a-tree-select
+              v-if="fieldData.setting.attribute.dataSource === 'addressBook'"
+              v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择') }] }]"
+              :allowClear="true"
+              :tree-data="fieldData.option"
+              :treeDefaultExpandedKeys="fieldData.value || []"
+              :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+              :placeholder="
+                fieldData.setting.attribute.emptyText ? fieldData.setting.attribute.emptyText : $t('请选择')
+              "
+              :multiple="fieldData.setting.attribute.multiple === '1'"
+              :tree-checkable="fieldData.setting.attribute.inherit === '1'"
+              :load-data="onLoadData"
+              :show-checked-strategy="fieldData.setting.attribute.inherit === '1' ? SHOW_PARENT : SHOW_CHILD"
+            >
+              <a-icon
+                v-if="fieldData.setting.form.suffixIcon === 'custom'"
+                slot="suffixIcon"
+                :type="fieldData.setting.form.suffixVal.type"
+              />
+              <span v-else-if="fieldData.setting.form.suffixIcon === 'string'" slot="suffixIcon">
+                {{ fieldData.setting.form.suffixVal.type }}
+              </span>
+            </a-tree-select>
+            <a-tree-select
+              v-else
+              v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择') }] }]"
+              :allowClear="true"
+              :tree-data="fieldData.option"
+              :treeDefaultExpandedKeys="fieldData.value || []"
+              :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+              :placeholder="
+                fieldData.setting.attribute.emptyText ? fieldData.setting.attribute.emptyText : $t('请选择')
+              "
+              :multiple="fieldData.setting.attribute.multiple === '1'"
+              :tree-checkable="fieldData.setting.attribute.inherit === '1'"
+              :show-checked-strategy="fieldData.setting.attribute.inherit === '1' ? SHOW_PARENT : SHOW_CHILD"
+            >
+              <a-icon
+                v-if="fieldData.setting.form.suffixIcon === 'custom'"
+                slot="suffixIcon"
+                :type="fieldData.setting.form.suffixVal.type"
+              />
+              <span v-else-if="fieldData.setting.form.suffixIcon === 'string'" slot="suffixIcon">
+                {{ fieldData.setting.form.suffixVal.type }}
+              </span>
+            </a-tree-select>
+          </template>
+          <!-- 组织结构 -->
+          <div
+            v-else-if="fieldType === 'organization'"
+            style="display: flex; justify-content: center; align-items: center; margin-bottom: 1px"
+          >
+            <a-select
+              v-if="fieldData.setting.form.optionType === 'user'"
+              v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择') }] }]"
+              show-search
+              allowClear
+              :default-active-first-option="false"
+              :not-found-content="null"
+              option-filter-prop="children"
+              :show-arrow="false"
+              :filter-option="false"
+              style="flex: 1"
+              :mode="fieldData.setting.attribute.mode"
+            >
+              <a-select-option v-for="(item1, index1) in fieldData.selectList" :key="index1" :value="item1.username">
+                {{ item1.text }}
+              </a-select-option>
+            </a-select>
+            <a-select
+              v-else
+              v-decorator="['bulkEdit[value]', { rules: [{ required: true, message: $t('请选择') }] }]"
+              show-search
+              allowClear
+              option-filter-prop="children"
+              :show-arrow="false"
+              style="flex: 1"
+              :mode="fieldData.setting.attribute.mode"
+            >
+              <template v-if="fieldData.setting.form.optionType === 'department'">
+                <a-select-option v-for="(item1, index1) in fieldData.option" :key="index1" :value="item1.departmentId">
+                  {{ item1.name }}
+                </a-select-option>
+              </template>
+              <template v-else>
+                <a-select-option v-for="(item1, index1) in fieldData.option" :key="index1" :value="item1.roleId">
+                  {{ item1.name }}
+                </a-select-option>
+              </template>
+            </a-select>
+            <a-button
+              v-if="fieldData.setting.form.optionType === 'user'"
+              icon="user"
+              style="margin-left: -1px"
+              @click="handleSelectUserForm(fieldData)"
+            ></a-button>
+            <a-button
+              v-else-if="fieldData.setting.form.optionType === 'department'"
+              icon="apartment"
+              style="margin-left: -1px"
+              @click="handleSelect(fieldData)"
+            ></a-button>
+            <a-button v-else icon="user" style="margin-left: -1px" @click="handleSelect(fieldData)"></a-button>
+          </div>
+        </a-form-item>
+      </a-form>
+      <select-user-form ref="selectUserForm" @ok="handleSelectUserData" />
+      <select-department ref="selectDepartment" @ok="handleSelectUserData" />
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import Vue from 'vue'
+import { TreeSelect } from 'ant-design-vue'
+
+Vue.use(TreeSelect)
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    TabsSelect: () => import('@/views/admin/Field/TabsSelect'),
+    AddressSelect: () => import('@/views/admin/Field/AddressSelect'),
+    SelectUserForm: () => import('./SelectUserForm'),
+    SelectDepartment: () => import('./SelectDepartment')
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      SHOW_PARENT: TreeSelect.SHOW_PARENT,
+      SHOW_CHILD: TreeSelect.SHOW_CHILD,
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      fields: {},
+      fieldType: 'text',
+      fieldalias: '',
+      combobox: [],
+      fieldData: {},
+      parentQueryParam: {}
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.parentQueryParam = this.$parent.queryParam
+      this.form.resetFields()
+      this.fieldType = 'text'
+      this.axios({
+        url: `/admin/field/getAliasFieldMapping?tableId=${config.tableId}`
+      }).then((res) => {
+        this.loading = false
+        const newfields = {}
+        for (const k in res.result) {
+          if (!['image', 'file', 'web_sub_data_window', 'tag', 'serialnumber'].includes(res.result[k].formType) && res.result[k].virtualField !== 1) {
+            newfields[k] = res.result[k]
+            newfields[k].setting = JSON.parse(newfields[k].setting)
+          }
+        }
+        this.fields = newfields
+      })
+    },
+    getcascaderValue (val, alias) {
+      const obj = {}
+      obj[alias] = val
+      this.form.setFieldsValue(obj)
+    },
+    getAddress (name, number, alias) {
+      const obj = {}
+      obj[alias] = number
+      this.form.setFieldsValue(obj)
+    },
+    // 打开选择用户界面
+    handleSelectUserForm (fieldData) {
+      this.$nextTick(() => {
+        this.$refs.selectUserForm.show({
+          fieldId: fieldData.fieldId,
+          selectValue: '',
+          mode: fieldData.setting.attribute.mode
+        })
+      })
+    },
+    // 打开选择部门，角色窗口
+    handleSelect (fieldData) {
+      this.$nextTick(() => {
+        this.$refs.selectDepartment.show({
+          optionCustom: fieldData.setting.form.optionCustom,
+          option: fieldData.option || [],
+          optionType: fieldData.setting.form.optionType,
+          selectValue: '',
+          mode: fieldData.setting.attribute.mode
+        })
+      })
+    },
+    // 选择部门，角色
+    handleSelectUserData (selectValue, index, conIndex, option) {
+      const name = 'bulkEdit[value]'
+      const obj = {}
+      let data
+      if (selectValue) {
+        data = selectValue
+      }
+      this.fieldData.option = option
+      obj[name] = data
+      this.form.setFieldsValue(obj)
+    },
+    // 树选择地址簿数据加载
+    onLoadData (treeNode) {
+      const { value } = treeNode.dataRef
+      return new Promise((resolve) => {
+        if (value.charAt(value.length - 1) === '0') {
+          this.axios({
+            url: '/admin/address/getAddressChildren',
+            data: { parentNumber: value }
+          }).then(res => {
+            this.fieldData.option.forEach(item => {
+              if (item.value === value && !item.children) {
+                const arr = []
+                res.result.forEach(arrItem => {
+                  const obj = { label: arrItem.name, value: arrItem.number }
+                  arr.push(obj)
+                })
+                this.$set(item, 'children', arr)
+                this.$forceUpdate()
+              } else if (item.children) {
+                item.children.forEach(childItem => {
+                  if (childItem.value === value && !childItem.children) {
+                    const arr = []
+                    res.result.forEach(arrItem => {
+                      const obj = { label: arrItem.name, value: arrItem.number }
+                      arr.push(obj)
+                    })
+                    this.$set(childItem, 'children', arr)
+                  } else if (childItem.children) {
+                    childItem.children.forEach(childrenItem => {
+                      if (childrenItem.value === value && !childrenItem.children) {
+                        const arr = []
+                        res.result.forEach(arrItem => {
+                          const obj = { label: arrItem.name, value: arrItem.number, isLeaf: true }
+                          arr.push(obj)
+                        })
+                        this.$set(childrenItem, 'children', arr)
+                      }
+                    })
+                  }
+                })
+              }
+            })
+          })
+        }
+        resolve()
+      })
+    },
+    onChange (value, record) {
+      this.fieldData = record.data.attrs.record
+      this.fieldalias = value
+      const formType = record.data.attrs.record.formType
+      if (formType === 'combobox' || formType === 'radio' || formType === 'checkbox') {
+        this.fieldType = formType === 'checkbox' ? 'checkbox' : 'combobox'
+        this.loading = true
+        this.axios({
+          url: 'admin/dict/initData',
+          data: {
+            dictCategoryNumber: record.data.attrs.record.setting.form.src
+          }
+        }).then((res) => {
+          this.loading = false
+          this.combobox = res.result.map(item => {
+            const { dictDataNumber, dictDataName } = item
+            return { name: dictDataName, number: dictDataNumber }
+          })
+        })
+      } else if (formType === 'switch') {
+        this.fieldType = 'switch'
+        this.combobox = [{ value: 1, label: this.fieldData.setting.form.word.value[1] }, {
+          value: 0,
+          label: this.fieldData.setting.form.word.value[0]
+        }]
+      } else if (formType === 'treeselect') {
+        this.axios({
+          url: '/admin/general/getFieldForm',
+          data: { fieldId: this.fieldData.fieldId }
+        }).then(res => {
+          this.fieldType = 'treeselect'
+          this.fieldData.option = res.result.option
+        })
+      } else {
+        this.fieldType = formType
+      }
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          const isArray = values.bulkEdit.value instanceof Array
+          if (isArray) {
+            values.bulkEdit.value = values.bulkEdit.value.join(',')
+          }
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, this.parentQueryParam, { tableId: this.config.tableId })
+          }).then((res) => {
+            this.visible = false
+            this.loading = false
+            this.$emit('ok', values)
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.$message.success(res.message)
+              this.form.resetFields()
+              this.fieldType = 'text'
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

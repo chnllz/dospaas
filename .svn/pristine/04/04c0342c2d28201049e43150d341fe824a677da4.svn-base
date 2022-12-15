@@ -1,0 +1,254 @@
+<template>
+  <a-spin
+    class="globalSpin"
+    :spinning="$store.state.app.globalSpin.spinning"
+    :tip="$store.state.app.globalSpin.tip"
+    :size="$store.state.app.globalSpin.size"
+  >
+    <a-layout :class="['layout', device, 'container']">
+      <global-header :mode="layoutMode" :menus="menus" :theme="navTheme" :collapsed="collapsed" :device="device" />
+      <a-layout>
+        <side-menu
+          mode="inline"
+          :menus="menus"
+          :theme="navTheme"
+          :collapsed="collapsed"
+          :collapsible="true"
+          @toggle="toggle"
+        />
+        <a-layout-content :style="{ paddingLeft: contentPaddingLeft, display: 'flex', 'flex-direction': 'column' }">
+          <!-- layout header -->
+          <multi-tab v-if="multiTab" @refresh="onRefresh" @setExclude="setExclude"></multi-tab>
+          <transition-group
+            name="page-transition"
+            class="content"
+            style="flex-grow: 1; overflow: auto; margin: 4px 12px 12px 12px; border-radius: 4px"
+          >
+            <route-view key="1" :routerKey="routerKey" :exclude="exclude" />
+            <div v-show="$route.query.url" key="2" style="height: 100%; overflow: hidden">
+              <iframe
+                v-for="(item, i) in iframeList"
+                v-show="$route.query.url === item"
+                :id="'dospass_iframe_' + i"
+                :key="i"
+                :src="item"
+                width="100%"
+                height="100%"
+                frameborder="0"
+              ></iframe>
+            </div>
+          </transition-group>
+        </a-layout-content>
+      </a-layout>
+      <!-- SideMenu -->
+      <!-- layout content -->
+      <!-- Setting Drawer (show in development mode) -->
+      <setting-drawer />
+      <audio-playback />
+    </a-layout>
+    <a-modal
+      title="系统信息"
+      :width="360"
+      :maskClosable="false"
+      :visible="visible"
+      @cancel="visible = false"
+      @ok="handleOk"
+    >
+      <a-spin :spinning="confirmLoading">
+        <a-alert message="为了系统安全，请输入密码" type="warning" show-icon style="margin: -8px 0 8px 0" />
+        <a-input v-model="password" type="password" placeholder="请输入密码" @pressEnter="handleOk"></a-input>
+      </a-spin>
+      <div slot="footer">
+        <a-spin :spinning="confirmLoading">
+          <span slot="indicator"></span>
+          <a-button type="primary" :loading="confirmLoading" @click="handleOk">提交</a-button>
+          <a-button @click="visible = !visible">取消</a-button>
+        </a-spin>
+      </div>
+    </a-modal>
+  </a-spin>
+</template>
+<script>
+import { triggerWindowResizeEvent } from '@/utils/util'
+import { mapState, mapActions, mapGetters } from 'vuex'
+import { mixin, mixinDevice } from '@/utils/mixin'
+import { convertRoutes } from '@/utils/routeConvert'
+import { watermark } from '@/components/_util/watermark'
+import md5 from 'md5'
+
+export default {
+  name: 'BasicLayout',
+  components: {
+    RouteView: () => import('./RouteView'),
+    SideMenu: () => import('@/components/Menu/SideMenu'),
+    GlobalHeader: () => import('@/views/admin/Index/GlobalHeader'),
+    SettingDrawer: () => import('@/components/SettingDrawer'),
+    AudioPlayback: () => import('@/views/admin/Common/AudioPlayback')
+  },
+  mixins: [mixin, mixinDevice],
+  data () {
+    return {
+      confirmLoading: false,
+      visible: false,
+      password: '',
+      collapsed: false,
+      menus: [],
+      iframeList: [],
+      routerKey: '',
+      pages: {},
+      exclude: []
+    }
+  },
+  computed: {
+    ...mapState({
+      // 动态主路由
+      mainMenu: state => state.permission.addRouters
+    }),
+    ...mapGetters(['setting', 'userInfo']),
+    contentPaddingLeft () {
+      if (this.sidebarOpened) {
+        return '208px'
+      } else {
+        return '80px'
+      }
+    }
+  },
+  watch: {
+    sidebarOpened (val) {
+      this.collapsed = !val
+    },
+    '$route': {
+      handler (to, from) {
+        if (typeof (this.pages[to.name]) === 'undefined') {
+          this.pages[to.name] = to.name
+        }
+        this.routerKey = this.pages[to.name]
+        if (this.$route.query.url && !this.iframeList.includes(this.$route.query.url)) {
+          this.iframeList.push(this.$route.query.url)
+        }
+      },
+      immediate: true
+    }
+  },
+  created () {
+    const query = this.$route.query || {}
+    if (query.hasOwnProperty('advanced') && !this.userInfo.superAdmin && this.userInfo.roleId === this.setting.adminRoleId) {
+      this.visible = true
+    }
+    document.title = this.$t(document.title)
+    // 常用配置中水印开关是否开启
+    if (this.setting.watermarkEnable) {
+      // 增加水印
+      watermark({ watermark_txt: this.$store.getters.userInfo.username })
+    }
+    const routes = convertRoutes(this.mainMenu.find(item => item.path === '/'))
+    this.menus = (routes && routes.children) || []
+    this.collapsed = !this.sidebarOpened
+    if (this.$route.query.url && !this.iframeList.includes(this.$route.query.url)) {
+      this.iframeList.push(this.$route.query.url)
+    }
+  },
+  methods: {
+    ...mapActions(['setSidebar']),
+    onRefresh () {
+      // iframe刷新
+      const index = this.iframeList.indexOf(this.$route.query.url)
+      if (index !== -1) {
+        const el = document.querySelector(`#dospass_iframe_${index}`)
+        const tmpUrl = el.src
+        el.src = tmpUrl
+        return
+      }
+      // 非iframe模块刷新
+      this.exclude = [this.$route.name]
+      this.$nextTick(() => {
+        this.pages[this.$route.name] = this.$route.name + '_' + (new Date().valueOf())
+        this.routerKey = this.pages[this.$route.name]
+        this.$nextTick(() => {
+          this.exclude = []
+        })
+      })
+    },
+    setExclude (excludeList) {
+      this.exclude = excludeList
+    },
+    toggle () {
+      this.collapsed = !this.collapsed
+      this.setSidebar(!this.collapsed)
+      triggerWindowResizeEvent()
+    },
+    // 超级管理员登录系统
+    handleOk () {
+      if (!this.password) {
+        this.$message.warning('请输入管理员密码')
+        return false
+      }
+      this.confirmLoading = true
+      const timestamp = new Date().valueOf()
+      this.axios({
+        url: 'admin/index/checkSuperAdmin',
+        data: {
+          password: md5(md5(this.password) + timestamp),
+          timestamp: timestamp
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.visible = false
+          let path = this.$route.path || ''
+          const query = this.$route.query || {}
+          delete query.advanced
+          for (const key in query) {
+            if (!path.includes('?')) {
+              path = `${path}?${key}=${query[key]}`
+            } else {
+              path = `${path}&${key}=${query[key]}`
+            }
+          }
+          let url = `${process.env.VUE_APP_BASE_URL}${path}`
+          url = url.replace(/\/\//g, '/')
+          window.open(url, '_self')
+        } else {
+          this.$message.error('密码错误，请重新输入')
+        }
+        this.confirmLoading = false
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/*
+ * The following styles are auto-applied to elements with
+ * transition="page-transition" when their visibility is toggled
+ * by Vue.js.
+ *
+ * You can easily play with the page transition by editing
+ * these styles.
+ */
+.layout.ant-layout.container {
+  height: 100%;
+}
+.page-transition-enter {
+  opacity: 0;
+}
+.page-transition-leave-active {
+  opacity: 0;
+}
+.page-transition-enter .page-transition-container,
+.page-transition-leave-active .page-transition-container {
+  -webkit-transform: scale(1.1);
+  transform: scale(1.1);
+}
+.content {
+  height: 100%;
+  > :first-child {
+    min-width: 1024px;
+  }
+}
+.globalSpin {
+  height: 100%;
+  /deep/ .ant-spin-container {
+    height: 100%;
+  }
+}
+</style>

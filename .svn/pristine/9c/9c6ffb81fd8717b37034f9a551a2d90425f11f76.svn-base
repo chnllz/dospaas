@@ -1,0 +1,1017 @@
+<template>
+  <a-drawer height="100%" placement="top" :closable="false" :destroyOnClose="true" :visible="visible" @close="onClose">
+    <div v-viewer="{ movable: false }" class="images">
+      <img :src="src" style="width: 0; height: 0" />
+    </div>
+    <div slot="title" style="text-align: right">
+      <a-space>
+        <a-button @click="handleBug">{{ $t('报错') }}</a-button>
+        <a-button
+          v-if="
+            (config.page !== 'init' && config.record && ['1', '2'].includes(config.record.status)) ||
+            config.page === 'manageKnowledge' ||
+            (config.page === 'myKnowledge' && new Date().getTime() < new Date(detail.article.effectStartTime).getTime())
+          "
+          type="primary"
+          @click="handleEdit"
+        >
+          {{ $t('编辑') }}
+        </a-button>
+        <a-button
+          v-if="
+            (detail.error && detail.error.length) ||
+            config.type === 'myAudited' ||
+            (config.type === 'myCreated' &&
+              new Date().getTime() < new Date(detail.article.effectStartTime).getTime() &&
+              config.record &&
+              ['3', '4'].includes(config.record.status)) ||
+            (config.page === 'myKnowledge' && config.record && ['1', '2'].includes(config.record.status)) ||
+            (config.page === 'myKnowledge' &&
+              new Date().getTime() < new Date(detail.article.effectStartTime).getTime() &&
+              config.record &&
+              ['3', '4'].includes(config.record.status)) ||
+            config.page === 'manageKnowledge'
+          "
+          type="danger"
+          @click="handleDelete"
+        >
+          {{ $t('删除') }}
+        </a-button>
+        <a-button style="background: #faad14; color: #fff; border: none" @click="onClose">{{ $t('关闭') }}</a-button>
+      </a-space>
+    </div>
+    <a-spin :spinning="loading">
+      <a-row type="flex" justify="center" style="padding-top: 32px">
+        <a-col flex="864px">
+          <a-row type="flex" justify="center">
+            <a-col flex="752px">
+              <a-form :form="form">
+                <div class="all_box">
+                  <div class="content_box">
+                    <h1>{{ detail.article.title }}</h1>
+                    <div class="header" style="margin: 20px 0px">
+                      <span>
+                        <a-icon type="user" />
+                        {{ detail.article.author }}
+                      </span>
+                      <span>{{ detail.article.inputTime }}</span>
+                      <span>{{ $t('浏览') }}({{ detail.article.browseNum }})</span>
+                      <span>{{ $t('评论') }}({{ detail.article.commentNum }})</span>
+                    </div>
+                    <div v-if="tagArr.length > 0" class="tags">
+                      <a-tag v-for="(item, index) in tagArr" :key="index" style="margin-bottom: 5px">
+                        <a-tooltip v-if="item.length > 20" :title="item">
+                          <span>{{ `${item.slice(0, 20)}...` }}</span>
+                        </a-tooltip>
+                        <span v-else>{{ item }}</span>
+                      </a-tag>
+                    </div>
+                    <div ref="iframeArticleContent" class="article"></div>
+
+                    <div class="footer">
+                      <div>
+                        <span>{{ $t('所属分类') }}：{{ detail.article.categoryName }}</span>
+                        <span class="explode">|</span>
+                        <span>
+                          {{ $t('生效时间') }}：{{
+                            !detail.article.effectStartTime ? $t('审核通过后立即生效') : detail.article.effectStartTime
+                          }}
+                        </span>
+                        <span class="explode">|</span>
+                        <span>
+                          {{ $t('失效时间') }}：{{
+                            detail.article.effectForever == 1 ? $t('永久生效') : detail.article.effectEndTime
+                          }}
+                        </span>
+                      </div>
+                      <div v-if="detail" class="footer_action">
+                        <a @click="handleCollect">
+                          <div
+                            class="collect"
+                            :style="[
+                              detail.flag.isCollected
+                                ? { color: 'rgb(64, 169, 255)' }
+                                : { color: 'rgba(0, 0, 0, 0.45)' }
+                            ]"
+                          >
+                            <a-icon
+                              :theme="detail.flag.isCollected ? 'filled' : 'outlined'"
+                              type="star"
+                              style="font-size: 24px"
+                            />
+                            <span v-if="!detail.flag.isCollected">
+                              {{ $t('收藏') }}({{ detail.article.collectedNum }})
+                            </span>
+                            <span v-else>{{ $t('已收藏') }}({{ detail.article.collectedNum }})</span>
+                          </div>
+                        </a>
+                        <a @click="handleLike">
+                          <div
+                            class="collect"
+                            :style="[
+                              detail.flag.isLiked ? { color: 'rgb(64, 169, 255)' } : { color: 'rgba(0, 0, 0, 0.45)' }
+                            ]"
+                          >
+                            <a-icon
+                              :theme="detail.flag.isLiked ? 'filled' : 'outlined'"
+                              type="like"
+                              style="font-size: 24px"
+                            />
+                            <span v-if="!detail.flag.isLiked">{{ $t('点赞') }}({{ detail.article.likedNum }})</span>
+                            <span v-else>{{ $t('已点赞') }}({{ detail.article.likedNum }})</span>
+                          </div>
+                        </a>
+                      </div>
+                      <div v-if="config.record && parseInt(config.record.status) === 1" class="examine">
+                        <a-button type="primary" class="examine_btn" @click="handleVerify('success', config.record)">
+                          {{ $t('审核通过') }}
+                        </a-button>
+                        <a-button @click="handleVerify('error', config.record)">{{ $t('审核不通过') }}</a-button>
+                      </div>
+                      <!-- 修改日志不应该在所有页面都能看到 -->
+                      <a-table
+                        v-if="
+                          config.type == 'myAudited' ||
+                          config.type == 'myCreated' ||
+                          config.type == 'dealBug' ||
+                          config.type == 'questions'
+                        "
+                        style="margin-top: 20px"
+                        size="small"
+                        rowKey="id"
+                        :columns="columns"
+                        :dataSource="detail.log"
+                        :pagination="false"
+                      >
+                        <span slot="order" slot-scope="text, record, index">{{ index + 1 }}</span>
+                      </a-table>
+                    </div>
+                    <div class="comment">
+                      <div class="header">
+                        <span>{{ $t('评论') }}({{ detail.article.commentNum }})</span>
+                      </div>
+                      <div v-for="(item, index) in detail.comment" :key="index" class="record">
+                        <div class="top">
+                          <img
+                            :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${item.avatar}`"
+                          />
+                          <div class="main">
+                            <div>
+                              <span class="name">{{ item.commenter }}</span>
+                              <span class="time">{{ item.inputTime }}</span>
+                            </div>
+                            <span v-dompurify-html="item.content" v-viewer class="content"></span>
+                          </div>
+                        </div>
+                        <div class="foot">
+                          <div>
+                            <a @click="likeComment(item.id, item.isLiked, item)">
+                              <a-tooltip>
+                                <template slot="title">
+                                  {{ item.isLiked ? $t('赞过了') : $t('赞一个') }}
+                                </template>
+                                <a-icon :theme="item.isLiked ? 'filled' : 'outlined'" type="like" />
+                                <span style="font-size: 12px">{{ item.likedNum }}</span>
+                              </a-tooltip>
+                            </a>
+                            <a @click="toggleRely(item, !item.showReply, item)">
+                              <a-tooltip>
+                                <template slot="title">{{ $t('回复TA') }}</template>
+                                <a-icon type="message" />
+                              </a-tooltip>
+                            </a>
+                            <a-popconfirm
+                              :title="$t('当前操作将会删除该评论及其子评论，您确认要删除吗？')"
+                              :ok-text="$t('确认')"
+                              :cancel-text="$t('取消')"
+                              @confirm="confirm1(item, index)"
+                              @cancel="cancel"
+                            >
+                              <a v-show="item.delCommentPriv" href="#"><a-icon type="delete" /></a>
+                            </a-popconfirm>
+                          </div>
+                          <div class="divide"></div>
+                          <div v-for="(item2, index2) in item.comment2" :key="index2" class="second_comment">
+                            <img
+                              :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${item2.avatar}`"
+                            />
+                            <div class="main">
+                              <div>
+                                <span>{{ item2.commenter }} {{ $t('回复') }} {{ item2.commentedPerson }}：</span>
+                                <div v-dompurify-html="item2.content" v-viewer class="second_comment_content"></div>
+                              </div>
+                              <span>
+                                {{ item2.commentTime }}
+                                <a style="margin-left: 10px" @click="toggleRely(item, !item.showReply, item2)">
+                                  <!-- item -->
+                                  <a-tooltip>
+                                    <template slot="title">{{ $t('回复TA') }}</template>
+                                    <a-icon type="message" />
+                                  </a-tooltip>
+                                </a>
+                                <a-popconfirm
+                                  :title="$t('您确认要删除该评论么？')"
+                                  :ok-text="$t('确认')"
+                                  :cancel-text="$t('取消')"
+                                  @confirm="confirm(item, index2)"
+                                  @cancel="cancel"
+                                >
+                                  <a v-show="item2.delCommentPriv" href="#"><a-icon type="delete" /></a>
+                                </a-popconfirm>
+                              </span>
+                            </div>
+                          </div>
+                          <a-form-item>
+                            <a-input-search
+                              v-if="item.showReply"
+                              :id="'reply' + item.id"
+                              v-decorator="[
+                                'reply' + item.id,
+                                {
+                                  initialValue: item.replyText,
+                                  rules: [{ required: true, message: $t('评论不能为空') }]
+                                }
+                              ]"
+                              style="margin-top: 5px"
+                              :placeholder="$t('评论') + selectedCommenter"
+                              @change="
+                                (e) => {
+                                  getReply(e, item)
+                                }
+                              "
+                              @search="reply2(item, index)"
+                            >
+                              <a-button slot="enterButton" :loading="loading_reply">
+                                {{ $t('评论') }}
+                              </a-button>
+                            </a-input-search>
+                          </a-form-item>
+                        </div>
+                      </div>
+                      <tiny-mce
+                        v-if="tinyVisible"
+                        v-model="commentMsg"
+                        style="height: 200px; margin-top: 20px"
+                        :newOptions="{
+                          height: 200,
+                          resize: false,
+                          toolbar: ['bold italic underline | bullist numlist'],
+                          toolbar_groups: {}
+                        }"
+                        @change="onEditorChange"
+                      />
+                      <a-space>
+                        <a-button style="margin: 10px 0" :loading="loading_btn" type="primary" @click="publish">
+                          {{ $t('发表') }}
+                        </a-button>
+                        <span v-if="commentFlag" style="color: red">{{ $t('评论不能为空') }}</span>
+                      </a-space>
+                    </div>
+                  </div>
+                  <a-spin v-if="detail.error && detail.error.length" :spinning="errorLoading">
+                    <div class="error_box">
+                      <a-card
+                        v-for="(item, index) in errors"
+                        :key="index"
+                        size="small"
+                        style="position: relative; margin-bottom: 10px"
+                      >
+                        <div v-if="config.type !== 'myRecordBug'" style="margin-bottom: 10px">
+                          <span style="color: #262626">{{ $t('报错人') }} :</span>
+                          <span style="color: #595959">{{ item.buger }}</span>
+                        </div>
+                        <div style="margin-bottom: 10px">
+                          <span style="color: #262626">{{ $t('报错时间') }} :</span>
+                          <span style="color: #595959">{{ item.inputTime }}</span>
+                        </div>
+                        <div style="margin-bottom: 10px">
+                          <span style="color: #262626">{{ $t('报错内容') }} :</span>
+                          <span style="color: #595959">{{ item.content }}</span>
+                        </div>
+                        <div v-if="item.dealer" style="margin-bottom: 10px">
+                          <span style="color: #262626; padding-left: 14px">{{ $t('处理人') }} :</span>
+                          <span style="color: #595959">{{ item.dealer }}</span>
+                        </div>
+                        <div v-if="item.dealer" style="margin-bottom: 10px">
+                          <span style="color: #262626">{{ $t('处理时间') }} :</span>
+                          <span style="color: #595959">{{ item.dealerTime }}</span>
+                        </div>
+                        <div
+                          v-if="config.type !== 'myRecordBug' && item.status === 0"
+                          style="display: flex; justify-content: space-around; margin-bottom: 10px"
+                        >
+                          <a-button size="small" type="primary" @click="handleError('success', item, index)">
+                            {{ $t('有效报错') }}
+                          </a-button>
+                          <a-button size="small" type="danger" @click="handleError('error', item, index)">
+                            {{ $t('无效报错') }}
+                          </a-button>
+                        </div>
+                        <div
+                          v-if="item.status != 0"
+                          style="position: absolute; right: 0px; top: 10px; margin-bottom: 10px"
+                        >
+                          <a-tag v-if="item.status == 1" color="green">{{ $t('有效报错') }}</a-tag>
+                          <a-tag v-else color="red">{{ $t('无效报错') }}</a-tag>
+                        </div>
+                        <div
+                          v-if="config.type === 'myRecordBug'"
+                          style="position: absolute; right: 0px; top: 10px; margin-bottom: 10px"
+                        >
+                          <a-tag v-if="item.status == 1" color="green">{{ $t('有效报错') }}</a-tag>
+                          <a-tag v-else-if="item.status == 2" color="red">{{ $t('无效报错') }}</a-tag>
+                          <a-tag v-else color="blue">{{ $t('待处理') }}</a-tag>
+                        </div>
+                      </a-card>
+                    </div>
+                  </a-spin>
+                </div>
+                <index-my-manage-knowledge-form ref="indexMyManageKnowledgeForm" @ok="handleRefresh" />
+                <!-- 报错 -->
+                <index-init-error ref="indexInitError" />
+                <index-my-knowledge-verify ref="indexMyKnowledgeVerify" @ok="handlerError" />
+              </a-form>
+            </a-col>
+          </a-row>
+        </a-col>
+      </a-row>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('knowledge'),
+  components: {
+    IndexInitCommonPage: () => import('./IndexInitCommonPage'),
+    IndexMyManageKnowledgeForm: () => import('./IndexMyManageKnowledgeForm.vue'),
+    IndexInitError: () => import('./IndexInitError'),
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    IndexMyKnowledgeVerify: () => import('./IndexMyKnowledgeVerify')
+  },
+  data () {
+    return {
+      selectedCommenter: '',
+      showError: false,
+      form: this.$form.createForm(this),
+      valid: '',
+      config: {},
+      detail: {
+        comment: [],
+        flag: { isCollected: 'true', isLiked: true },
+        article: {}
+      },
+      src: '',
+      tagArr: [],
+      errors: [], // 报错处理列表
+      errorLoading: false,
+      columns: [{
+        title: '#',
+        dataIndex: 'order',
+        slots: { title: 'order' },
+        scopedSlots: { customRender: 'order' }
+      }, {
+        title: this.$t('操作人'),
+        dataIndex: 'operator'
+      }, {
+        title: this.$t('操作名称'),
+        dataIndex: 'operateName'
+      }, {
+        title: this.$t('操作时间'),
+        dataIndex: 'inputTime'
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks'
+      }],
+      dealer: null,
+      dealerTime: null,
+      loading: false,
+      loading_btn: false,
+      loading_reply: false,
+      visible: false,
+      commentMsg: '',
+      commentFlag: false,
+      editorOption: {
+        placeholder: '',
+        modules: {
+          toolbar: {
+            container: [
+              ['bold', 'italic', 'underline', 'strike'],
+              [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+              [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+              [{ 'color': [] }, { 'background': [] }]
+            ]
+          }
+        }
+      },
+      tinyVisible: false
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo', 'setting'])
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.loading = true
+      if (['dealBug', 'myRecordBug'].includes(config.type)) {
+        this.axios({
+          url: '/knowledge/index/detail',
+          data: { id: config.record.id, spec: 'dealBug' }
+        }).then(res => {
+          if (!res.code) {
+            this.loading = false
+            this.detail = res.result
+            this.createIframe()
+            this.errors = res.result.error
+            this.errors = this.handleNewArr(this.errors)
+            if (['myRecordBug'].includes(config.type)) {
+              this.errors = this.errors.filter(item => item.buger === this.userInfo.username)
+            }
+            const label = res.result.article.label
+            this.tagArr = label.length > 0 ? label.split(',') : label
+          }
+        })
+      } else {
+        this.getDetail(this.config.record.id)
+      }
+      this.$nextTick(() => {
+        this.tinyVisible = true
+      })
+    },
+    createIframe () {
+      const content = this.detail.article.content.replace(/<link.*\.js.*>/g, '').replace(/<iframe.*<\/iframe>/g, '').replace(/<script(?:(?:\s|.)+?)src=["'](.+?)["'](?!<)(?:(?:\s|.)*?)(?:(?:\/>)|(?:>\s*?<\/script>))/g, '').replace(/<img/gi, '<img style="max-width:100%;height:auto;display:block;cursor:pointer"')
+      const ifr = document.createElement('iframe')
+      ifr.setAttribute('frameborder', '0')
+      ifr.setAttribute('id', 'iframeArticleContent')
+      ifr.setAttribute('width', '100%')
+      ifr.setAttribute('height', '100%')
+      ifr.addEventListener('load', () => {
+        const iframe = document.getElementById('iframeArticleContent')
+        iframe.height = iframe.contentWindow.document.body.scrollHeight + 30
+        iframe.scrolling = 'no'
+      })
+      this.$refs.iframeArticleContent.innerHTML = ''
+      this.$refs.iframeArticleContent.appendChild(ifr)
+      const ifrw = (ifr.contentWindow) ? ifr.contentWindow : (ifr.contentDocument.document) ? ifr.contentDocument.document : ifr.contentDocument
+      ifrw.document.open()
+      ifrw.document.write(content)
+      ifrw.document.close()
+      // 点击iframe里的图能放大显示
+      ifrw.addEventListener('click', (e) => {
+        this.src = e.target.src
+        const viewer = this.$el.querySelector('.images').$viewer
+        viewer.show()
+      })
+    },
+    getDetail (id) {
+      this.axios({
+        url: '/knowledge/index/detail',
+        data: { id: id }
+      }).then(res => {
+        if (!res.code) {
+          this.loading = false
+          this.detail = res.result
+          this.createIframe()
+          const label = res.result.article.label
+          this.tagArr = label.length > 0 ? label.split(',') : label
+        }
+      })
+    },
+    // 报错信息重排列
+    handleNewArr (errors) {
+      var arr1 = []
+      var arr2 = []
+      var arr3 = []
+      errors.forEach(item => {
+        if (item.status === '0') {
+          arr1.push(item)
+        } else if (item.status === '1') {
+          arr2.push(item)
+        } else {
+          arr3.push(item)
+        }
+      })
+      return [...arr1, ...arr2, ...arr3]
+    },
+    // 刷新数据
+    handleRefresh () {
+      this.show(this.config)
+    },
+    // 编辑文章
+    handleEdit () {
+      this.$refs.indexMyManageKnowledgeForm.show({
+        title: this.$t('编辑'),
+        detail: this.detail,
+        action: 'edit'
+      })
+    },
+    // 报错
+    handleBug () {
+      this.$refs.indexInitError.show({
+        detail: this.detail
+      })
+    },
+    handleDelete () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除这条知识吗？'),
+        onOk () {
+          that.axios({
+            url: '/knowledge/index/deleteArticle',
+            data: { id: that.config.record.id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+              that.visible = false
+              that.$emit('ok')
+            } else {
+              that.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    },
+    // 点赞评论
+    likeComment (commentId, curLike, item) {
+      var type = ''
+      if (curLike === 1) {
+        item.isLiked = 0
+        type = 'cancel'
+        item.likedNum--
+        if (item.likedNum === 0) {
+          item.likedNum = '赞'
+        }
+      } else {
+        item.isLiked = 1
+        type = 'yes'
+        if (item.likedNum === '赞') {
+          item.likedNum = 1
+        } else {
+          item.likedNum++
+        }
+      }
+      this.axios({
+        url: '/knowledge/index/myLike',
+        data: {
+          commentId: commentId,
+          grade: 'second',
+          type: type
+        }
+      }).then(res => {
+      })
+    },
+    onEditorChange (text) {
+      if (text) {
+        let string = text.replace(/<[^>]+>/g, '')
+        const arrEntities = { 'lt': '<', 'gt': '>', 'nbsp': ' ', 'amp': '&', 'quot': '"' }
+        string = string.replace(/&(lt|gt|nbsp|amp|quot);/ig, (all, t) => { return arrEntities[t] })
+        if (string.trim().length > 0) {
+          this.commentMsg = text
+          this.commentFlag = false
+        } else {
+          this.commentFlag = !!this.commentMsg
+        }
+      }
+    },
+    // 添加一级评论
+    publish () {
+      if (!this.commentFlag && this.commentMsg) {
+        const data = new FormData()
+        data.append('articleId', this.detail.article.id)
+        data.append('content', this.commentMsg)
+        data.append('grade', 'first')
+        this.loading_btn = true
+        this.loadContent(this.detail.article.id)
+        this.axios({
+          url: '/knowledge/index/addComment',
+          data: data
+        }).then(res => {
+          this.loading_btn = false
+          if (res.code === 0) {
+            this.loadContent(this.detail.article.id)
+            this.detail.comment.push({
+              avatar: res.result.avatar,
+              commenter: this.detail.hoster,
+              inputTime: this.getTime(),
+              content: this.commentMsg,
+              isLiked: 0,
+              id: res.result.commentId,
+              likedNum: '赞'
+            })
+            this.detail.article.commentNum++
+            this.commentMsg = ''
+            this.getDetail(this.config.record.id) // 刷新数据
+          } else {
+            this.$message.warning(res.message)
+          }
+        })
+      } else {
+        this.commentFlag = true
+      }
+    },
+    // 删除一级评论
+    confirm1 (item, index) {
+      const commentNum = item.comment2 ? item.comment2.length + 1 : 1
+      const commentId = item.id
+      this.axios({
+        url: '/knowledge/index/delComment',
+        data: {
+          id: commentId,
+          grade: 'first'
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.$message.success(this.$t('删除成功'))
+          this.detail.comment.splice(index, 1)
+          this.detail.article.commentNum -= commentNum
+          this.detail.comment = JSON.parse(JSON.stringify(this.detail.comment))
+        }
+      })
+    },
+    // 获取二级回复
+    getReply (e, item) {
+      item.replyText = e.target.value
+    },
+    // 二级回复评论
+    reply2 (item, index) {
+      item.replyText = item.replyText ? item.replyText : ' '
+      item.replyText = item.replyText.trim()
+      const { validateFields, setFieldsValue } = this.form
+      const fieldName = 'reply' + item.id
+      const obj = {}
+      obj[fieldName] = item.replyText
+      setFieldsValue(Object.assign(obj))
+      validateFields(['reply' + item.id], (errors, values) => {
+        if (!errors) {
+          const data = new FormData()
+          data.append('commentId', item.id)
+          data.append('content', item.replyText)
+          data.append('grade', 'second')
+          data.append('commenter', this.selectedCommenter)
+          data.append('other', this.userInfo.username)
+          if (!this.detail.comment[index].comment2) {
+            this.detail.comment[index].comment2 = []
+          }
+          this.loading_reply = true
+          this.axios({
+            url: '/knowledge/index/addComment',
+            data: data
+          }).then(res => {
+            if (res.code === 0) {
+              this.detail.comment[index].comment2.push({
+                avatar: res.result.avatar,
+                commenter: this.userInfo.username,
+                commentedPerson: this.detail.comment[index].commenter,
+                content: item.replyText,
+                commentTime: '刚刚',
+                id: res.result.commentId
+              })
+              item.showReply = false
+              item.replyText = ''
+              this.detail.comment = JSON.parse(JSON.stringify(this.detail.comment))
+              this.detail.article.commentNum++
+              this.loading_reply = false
+              this.getDetail(res.result.articleId)
+            } else {
+              this.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    },
+    // 删除二级评论
+    confirm (item, index2) {
+      var id = item.comment2[index2].id
+      this.axios({
+        url: '/knowledge/index/delComment',
+        data: {
+          id,
+          grade: 'second'
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.detail.article.commentNum--
+          this.$message.success(this.$t('删除成功'))
+          item.comment2.splice(index2, 1)
+        }
+      })
+    },
+    // 回复输入框的显示与隐藏
+    toggleRely (item, value, sitem) {
+      this.$forceUpdate()
+      item.showReply = value
+      this.selectedCommenter = sitem.commenter
+    },
+    handleLike () {
+      var curLike = ''
+      if (this.detail.flag.isLiked === 0) {
+        this.detail.article.likedNum++
+        this.detail.flag.isLiked = 1
+        curLike = 'yes'
+      } else {
+        this.detail.article.likedNum--
+        this.detail.flag.isLiked = 0
+        curLike = 'cancel'
+      }
+      this.axios({
+        url: '/knowledge/index/myLike',
+        data: {
+          articleId: this.config.record.id,
+          type: curLike,
+          grade: 'first'
+        }
+      }).then(res => {
+      })
+    },
+    handleCollect () {
+      var curLike = ''
+      if (this.detail.flag.isCollected === 0) {
+        this.detail.article.collectedNum++
+        this.detail.flag.isCollected = 1
+        curLike = 'yes'
+      } else {
+        this.detail.article.collectedNum--
+        this.detail.flag.isCollected = 0
+        curLike = 'cancel'
+      }
+      this.axios({
+        url: '/knowledge/index/myCollect',
+        data: {
+          articleId: this.config.record.id,
+          type: curLike
+        }
+      }).then(res => {
+      })
+    },
+    changePage (page) {
+      this.$emit('changepage', page)
+    },
+    loadContent (id) {
+      this.loading = true
+      this.$nextTick(() => {
+        this.loading = false
+        this.visible = true
+      })
+    },
+    onClose () {
+      this.visible = false
+      this.commentMsg = ''
+      // 已读未读知识，未读知识数-1，刷新列表
+      if (this.config.type === 'waitRead' || this.config.type === 'public') {
+        this.$emit('read')
+      }
+    },
+    handleChange (value) {
+    },
+    cancel (e) {
+    },
+    handleError (type, item, index) {
+      var flag = ''
+      var articleId = this.detail.article.id
+      var errorId = item.id
+      if (type === 'success') {
+        flag = 'yes'
+      } else {
+        flag = 'no'
+      }
+      this.errorLoading = true
+      this.axios({
+        url: '/knowledge/index/dealError',
+        data: { flag, articleId, errorId }
+      }).then(res => {
+        this.errorLoading = false
+        if (res.code === 0) {
+          if (type === 'success') {
+            item.status = 1
+          } else {
+            item.status = 2
+          }
+          // this.errors[index].dealerTime = res.result.info.dealerTime
+          // this.errors[index].dealer = res.result.info.dealer
+          this.errors = this.handleNewArr(this.errors)
+          this.$message.success(res.message)
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    //  获取时间
+    getTime () {
+      var myDate = new Date()
+      var y = myDate.getFullYear()
+      var m = getFormat(myDate.getMonth() + 1)
+      var d = getFormat(myDate.getDate())
+      var h = getFormat(myDate.getHours())
+      var min = getFormat(myDate.getMinutes())
+      var s = getFormat(myDate.getSeconds())
+      var nowDate = y + '-' + m + '-' + d + ' ' + h + ':' + min + ':' + s
+      function getFormat (value) {
+        if (parseInt(value) < 10) {
+          value = '0' + value
+          return value
+        } else {
+          return value
+        }
+      }
+      return nowDate
+    },
+    // 审核
+    handleVerify (type, item) {
+      if (type === 'error') {
+        this.$refs.indexMyKnowledgeVerify.show({
+          item: item,
+          url: '/knowledge/index/audit'
+        })
+      } else {
+        this.visible = false
+        this.$emit('success', type, item)
+      }
+    },
+    // 审核不通过
+    handlerError () {
+      this.visible = false
+      this.$emit('error')
+    }
+  }
+}
+</script>
+<style  lang="less" scoped>
+/deep/.ant-drawer-body {
+  padding: 0;
+  height: calc(100% - 50px);
+}
+.all_box {
+  width: 100%;
+  display: flex;
+  .content_box {
+    flex: 1;
+  }
+  .error_box {
+    width: 300px;
+    margin-left: 10px;
+    padding: 0 10px;
+    position: absolute;
+  }
+}
+
+.header {
+  margin-bottom: 10px;
+  .author {
+    margin-right: 40px;
+  }
+  .right {
+    float: right;
+  }
+  span {
+    color: rgba(0, 0, 0, 0.92);
+    margin-right: 20px;
+  }
+}
+
+.tags {
+  font-size: 12px;
+  margin: 10px 0;
+  .tags_tag {
+    margin-right: 10px;
+  }
+}
+.footer {
+  margin-top: 10px;
+  color: rgba(0, 0, 0, 0.45);
+
+  .footer_action {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    .collect {
+      width: 70px;
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-content: center;
+      color: rgba(0, 0, 0, 0.45);
+      span {
+        text-align: center;
+        font-size: 12px;
+      }
+    }
+    .collect:hover {
+      color: #40a9ff;
+    }
+  }
+
+  .explode {
+    padding: 0px 10px;
+  }
+}
+
+.comment {
+  .header {
+    margin-top: 30px;
+    padding: 10px 0px;
+    border-bottom: 1px #ccc solid;
+    margin-bottom: 16px;
+  }
+
+  button {
+    margin-top: 10px;
+  }
+  .ant-btn.ant-input-search-button {
+    margin: 0px;
+  }
+  .record {
+    padding-bottom: 20px;
+    border-bottom: #ccc solid 1px;
+    margin-bottom: 10px;
+    .top {
+      display: flex;
+      flex-direction: row;
+      img {
+        border-radius: 50%;
+        width: 46px;
+        height: 46px;
+      }
+      .name {
+        color: rgba(0, 0, 0, 0.45);
+        margin-bottom: 8px;
+      }
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      margin-left: 10px;
+    }
+
+    .foot {
+      margin-left: 60px;
+      a {
+        color: rgba(0, 0, 0, 0.45);
+        margin-right: 10px;
+      }
+    }
+  }
+
+  .content {
+    color: rgba(0, 0, 0, 0.65);
+    margin: 10px 0 0 0;
+  }
+
+  .time {
+    margin-left: 10px;
+    font-size: 12px;
+    color: #ccc;
+  }
+
+  .divide {
+    height: 14px;
+  }
+}
+
+.second_comment {
+  padding-top: 6px;
+  display: flex;
+  flex-direction: row;
+
+  img {
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+  }
+
+  .main {
+    padding-right: 10px;
+    padding-bottom: 6px;
+    font-size: 14px;
+
+    .second_comment_content {
+      padding: 10px 0 10px 10px;
+    }
+  }
+}
+
+.examine {
+  width: 100%;
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  .examine_btn {
+    margin-right: 60px;
+  }
+}
+
+.article {
+  margin: 30px 0;
+  line-height: 26px;
+}
+
+/deep/ img {
+  max-width: 864px;
+  height: auto;
+}
+</style>

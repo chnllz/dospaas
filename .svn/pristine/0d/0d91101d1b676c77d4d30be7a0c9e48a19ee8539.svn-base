@@ -1,0 +1,212 @@
+<template>
+  <div class="setting-drawer">
+    <a-drawer width="300" title="主题设置" placement="right" :visible="visible" @close="handleClose">
+      <a-spin :spinning="false">
+        <div class="setting-drawer-index-content">
+          <div :style="{ marginBottom: '24px' }">
+            <h3 class="setting-drawer-index-title">整体风格设置</h3>
+            <div class="setting-drawer-index-blockChecbox">
+              <a-tooltip>
+                <template slot="title">暗色菜单风格</template>
+                <div class="setting-drawer-index-item" @click="handleMenuTheme('dark')">
+                  <img src="https://gw.alipayobjects.com/zos/rmsportal/LCkqqYNmvBEbokSDscrm.svg" alt="dark" />
+                  <div v-if="navTheme === 'dark'" class="setting-drawer-index-selectIcon">
+                    <a-icon type="check" />
+                  </div>
+                </div>
+              </a-tooltip>
+              <a-tooltip>
+                <template slot="title">亮色菜单风格</template>
+                <div class="setting-drawer-index-item" @click="handleMenuTheme('light')">
+                  <img src="https://gw.alipayobjects.com/zos/rmsportal/jpRkZQMyYRryryPNtyIC.svg" alt="light" />
+                  <div v-if="navTheme !== 'dark'" class="setting-drawer-index-selectIcon">
+                    <a-icon type="check" />
+                  </div>
+                </div>
+              </a-tooltip>
+            </div>
+          </div>
+          <div :style="{ marginBottom: '24px' }">
+            <h3 class="setting-drawer-index-title">主题色</h3>
+            <a-radio-group v-model="selectValue">
+              <a-radio value="standard">标准色</a-radio>
+              <a-radio value="custom">自定义</a-radio>
+            </a-radio-group>
+            <div v-if="selectValue === 'standard'" style="height: 20px; margin-top: 8px">
+              <a-tooltip v-for="(item, index) in colorList" :key="index" class="setting-drawer-theme-color-colorBlock">
+                <template slot="title">
+                  {{ item.key }}
+                </template>
+                <a-tag
+                  :color="item.color"
+                  style="margin-bottom: 4px"
+                  @click="changeColor(item.color, 'default', item.headColor)"
+                >
+                  <a-icon v-if="item.color === primaryColor" type="check"></a-icon>
+                </a-tag>
+              </a-tooltip>
+            </div>
+            <div v-else style="display: flex; align-items: center; margin-top: 8px">
+              <a-tag :color="customColor" style="width: 64px; height: 24px"></a-tag>
+              <a-button size="small" @click.stop="customColorShow = !customColorShow">自定义</a-button>
+            </div>
+            <div
+              v-if="customColorShow"
+              ref="sketchPicker"
+              style="margin-top: 8px; position: absolute; z-index: 1; right: 40px"
+            >
+              <sketch-picker v-model="customColor" :presetColors="colorArr" @input="selectColor" />
+            </div>
+          </div>
+          <a-divider />
+          <div :style="{ marginBottom: '24px' }">
+            <h3 class="setting-drawer-index-title">其他设置</h3>
+            <div>
+              <a-list :split="false">
+                <a-list-item>
+                  <a-switch slot="actions" size="small" :defaultChecked="colorWeak" @change="onColorWeak" />
+                  <a-list-item-meta>
+                    <div slot="title">色弱模式</div>
+                  </a-list-item-meta>
+                </a-list-item>
+              </a-list>
+            </div>
+          </div>
+        </div>
+        <div class="bbar">
+          <a-button @click="handleClose">关闭</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+import { Sketch } from 'vue-color'
+import SettingItem from './SettingItem'
+import config from '@/config/defaultSettings'
+import { updateTheme, updateColorWeak, colorList } from './settingConfig'
+import storage from '@/utils/storage'
+import { mixin, mixinDevice } from '@/utils/mixin'
+export default {
+  components: {
+    SettingItem,
+    SketchPicker: Sketch
+  },
+  mixins: [mixin, mixinDevice],
+  data () {
+    return {
+      selectValue: 'standard',
+      customColor: '#cdcdcd',
+      colorArr: ['#F5222D', '#FA541C', '#FAAD14', '#13C2C2', '#52C41A', '#1890FF', '#2F54EB', '#722ED1'],
+      customColorShow: false,
+      colorList
+    }
+  },
+  computed: {
+    visible () {
+      return this.$store.state.app.setting.themeShow
+    }
+  },
+  mounted () {
+    document.addEventListener('click', (e) => {
+      if (this.$refs.sketchPicker && !this.$refs.sketchPicker.contains(e.target)) {
+        this.customColorShow = false
+      }
+    })
+    this.customColorShow = false
+    const isColor = this.colorList.some(item => this.primaryColor === item.color)
+    this.customColor = isColor ? '#cdcdcd' : this.primaryColor
+    this.selectValue = isColor ? 'standard' : 'custom'
+    if (storage.get('CLICK_COLOR') !== '1') {
+      updateTheme('#1890FF')
+      this.$store.dispatch('ToggleColor', '#1890FF')
+      this.$store.dispatch('ToggleHeadColor', 'linear-gradient(90deg, #1d42ab, #2173dc, #1e93ff)')
+    } else {
+      updateTheme(this.primaryColor)
+    }
+    if (this.colorWeak !== config.colorWeak) {
+      updateColorWeak(this.colorWeak)
+    }
+  },
+  methods: {
+    selectColor (val) {
+      this.customColor = val.hex
+      this.changeColor(this.customColor, 'custom', `linear-gradient(90deg, ${this.customColor},${this.customColor}98,${this.customColor}95)`)
+    },
+    handleClose () {
+      this.$setSetting({ themeShow: false })
+    },
+    onColorWeak (checked) {
+      this.$store.dispatch('ToggleWeak', checked)
+      updateColorWeak(checked)
+    },
+    onMultiTab (checked) {
+      this.$store.dispatch('ToggleMultiTab', checked)
+    },
+    handleMenuTheme (theme) {
+      this.$store.dispatch('ToggleTheme', theme)
+    },
+    changeColor (color, type, headColor) {
+      if (this.primaryColor !== color) {
+        storage.set('CLICK_COLOR', '1')
+        this.$store.dispatch('ToggleColor', color)
+        this.$store.dispatch('ToggleHeadColor', headColor)
+        updateTheme(color)
+        this.$emit('update', true)
+      }
+      if (type === 'default') {
+        this.customColor = '#cdcdcd'
+      }
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.setting-drawer-index-content {
+  .setting-drawer-index-blockChecbox {
+    display: flex;
+    .setting-drawer-index-item {
+      margin-right: 16px;
+      position: relative;
+      border-radius: 4px;
+      cursor: pointer;
+
+      img {
+        width: 48px;
+      }
+
+      .setting-drawer-index-selectIcon {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 100%;
+        padding-top: 15px;
+        padding-left: 24px;
+        height: 100%;
+        color: @primary-color;
+        font-size: 14px;
+        font-weight: 700;
+      }
+    }
+  }
+  .setting-drawer-theme-color-colorBlock {
+    width: 20px;
+    height: 20px;
+    border-radius: 2px;
+    float: left;
+    cursor: pointer;
+    margin-right: 8px;
+    padding-left: 0px;
+    padding-right: 0px;
+    text-align: center;
+    color: #fff;
+    font-weight: 700;
+
+    i {
+      font-size: 14px;
+    }
+  }
+}
+</style>

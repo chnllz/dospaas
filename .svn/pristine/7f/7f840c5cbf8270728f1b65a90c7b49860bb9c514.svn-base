@@ -1,0 +1,178 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = { startTime: null, endTime: null, usernameList: null }
+                startTime = null
+                username = undefined
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+        </a-space>
+        <a-row class="form">
+          <a-col :span="6">
+            <a-form-item :label="$t('选择时间')">
+              <a-range-picker
+                v-model="startTime"
+                :show-time="{
+                  defaultValue: [moment('00:00:00', 'HH:mm:ss'), moment('23:59:59', 'HH:mm:ss')]
+                }"
+                @change="getDate"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button @click="handleSelect">{{ $t('选择用户') }}</a-button>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      class="table-fill"
+      size="small"
+      rowKey="extension"
+      :columns="columns"
+      :data="loadDataTable"
+      :showPagination="false"
+    ></s-table>
+    <select-user-form ref="selectUserForm" @ok="getUser" />
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('callcenter'),
+  components: {
+    SelectUserForm: () => import('../admin/UserTable/SelectUserForm'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      // 时间组件
+      startTime: null,
+      // 搜索参数
+      queryParam: {
+        'startTime': null,
+        'endTime': null,
+        'usernameList': null
+      },
+      // 表头
+      columns: [{
+        title: '#',
+        width: 50,
+        customRender: (text, record, index) => `${index + 1}`
+      }, {
+        title: this.$t('坐席姓名'),
+        dataIndex: 'username',
+        sorter: false
+      }, {
+        title: this.$t('分机号码'),
+        dataIndex: 'extension',
+        sorter: false
+      }, {
+        title: this.$t('参评数'),
+        dataIndex: 'inCommentsCount',
+        sorter: false
+      }, {
+        title: this.$t('参评率'),
+        dataIndex: 'inCommentsPercent',
+        sorter: false
+      }, {
+        title: this.$t('邀评数'),
+        dataIndex: 'commentsInviteCount',
+        sorter: false
+      }, {
+        title: this.$t('邀评率'),
+        dataIndex: 'commentsInvitePercent',
+        sorter: false
+      }, {
+        title: this.$t('客户满意度(CSAT)'),
+        dataIndex: 'customerSatisfaction',
+        sorter: false
+      }],
+      username: undefined
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo', 'setting'])
+  },
+  mounted () {
+    this.axios({
+      url: '/admin/dict/getChildren',
+      data: {
+        dictCategoryNumber: 'callcenter_comment_type'
+      }
+    }).then(res => {
+      const list = res.result
+      list.forEach(childItem => {
+        const data = [{
+          title: childItem.name + this.$t('数'),
+          dataIndex: 'appraise' + childItem.number,
+          align: 'center',
+          width: 100
+        }, {
+          title: childItem.name + this.$t('率'),
+          dataIndex: 'appraise' + childItem.number + 'Rate',
+          align: 'center',
+          width: 150
+        }]
+        this.columns.push({
+          title: childItem.name,
+          children: data
+        })
+      })
+    })
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/callcenter/comment/evaluate',
+        data: Object.assign(parameter, this.queryParam, { usernameList: this.username, init: String(this.columns.length === 8) })
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportEvaluateStatementTask',
+        parameter: {
+          condition: {
+            req: this.queryParam,
+            type: 'satisfactionStatement'
+          }
+        }
+      })
+    },
+    getDate (date, dateString) {
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    // 打开选择用户
+    handleSelect () {
+      this.$refs.selectUserForm.show({
+        page: 'statistic',
+        mode: 'multiple',
+        selectValue: this.username
+      })
+    },
+    // 获取用户
+    getUser (val) {
+      this.username = val
+      this.queryParam.usernameList = this.username
+    }
+  }
+}
+</script>

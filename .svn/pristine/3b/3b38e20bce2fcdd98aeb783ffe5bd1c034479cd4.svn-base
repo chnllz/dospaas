@@ -1,0 +1,724 @@
+<template>
+  <transition name="showHeader">
+    <a-layout-header v-if="visible" ref="header" class="header" style="height: 64px">
+      <div class="logo">
+        <img
+          v-if="setting.logoType && setting.logoType !== 'text'"
+          :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${setting.logoUrl}`"
+        />
+        <h1
+          v-if="setting.logoType !== 'img'"
+          style="display: inline-block"
+          :style="{
+            fontSize: setting.logoTextSize || '24px',
+            color: setting.logoStyle === 'light' ? '#262626' : '#f0f0f0',
+            fontWeight: setting.logoTextWeight || 600,
+            fontFamily: setting.logoTextFont || ''
+          }"
+        >
+          {{ $t(setting.name) }}
+        </h1>
+      </div>
+      <!-- 呼叫中心电话条 -->
+      <div style="flex: 1; display: flex; align-items: center">
+        <div id="mypanel" style="width: 820px; line-height: normal"></div>
+      </div>
+      <template>
+        <a-dropdown v-if="setting.userStatus !== -1">
+          <a-menu slot="overlay" style="width: 120px" @click="editServiceStatus">
+            <a-menu-item :key="0">
+              <a-icon type="check-circle" theme="twoTone" two-tone-color="#2FC25B" />
+              {{ $t('就绪') }}
+            </a-menu-item>
+            <a-sub-menu v-if="setting.userBusyEnable && setting.userFurtherStates" :key="2">
+              <span slot="title">
+                <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                {{ $t('示忙') }}
+              </span>
+              <template>
+                <a-menu-item
+                  v-for="busyItem in setting.userFurtherStates"
+                  v-show="busyItem.check"
+                  :key="busyItem.value"
+                >
+                  <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                  {{ busyItem.label }}
+                </a-menu-item>
+              </template>
+            </a-sub-menu>
+            <a-menu-item v-else :key="2">
+              <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+              {{ $t('示忙') }}
+            </a-menu-item>
+            <a-menu-item :key="1">
+              <a-icon type="close-circle" theme="twoTone" two-tone-color="#F04864" />
+              {{ $t('离开') }}
+            </a-menu-item>
+          </a-menu>
+          <div class="message">
+            <span v-if="setting.userStatus == 0" style="cursor: pointer">
+              <a-icon type="check-circle" theme="twoTone" two-tone-color="#2FC25B" />
+              {{ $t('就绪') }}
+            </span>
+            <span v-else-if="setting.userStatus == 1" style="cursor: pointer">
+              <a-icon type="close-circle" theme="twoTone" two-tone-color="#F04864" />
+              {{ $t('离开') }}
+            </span>
+            <span v-else-if="setting.userStatus == 2" style="cursor: pointer">
+              <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+              {{ $t('示忙') }}
+            </span>
+            <span v-else style="cursor: pointer">
+              <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+              {{
+                setting.userBusyEnable && setting.userFurtherStates.find((item) => item.value === setting.userStatus)
+                  ? setting.userFurtherStates.find((item) => item.value === setting.userStatus).label
+                  : '示忙'
+              }}
+            </span>
+          </div>
+        </a-dropdown>
+        <div v-else class="message">
+          <span>读取中...</span>
+        </div>
+      </template>
+      <!-- 未接来电 -->
+      <a-tooltip v-if="userInfo.misscallMenu">
+        <template slot="title">{{ $t('未接来电') }}</template>
+        <div class="message" @click="missedCall">
+          <a-icon type="customer-service" />
+        </div>
+      </a-tooltip>
+      <!-- 消息中心 -->
+      <a-tooltip v-if="userInfo.messageMenu">
+        <template slot="title">{{ $t('消息中心') }}</template>
+        <div class="message" @click="handleRemind">
+          <a-badge :count="count" :offset="[6, -2]">
+            <a-icon type="bell" class="icon" />
+          </a-badge>
+        </div>
+      </a-tooltip>
+      <!-- 新建工单 -->
+      <a-tooltip>
+        <template slot="title">{{ $t('新建工单') }}</template>
+        <div
+          class="message"
+          @click="
+            () => {
+              popVisible = !popVisible
+            }
+          "
+        >
+          <a-icon type="plus" />
+        </div>
+      </a-tooltip>
+      <!-- 用户信息菜单 -->
+      <a-dropdown>
+        <div class="message">
+          <a-avatar
+            class="avatar"
+            size="small"
+            :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${
+              userInfo.avatar ? userInfo.avatar.filePath : ''
+            }`"
+            style="margin-right: 6px"
+          />
+          <span>{{ userInfo.username }}</span>
+        </div>
+        <a-menu slot="overlay" class="user-dropdown-menu-wrapper">
+          <a-menu-item key="0">
+            <a href="javascript:;" @click="handleUserinfo">
+              <a-icon type="user" />
+              <span>{{ $t('个人信息') }}</span>
+            </a>
+          </a-menu-item>
+          <a-menu-item key="1">
+            <a href="javascript:;" @click="$refs.passwordEdit.show({ modifyType: 'personal' })">
+              <a-icon type="key" />
+              <span>{{ $t('修改密码') }}</span>
+            </a>
+          </a-menu-item>
+          <a-menu-item v-if="setting.workWeChatEnable" key="2">
+            <a href="javascript:;" @click="$refs.qRModal.show({ title: $t('企业微信授权') })">
+              <a-icon type="api" />
+              <span>{{ $t('绑定企业微信') }}</span>
+            </a>
+          </a-menu-item>
+          <a-menu-item key="3">
+            <a href="javascript:;" @click="handleSetTheme">
+              <a-icon type="setting" />
+              <span>{{ $t('主题设置') }}</span>
+            </a>
+          </a-menu-item>
+          <a-sub-menu key="4">
+            <a slot="title" href="javascript:;" style="display: inline-block">
+              <a-icon type="global" style="padding-right: 8px" />
+              <span>{{ $t('语言') }}</span>
+            </a>
+            <a-menu-item key="zh_CN" @click="handleSetLang('zh_CN')">
+              <a-badge v-if="lang === 'zh_CN'" status="processing" />
+              <span v-else style="margin-right: 16px"></span>
+              简体中文
+            </a-menu-item>
+            <a-menu-item key="en_US" @click="handleSetLang('en_US')">
+              <a-badge v-if="lang === 'en_US'" status="processing" />
+              <span v-else style="margin-right: 16px"></span>
+              English
+            </a-menu-item>
+          </a-sub-menu>
+          <a-menu-item key="5">
+            <a
+              href="javascript:;"
+              @click="
+                () => {
+                  copyrightVisible = !copyrightVisible
+                }
+              "
+            >
+              <a-icon type="copyright" />
+              <span>{{ $t('关于我们') }}</span>
+            </a>
+          </a-menu-item>
+          <a-menu-divider />
+          <a-menu-item key="6">
+            <a href="javascript:;" @click="handleLogout">
+              <a-icon type="logout" />
+              <span>{{ $t('退出登录') }}</span>
+            </a>
+          </a-menu-item>
+        </a-menu>
+      </a-dropdown>
+      <a-modal
+        :title="$t('关于我们')"
+        :width="500"
+        :visible="copyrightVisible"
+        @cancel="copyrightVisible = !copyrightVisible"
+      >
+        <a-alert
+          type="warning"
+          :message="
+            $t(
+              '警告: 本计算机程序受版权法及国际公约的保护，未经授权擅自复制或散布本程序的部分或全部，将承受严厉的民事和刑事处罚，对已知的违反者将给予法律范围内的全面制裁。'
+            )
+          "
+        ></a-alert>
+        <a-space direction="vertical" style="width: 100%; margin-top: 16px">
+          <a-row type="flex">
+            <a-col flex="80px" style="text-align: right; color: #262626">{{ $t('产品名称：') }}</a-col>
+            <a-col flex="1" style="color: #595959">{{ setting.title }}</a-col>
+          </a-row>
+          <a-row type="flex">
+            <a-col flex="80px" style="text-align: right; color: #262626">{{ $t('版权所有：') }}</a-col>
+            <a-col flex="1" style="color: #595959">{{ setting.copyright }}</a-col>
+          </a-row>
+          <a-row type="flex">
+            <a-col flex="80px" style="text-align: right; color: #262626">Vue：</a-col>
+            <a-col flex="1" style="color: #595959">v{{ version }} / {{ release }}</a-col>
+          </a-row>
+          <a-row type="flex">
+            <a-col flex="80px" style="text-align: right; color: #262626">Java：</a-col>
+            <a-col flex="1" style="color: #595959">
+              v{{ setting.releaseVersion }} / {{ moment(setting.releaseTime).format('YYYY-MM-DD HH:mm:ss') }}
+            </a-col>
+          </a-row>
+        </a-space>
+        <div slot="footer">
+          <a-button @click="copyrightVisible = !copyrightVisible">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-modal>
+      <a-modal :width="400" :visible="popVisible" centered @ok="popFormSubmit" @cancel="popVisible = false">
+        <template slot="title">
+          <a-icon type="plus" />
+          {{ $t('新建工单') }}
+        </template>
+        <a-form ref="popForm" :form="form" :label-col="{ span: 8 }" :wrapper-col="{ span: 16 }">
+          <a-form-item :label="$t('客户手机号码')">
+            <a-input
+              v-decorator="[
+                'contactPhone',
+                {
+                  initialValue: '',
+                  rules: [{ required: true, message: $t('电话号码不能为空') }, { validator: checkPhone }]
+                }
+              ]"
+              :placeholder="$t('请输入客户手机号码')"
+              @keyup.enter="popFormSubmit"
+            />
+          </a-form-item>
+        </a-form>
+      </a-modal>
+      <password-edit ref="passwordEdit"></password-edit>
+      <Document></Document>
+      <modal-user-info ref="modalUserInfo" :key="userKey" />
+      <Preview ref="preview" />
+      <workflow-handle-form ref="workflowHandleForm" />
+      <QRModal ref="qRModal" />
+    </a-layout-header>
+  </transition>
+</template>
+<script>
+import Vue from 'vue'
+import { mapActions, mapGetters } from 'vuex'
+import notification from 'ant-design-vue/es/notification'
+import storage from '@/utils/storage'
+import VueClipBoard from 'vue-clipboard2'
+import SockJS from 'sockjs-client'
+import Stomp from 'webstomp-client'
+Vue.use(VueClipBoard)
+export default {
+  name: 'GlobalHeader',
+  i18n: window.lang('admin'),
+  components: {
+    SMenu: () => import('@/components/Menu/'),
+    ModalUserInfo: () => import('@/views/admin/User/UserInfo'),
+    Document: () => import('./Document'),
+    Preview: () => import('./Preview'),
+    WorkflowHandleForm: () => import('@/views/admin/WorkflowHandleForm'),
+    QRModal: () => import('@/views/wechat/QRModal'),
+    PasswordEdit: () => import('@/views/admin/Index/PasswordEdit')
+  },
+  props: {
+    mode: {
+      type: String,
+      // sidemenu, topmenu
+      default: 'sidemenu'
+    },
+    menus: {
+      type: Array,
+      required: true
+    },
+    theme: {
+      type: String,
+      required: false,
+      default: 'dark'
+    },
+    collapsed: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    device: {
+      type: String,
+      required: false,
+      default: 'desktop'
+    }
+  },
+  data () {
+    return {
+      release: process.env.release,
+      version: process.env.VUE_APP_VERSION,
+      visible: true,
+      wordRequired: false,
+      oldWord: { status: 'success', help: '', value: '' },
+      newWord: { status: 'success', help: '', value: '' },
+      repeat: { status: 'success', help: '', value: '' },
+      searchShow: false,
+      caseList: {},
+      oldScrollTop: 0,
+      socket: '',
+      count: 0,
+      form: this.$form.createForm(this),
+      copyrightVisible: false,
+      popVisible: false,
+      userKey: 'userKey',
+      changePassword: false,
+      lang: '',
+      stompClient: null,
+      status: ''
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo', 'color'])
+  },
+  watch: {
+    color (newVal) {
+      if (newVal) {
+        this.$refs.header.$el.style.background = storage.get('DEFAULT_HEAD_COLOR')
+      }
+    }
+  },
+  mounted () {
+    // 使用实例 window.top.view({fileName: 'VIOMI牌MR1072-1000G型双出水净水器.pdf', authCode: '4c30943026ca2e32adac7cbb9a060fc7'})
+    window.top.view = (config) => {
+      this.$refs.preview.show(config)
+    }
+    window.mainFrame = true
+    this.lang = storage.get('lang')
+    this.count = this.userInfo.remindCount
+    this.$refs.header.$el.style.background = storage.get('DEFAULT_HEAD_COLOR')
+    document.addEventListener('scroll', this.handleScroll, { passive: true })
+    if (this.$store.getters.userInfo.extension) {
+      const element = document.createElement('script')
+      element.type = 'text/javascript'
+      element.src = `${this.$store.getters.setting.interfaceurl}sdk/index/callcenter/?debug=0&extension=${this.$store.getters.userInfo.extension}&popscreenCallback=mypopscreen&control_container=mypanel`
+      document.getElementsByTagName('head')[0].appendChild(element)
+    }
+    window.mypopscreen = (obj) => {
+      const { popmethod, popurl, poptime } = this.$store.getters.setting
+      if ((popmethod === 'All' || popmethod === obj.Method) && poptime === obj.Poptime) {
+        let url
+        const params = Object.keys(obj).map((key) => {
+          return encodeURIComponent(key) + '=' + encodeURIComponent(obj[key])
+        }).join('&')
+        if (popurl.indexOf('http') === 0) {
+          if (popurl.indexOf('?') === -1) {
+            url = `${popurl}?${params}`
+          } else {
+            url = `${popurl}&${params}`
+          }
+        } else {
+          url = `${process.env.VUE_APP_BASE_URL}CustomPage/?view=${popurl}&${params}`
+        }
+        window.open(url)
+      }
+    }
+    // 初始化websocket
+    this.initWebSocket()
+    this.changePassword = this.setting.resetPassword && this.userInfo.resetPassword === 1
+    if (this.changePassword) {
+      this.$refs.passwordEdit.show({ changePassword: this.changePassword, modifyType: 'personal' })
+    }
+    setTimeout(() => {
+      this.getMessageList()
+    }, 10000)
+  },
+  beforeDestroy () {
+    document.body.removeEventListener('scroll', this.handleScroll, true)
+  },
+  methods: {
+    initWebSocket () {
+      // 实例化socket
+      if (typeof (WebSocket) === 'undefined') {
+        this.$message.warning('您的浏览器不支持WebSocket，将会导致系统部分功能无法正常使用，请升级浏览器版本或更换浏览器后重试。')
+      } else {
+        // 监听socket连接
+        const path = this.setting.websocket ? `${this.setting.websocket}?role=user&token=${this.userInfo.accessToken}` : `${process.env.VUE_APP_API_BASE_URL}admin/websocket?role=user&token=${this.userInfo.accessToken}`
+        const socket = new SockJS(path)
+        const onlineStatus = sessionStorage.getItem('onlineStatus')
+        const sendMsg = {
+          code: '1001',
+          status: onlineStatus ? JSON.parse(onlineStatus) : '1',
+          time: this.moment().format('YYYY-MM-DD HH:mm:ss'),
+          from: {},
+          to: {},
+          data: {
+            username: this.userInfo.username,
+            token: this.userInfo.accessToken
+          }
+        }
+        this.stompClient = Stomp.over(socket)
+        this.stompClient.heartbeat.outgoing = 0 // 100s，默认10s
+        this.stompClient.heartbeat.incoming = 0 // 100s
+        this.stompClient.connect({}, suce => {
+          this.status = 'online'
+          this.stompClient.send('/app/admin/sendToUser', JSON.stringify(sendMsg))
+          // 全局个人通道
+          this.stompClient.subscribe('/user/topic/message', (msg) => {
+            const obj = JSON.parse(msg.body)
+            if (obj) {
+              const msgData = obj
+              if (msgData.code === '2002') {
+                window.location.reload()
+              } else if (msgData.code === '1001') {
+                this.$setSetting({ clientId: msgData.data.clientId })
+              } else if (msgData.code === '1005') {
+                // 设置邮件客服当前在线状态
+                this.$setSetting({ mailStatus: msgData.data.status })
+              } else if (msgData.code === '1006') {
+                // 设置邮件客服当前在线状态
+                this.$setSetting({ userStatus: msgData.data.status })
+              } else if (msgData.code === '2003') {
+                if (this.userInfo.accessToken !== msgData.data.token) {
+                  // 多个浏览器,多端登录时,当前页面token与最新token不相符,则刷新页面
+                  this.$notification({ code: 2001, message: '您的账号已在其他地方登录' })
+                  storage.remove('Access-Token')
+                  setTimeout(() => {
+                    window.location.reload()
+                  }, 3000)
+                }
+              }
+              try {
+                if (typeof obj === 'object' && obj.data && obj.data.username) {
+                  this.count = obj.data.remindCount
+                } else if (typeof obj === 'object' && obj.data && obj.data.remindCount) {
+                  this.count = obj.data.remindCount
+                }
+                if (typeof obj === 'object' && obj.data && obj.data.id) {
+                  if (obj.data.setting && obj.data.setting.type === 'vioce') {
+                    if (this.audio) {
+                      this.audio.pause()
+                    }
+                    this.audio = new Audio()
+                    this.audio.src = obj.data.setting.vioce.vioceUrl
+                    setTimeout(() => {
+                      this.audio.play()
+                    }, 10)
+                  }
+                  this.showNotification(obj)
+                }
+              } catch (e) {
+                // console.log('error：' + msg.data + '!!!' + e)
+              }
+            }
+          })
+          // 系统消息通知通道
+          this.stompClient.subscribe('/topic/all', (msg) => {
+            // console.log(msg)
+            // const obj = JSON.parse(msg.body)
+          })
+        }, err => {
+          this.status = 'outLine'
+          console.log('连接失败', err)
+        })
+      }
+    },
+    getMessageList () {
+      this.axios({
+        url: '/admin/message/remind',
+        data: {
+          pageNo: 1,
+          pageSize: 50,
+          sortField: 'id',
+          sortOrder: 'descend',
+          status: 0,
+          type: 'system'
+        }
+      }).then(res => {
+        res.result.data.forEach(item => {
+          setTimeout(() => { this.showNotification({ data: item }) }, 100)
+        })
+      })
+    },
+    showNotification (obj) {
+      const that = this
+      const self = this
+      notification.open({
+        message: h => {
+          return <span><a-icon type={'bell'} onClick={() => {
+            that.audio.play()
+          }}></a-icon> {obj.data.title}</span>
+        },
+        description: h => {
+          if (obj.data.setting) {
+            let setting = {}
+            if (obj.data.setting) {
+              setting = JSON.parse(obj.data.setting)
+            }
+            const contentList = obj.data.content.split(setting.caseNumber)
+            return <span><span>{contentList[0]}</span><a onClick={() => {
+              self.$copyText(setting.caseNumber).then(function (e) {
+                that.$message.success(that.$t('复制成功'))
+              }, function (e) {
+                that.$message.success(that.$t('复制失败'))
+              })
+              // self.$refs.workflowHandleForm.show({
+              //   config: {
+              //     title: this.$t('查看流程'),
+              //     width: 1200,
+              //     tplviewUrl: '/admin/centerflow/viewOrder',
+              //     flowStatus: 'proceed',
+              //     flowCondition: 'all_flow',
+              //     caseId: obj.data.setting.caseId,
+              //     viewType: 'view'
+              //   }
+              // })
+              // notification.close(obj.data.id)
+            }}>{setting.caseNumber}</a><span>{contentList[1]}</span></span>
+          } else {
+            let text = obj.data.content.replace(/<[^<>]+>/g, '')
+            text = text.substr(0, 100) + (text.length > 100 ? ' ···' : '')
+            return <span domPropsInnerHTML={text || '--'}></span>
+          }
+        },
+        placement: 'bottomRight',
+        duration: obj.data.type === 'system' ? null : 4.5,
+        key: obj.data.id,
+        onClose: () => {
+          if (obj.data.type === 'system') {
+            self.axios({
+              url: '/admin/message/delRemind',
+              data: {
+                id: [obj.data.id]
+              }
+            })
+          }
+        }
+      })
+    },
+    // 修改在线状态
+    editServiceStatus (menu) {
+      this.$setSetting({ mailStatus: -1 })
+      const obj = {
+        status: menu.key,
+        code: '4001'
+      }
+      if (this.status === 'online') {
+        this.stompClient.send('/app/admin/sendToUser', JSON.stringify(obj))
+      } else {
+        this.$message.warning(this.$t('websocket连接错误，请刷新后重试'))
+      }
+    },
+    // 打开未接来电页面
+    missedCall () {
+      this.$router.push(this.userInfo.misscallMenu)
+    },
+    // 语言切换
+    handleSetLang (key) {
+      storage.set('lang', key)
+      window.location.reload()
+    },
+    handleRemind () {
+      this.$router.push(this.userInfo.messageMenu)
+    },
+    handleScroll () {
+      if (!this.autoHideHeader) {
+        return
+      }
+      const scrollTop = document.body.scrollTop + document.documentElement.scrollTop
+      if (!this.ticking) {
+        this.ticking = true
+        requestAnimationFrame(() => {
+          if (this.oldScrollTop > scrollTop) {
+            this.visible = true
+          } else if (scrollTop > 300 && this.visible) {
+            this.visible = false
+          } else if (scrollTop < 300 && !this.visible) {
+            this.visible = true
+          }
+          this.oldScrollTop = scrollTop
+          this.ticking = false
+        })
+      }
+    },
+    handleSetTheme () {
+      this.$setSetting({ themeShow: true })
+    },
+    ...mapActions(['Logout']),
+    handleLogout () {
+      this.$confirm({
+        title: this.$t('您确认要退出登录吗 ?'),
+        onOk: () => {
+          return this.Logout({}).then(() => {
+            setTimeout(() => {
+              window.location.reload()
+            }, 16)
+          }).catch(err => {
+            this.$message.error({
+              title: this.$t('错误'),
+              description: err.message
+            })
+          })
+        },
+        onCancel () {
+        }
+      })
+    },
+    checkPhone (rule, value, callback) {
+      const str = this.$t('请输入正确的电话号码')
+      if (value && !/^([+-]?)\d*\.?\d+$/.test(value)) {
+        callback(str)
+      } else {
+        callback()
+      }
+    },
+    handleUserinfo () {
+      this.userKey = this.userKey === 'userKey' ? 'userKey_1' : 'userKey'
+      this.$nextTick(() => {
+        this.$refs.modalUserInfo.show()
+      })
+    },
+    // 弹屏提交
+    popFormSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          const url = `${process.env.VUE_APP_BASE_URL}CustomPage/?view=` + this.setting.popurl
+          window.open(url)
+          this.$set(this, 'popVisible', false)
+        }
+      })
+    },
+    // 生成唯一ID
+    uuid (n) {
+      n = 1 // 生成一个唯一id，包含数字和字母
+      var random = function () {
+        // 生成10-12位不等的字符串
+        return Number(
+          Math.random()
+            .toString()
+            .substr(2)
+        ).toString(36) // 转换成十六进制
+      }
+      var arr = []
+      function createId () {
+        var num = random()
+        var _bool = false
+        arr.forEach(v => {
+          if (v === num) _bool = true
+        })
+        if (_bool) {
+          createId()
+        } else {
+          arr.push(num)
+        }
+      }
+      var i = 0
+      while (i < n) {
+        createId()
+        i++
+      }
+      return arr[0] // 将生成的转为我们需要的字符串并赋值
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '../../../components/index.less';
+@import '~ant-design-vue/es/style/themes/default.less';
+.header-animat {
+  position: relative;
+  z-index: @ant-global-header-zindex;
+}
+.header {
+  display: flex;
+  padding: 0;
+  align-items: center;
+  box-shadow: 0 1px 4px #00152914;
+}
+.showHeader-enter-active {
+  transition: all 0.25s ease;
+}
+.showHeader-leave-active {
+  transition: all 0.5s ease;
+}
+.showHeader-enter,
+.showHeader-leave-to {
+  opacity: 0;
+}
+.message {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  padding: 0 16px;
+  cursor: pointer;
+  line-height: 64px;
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+  color: #ffffff;
+  .icon {
+    font-size: 16px;
+    vertical-align: middle;
+  }
+}
+.copyright {
+  border-left: 1px solid #aca899;
+  border-top: 1px solid #aca899;
+  border-right: 2px solid #eeede5;
+  border-bottom: 2px solid #eeede5;
+  padding: 5px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+</style>

@@ -1,0 +1,26 @@
+<template>
+  <a-card size="small" :bordered="false">
+    <a-tabs size="small">
+      <a-tab-pane key="1" :tab="$t('我创建的')">
+        <IndexInitCommon type="myCreated" page="myKnowledge" />
+      </a-tab-pane>
+      <a-tab-pane key="2" :tab="$t('我收藏的')">
+        <IndexInitCommon type="myCollected" page="myKnowledge" />
+      </a-tab-pane>
+      <a-tab-pane key="3" :tab="$t('我评论的')">
+        <IndexInitCommon type="myCommented" page="myKnowledge" />
+      </a-tab-pane>
+      <a-tab-pane key="4" :tab="$t('我报错的')">
+        <IndexInitCommon type="myRecordBug" page="myKnowledge" />
+      </a-tab-pane>
+    </a-tabs>
+  </a-card>
+</template>
+<script>
+export default {
+  i18n: window.lang('knowledge'),
+  components: {
+    IndexInitCommon: () => import('./IndexInitCommon')
+  }
+}
+</script>

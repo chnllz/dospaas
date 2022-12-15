@@ -1,0 +1,56 @@
+<template>
+  <a-modal
+    :visible="visible"
+    :confirmLoading="loading"
+    :destroyOnClose="true"
+    :footer="false"
+    :width="520"
+    @cancel="visible = !visible"
+  >
+    <div style="width: 100%; height: 20px"></div>
+    <iframe :src="src" width="480px" height="520px" frameborder="0" name="frame"></iframe>
+  </a-modal>
+</template>
+<script>
+export default {
+  name: 'ThirdPartyBinding',
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      src: '',
+      record: {}
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.record = config.record
+      if (this.record.platform) {
+        this.src = ''
+        this.unbind()
+      }
+    },
+    unbind () {
+      window.top['ThirdPartyBinding'] = () => {
+        this.visible = false
+      }
+      this.axios({
+        url: 'admin/userBind/createUrl',
+        params: { platform: this.record.platform }
+      }).then(res => {
+        if (res.code === 0) {
+          if (res.result.code === 0) {
+            this.src = res.result.result
+          } else {
+            this.$message.error(res.result.message)
+          }
+        }
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+</style>

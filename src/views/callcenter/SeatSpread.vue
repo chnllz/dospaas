@@ -1,0 +1,330 @@
+<template>
+  <a-spin :spinning="loading">
+    <a-table rowKey="id" :columns="infoColumns" :data-source="dataSource" size="small" :pagination="false">
+      <template slot="title">
+        <div style="font-weight: bold; font-size: 16px">{{ $t('报表信息') }}</div>
+      </template>
+    </a-table>
+    <a-table
+      style="margin: 20px 0"
+      rowKey="hour"
+      :columns="hoursColumns"
+      :data-source="hoursData"
+      size="small"
+      :pagination="false"
+    >
+      <template slot="title">
+        <div style="font-weight: bold; font-size: 16px">
+          <span style="margin-right: 20px">{{ $t('每小时数据分布') }}</span>
+          <a-button type="primary" icon="download" size="small" @click="download">{{ $t('导出数据') }}</a-button>
+        </div>
+      </template>
+    </a-table>
+    <div ref="echart" style="width: 100%; height: 400px; margin: 20px 0"></div>
+    <a-card size="small">
+      <a-tabs tabPosition="left" :style="{ height: '500px' }" @change="onChange">
+        <a-tab-pane v-for="(item, key) of extensionObj" :key="key" :tab="item">
+          <a-spin :spinning="channelLoading">
+            <a-table rowKey="date" :columns="seatColumns" :data-source="channelData[key]" size="small">
+              <template slot="title">
+                <div>
+                  <span style="font-weight: bold; font-size: 16px; margin-right: 20px">{{ item }}</span>
+                  <span>{{ $t('24小时 (如 8表示 08:00 - 08:59,单位:分)') }}</span>
+                </div>
+              </template>
+            </a-table>
+          </a-spin>
+        </a-tab-pane>
+      </a-tabs>
+    </a-card>
+    <general-export ref="generalExport" />
+  </a-spin>
+</template>
+<script>
+import echarts from 'echarts'
+import { mapGetters } from 'vuex'
+import storage from '@/utils/storage'
+
+export default {
+  i18n: window.lang('callcenter'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  props: {
+    searchData: {
+      type: Object,
+      default: () => { }
+    },
+    users: {
+      type: Array,
+      default: () => {
+        return []
+      }
+    }
+  },
+  data () {
+    return {
+      loading: false,
+      loadFlag: true,
+      channelLoading: false,
+      extension: [],
+      extensionObj: {},
+      infoColumns: [
+        { title: this.$t('开始时间'), dataIndex: 'startTime' },
+        { title: this.$t('结束时间'), dataIndex: 'endTime' },
+        { title: this.$t('搜索时间段'), dataIndex: 'rangeTime', customRender: text => text + this.$t('天') }
+      ],
+      dataSource: [],
+      hoursColumns: [
+        { title: this.$t('小时段'), dataIndex: 'hour' },
+        { title: this.$t('呼叫次数'), dataIndex: 'callCount' },
+        { title: this.$t('通话时长'), dataIndex: 'seconds' }
+      ],
+      hoursData: [],
+      seatColumns: [
+        { title: this.$t('日期'), dataIndex: 'date' },
+        { title: '0', dataIndex: 'h_0' },
+        { title: '1', dataIndex: 'h_1' },
+        { title: '2', dataIndex: 'h_2' },
+        { title: '3', dataIndex: 'h_3' },
+        { title: '4', dataIndex: 'h_4' },
+        { title: '5', dataIndex: 'h_5' },
+        { title: '6', dataIndex: 'h_6' },
+        { title: '7', dataIndex: 'h_7' },
+        { title: '8', dataIndex: 'h_8' },
+        { title: '9', dataIndex: 'h_9' },
+        { title: '10', dataIndex: 'h_10' },
+        { title: '11', dataIndex: 'h_11' },
+        { title: '12', dataIndex: 'h_12' },
+        { title: '13', dataIndex: 'h_13' },
+        { title: '14', dataIndex: 'h_14' },
+        { title: '15', dataIndex: 'h_15' },
+        { title: '16', dataIndex: 'h_16' },
+        { title: '17', dataIndex: 'h_17' },
+        { title: '18', dataIndex: 'h_18' },
+        { title: '19', dataIndex: 'h_19' },
+        { title: '20', dataIndex: 'h_20' },
+        { title: '21', dataIndex: 'h_21' },
+        { title: '22', dataIndex: 'h_22' },
+        { title: '23', dataIndex: 'h_23' },
+        { title: this.$t('总计'), dataIndex: 'total', width: 100 }
+      ],
+      channelData: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  watch: {
+    searchData: {
+      handler () {
+        this.loadFlag = true
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  methods: {
+    init () {
+      if (this.loadFlag) {
+        const extension = []
+        const selectUsers = this.searchData.seat
+        const seatSearch = storage.get('seatSearch') ? JSON.parse(storage.get('seatSearch')) : {}
+
+        this.seatSearch = seatSearch
+        const params = {
+          startTime: seatSearch.startTime,
+          endTime: seatSearch.endTime,
+          noInternal: seatSearch.filtration ? 1 : 0,
+          typeReport: 'outgoing'
+        }
+        this.params = params
+        this.users.forEach(item => {
+          if (selectUsers.indexOf(item.extension) !== -1) {
+            extension.push(item.extension)
+          }
+        })
+        this.extension = extension
+        this.loading = true
+        const p = new Promise((resolve, reject) => {
+          this.axios({
+            url: '/callcenter/callCenterCallRecord/distribution',
+            data: Object.assign(params, { extension: extension })
+          }).then(res => {
+            resolve(res.result.extension)
+            // 报表信息
+            const obj = {}
+            obj.startTime = this.seatSearch.startTime.split(' ')[0]
+            obj.endTime = this.seatSearch.endTime.split(' ')[0]
+            obj.rangeTime = res.result.period
+            obj.id = 0
+            this.dataSource = [obj]
+            // 小时段数据
+            this.hoursData = res.result.hourData
+            // 分级数据
+            this.extensionObj = res.result.extension
+            // 图标数据
+            const xData = []
+            const yData = []
+            this.hoursData.forEach(item => {
+              xData.push(item.hour)
+              yData.push(parseInt(item.callCount))
+            })
+            this.initCharts(xData, yData)
+            this.loading = false
+            // this.loadFlag = false
+          })
+        })
+        p.then(res => {
+          const keyArr = []
+          for (var key in res) {
+            keyArr.push(key)
+            this.channelData[key] = []
+          }
+          this.onChange(keyArr[0])
+        })
+      }
+      this.seatColumns.map(item => {
+        item.customRender = (text, record, index) => {
+          let bgColor = ''
+          let textAlign = ''
+          if (text === 0 || typeof text === 'string') {
+            bgColor = 'rgba(255, 255, 255, 0)'
+          } else {
+            bgColor = this.getColorByNumber(text, 100)
+          }
+          if (typeof text !== 'string') {
+            textAlign = 'center'
+          }
+          const style = { backgroundColor: bgColor, textAlign }
+          return (
+            <div style={style}>{text}</div>
+          )
+        }
+      })
+    },
+    // 数值越大颜色越深
+    getColorByNumber (n, max) {
+      const halfMax = max / 2 // 最大数值的二分之一
+      // var 百分之一 = (单色值范围) / halfMax;  单颜色的变化范围只在50%之内
+      var one = 255 / halfMax
+      var r = 0
+      var g = 0
+      var b = 0
+      if (n < halfMax) {
+        // 比例小于halfMax的时候红色是越来越多的,直到红色为255时(红+绿)变为黄色.
+        r = one * n
+        g = 255
+      }
+      if (n >= halfMax) {
+        // 比例大于halfMax的时候绿色是越来越少的,直到0 变为纯红
+        g = (255 - ((n - halfMax) * one)) < 0 ? 0 : (255 - ((n - halfMax) * one))
+        r = 255
+      }
+      r = parseInt(r)// 取整
+      g = parseInt(g)// 取整
+      b = parseInt(b)// 取整
+      return 'rgb(' + r + ',' + g + ',' + b + ')'
+    },
+    initCharts (xData, yData) {
+      const option = {
+        color: ['#3398DB'],
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { // 坐标轴指示器，坐标轴触发有效
+            type: 'shadow' // 默认为直线，可选为：'line' | 'shadow'
+          }
+        },
+        title: { text: this.$t('每小时数据分布图(单位：次)') },
+        grid: { left: '10px', right: '10px', bottom: '10px', containLabel: true },
+        xAxis: [{
+          axisLabel: {
+            interval: 0,
+            rotate: 40
+          },
+          type: 'category',
+          data: xData,
+          axisTick: {
+            alignWithLabel: true
+          },
+          nameRotate: '92°'
+        }],
+        yAxis: [{
+          type: 'value'
+        }],
+        series: [{
+          type: 'bar',
+          barWidth: '60%',
+          data: yData,
+          label: {
+            show: true,
+            formatter: '{c}',
+            fontSize: 16,
+            position: 'top',
+            rich: {
+              name: {
+                textBorderColor: '#fff'
+              }
+            }
+          }
+        }]
+      }
+      const myChart = echarts.init(this.$refs.echart)
+      myChart.setOption(option)
+    },
+    // 导出
+    download () {
+      const params = {
+        startTime: this.seatSearch.startTime,
+        endTime: this.seatSearch.endTime,
+        noInternal: this.seatSearch.filtration ? 1 : 0,
+        sortField: 'calldate',
+        sortOrder: 'ascend',
+        export: 1,
+        extension: this.extension
+      }
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportCallCenterRecordTask',
+        setMenuName: true,
+        parameter: {
+          condition: {
+            req: params,
+            type: 'exportGetDistribution'
+          }
+        }
+      })
+    },
+    urlEncode (param, key, encode) {
+      if (param == null) return ''
+      var paramStr = ''
+      var t = typeof (param)
+      if (t === 'string' || t === 'number' || t === 'boolean') {
+        paramStr += '&' + key + '=' + ((encode == null || encode) ? encodeURIComponent(param) : param)
+      } else {
+        for (var i in param) {
+          var k = key == null ? i : key + (param instanceof Array ? '[' + i + ']' : '.' + i)
+          paramStr += this.urlEncode(param[i], k, encode)
+        }
+      }
+      return paramStr
+    },
+    onChange (key) {
+      this.channelLoading = true
+      this.axios({
+        url: '/callcenter/callCenterCallRecord/distributionDetail',
+        data: {
+          startTime: this.seatSearch.startTime,
+          endTime: this.seatSearch.endTime,
+          noInternal: this.seatSearch.filtration ? 1 : 0,
+          channel: key
+        }
+      }).then(res => {
+        this.channelLoading = false
+        this.channelData[key] = res.result.data
+        this.channelData = JSON.parse(JSON.stringify(this.channelData))
+      })
+    }
+  }
+}
+</script>

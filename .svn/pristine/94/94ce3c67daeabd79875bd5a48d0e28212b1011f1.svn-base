@@ -1,0 +1,1071 @@
+<template>
+  <div class="useMonitor">
+    <div ref="box" class="box">
+      <div class="content">
+        <div class="color-fff gloTime font-12">
+          <div>{{ nowTime }}</div>
+          <div>信息化系统解决方案提供商</div>
+        </div>
+        <!-- 头部 -->
+        <div class="globalClass toHead">
+          <div class="topLogo topLogoImg">
+            <img :src="heardImg" />
+          </div>
+          <div class="centerTitleHeight centerTitleImg">
+            <div class="centerTitle">在线宏观监控</div>
+          </div>
+        </div>
+        <!-- 说明 -->
+        <div
+          class="gloExplainClass"
+          @click="
+            () => {
+              openExplain = true
+            }
+          "
+        >
+          <img src="./assets/image/explain.png" class="explainImage" alt="" />
+          <div class="color-ffc font-12">帮助说明</div>
+        </div>
+        <!-- 中间 -->
+        <div class="glo-row tableBox">
+          <!-- 左部分 -->
+          <subTable class="flex-1">
+            <div slot="body" class="fullClass toFirBoxBody" style="">
+              <div class="flex-1">
+                <div class="color-fff font-18">在线客服人数</div>
+                <div ref="charts_pieHollow" class="toPieHollow"></div>
+              </div>
+              <div class="flex-1">
+                <div class="glo-flex glo-wrap">
+                  <div class="glo-flex toLeftMar">
+                    <div class="font-18 color-fff toLeftText">正在会话</div>
+                    <div class="firBox">
+                      <div v-for="(item, index) in inSession" :key="index" class="firBoxItem">{{ item }}</div>
+                      <div class="firBoxText">人</div>
+                    </div>
+                  </div>
+                  <div class="glo-flex">
+                    <div class="font-18 color-fff toLeftText">正在排队</div>
+                    <div class="firBox">
+                      <div v-for="(item, index) in inLineUp" :key="index" class="firBoxItem">{{ item }}</div>
+                      <div class="firBoxText">人</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="glo-flex toLeftAverage">
+                  <div class="font-18 color-fff toLeftText">平均会话时长</div>
+                  <div class="firBox glo-wrap">
+                    <div v-for="(item, index) in sessionAverage" :key="index" class="glo-flex">
+                      <div v-for="(itemVal, indexVal) in item.value" :key="indexVal" class="firBoxItem">
+                        {{ itemVal }}
+                      </div>
+                      <div
+                        class="firBoxText"
+                        :style="{ marginRight: index !== sessionAverage.length - 1 ? '0.01rem' : '' }"
+                      >
+                        {{ item.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="color-fff font-18 toLeftEfficiency">客服效率排名</div>
+                <div ref="toTableBox" class="toTableBox" :style="{ height: `${windowHeight / 4.7 - 30}px` }">
+                  <a-table
+                    ref="table"
+                    size="small"
+                    rowKey="id"
+                    :pagination="false"
+                    :columns="columnsEfficiency"
+                    :data-source="tableDataEfficiency"
+                  >
+                    <template slot="pm" slot-scope="text">
+                      <div
+                        :class="[
+                          text === 1 ? 'firstNum' : text === 2 ? 'secondNum' : text === 3 ? 'thirdNum' : 'otherNum'
+                        ]"
+                      >
+                        {{ text }}
+                      </div>
+                    </template>
+                  </a-table>
+                </div>
+              </div>
+            </div>
+          </subTable>
+          <!-- 中间部分 -->
+          <div class="flex-2 glo-col glo-flex toCenBox">
+            <div>
+              <div class="color-fff font-21 toCenConver">会话总数</div>
+            </div>
+            <div class="glo-col glo-flex flex-4 fullHeight">
+              <div class="glo-flex-bet fullWidth">
+                <div class="dialogNumListClass glo-flex">
+                  <div v-for="(item, index) in dialogNumList" :key="index" class="dialogNumBox">
+                    <div class="dialogNumItem dialogNumFirst"></div>
+                    <div class="dialogNumItem dialogNumSecond"></div>
+                    <div class="color-fff dialogNumText">{{ item }}</div>
+                  </div>
+                </div>
+                <div class="glo-flex toCenRateBox">
+                  <div class="font-14 color-fff toCenRate toCenConnect">接通率</div>
+                  <div ref="charts_connectRate" class="toCenChart"></div>
+                  <div class="font-14 color-fff toCenRate toCenPart">参评率</div>
+                  <div ref="charts_partRate" class="toCenChart"></div>
+                </div>
+              </div>
+
+              <div class="glo-flex fullHeight">
+                <div class="flex-1 glo-flex-bet glo-col fullHeight toCenText">
+                  <div class="color-fff font-21">客户服务分布图</div>
+                  <div class="color-fff font-21">今日会话分布</div>
+                </div>
+                <div class="flex-3">
+                  <div ref="charts_map" class="fullClass"></div>
+                </div>
+              </div>
+            </div>
+            <div class="flex-2">
+              <subTable class="flex-1 fullHeight">
+                <div slot="body" class="fullClass">
+                  <div ref="charts_area" class="fullClass toCenArea"></div>
+                </div>
+              </subTable>
+            </div>
+          </div>
+          <!-- 右部分 -->
+          <subTable class="flex-1">
+            <div slot="body" class="fullClass toFirBoxBody">
+              <div class="flex-1">
+                <div class="color-fff font-21">坐标状态</div>
+                <div ref="charts_satisfactRate" class="toRightCoo"></div>
+              </div>
+              <div class="flex-1">
+                <div class="glo-flex">
+                  <div class="font-18 color-fff toRightFirstSound">平均首响时长</div>
+                  <div class="firBox glo-wrap toLeftEfficiency">
+                    <div v-for="(item, index) in firstSecond" :key="index" class="glo-flex">
+                      <div v-for="(itemVal, indexVal) in item.value" :key="indexVal" class="firBoxItem">
+                        {{ itemVal }}
+                      </div>
+                      <div
+                        class="firBoxText"
+                        :style="{ marginRight: index !== firstSecond.length - 1 ? '0.01rem' : '' }"
+                      >
+                        {{ item.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="glo-flex toRightLineup">
+                  <div class="font-18 color-fff toRightFirstSound">平均排队时长</div>
+                  <div class="firBox glo-wrap toLeftEfficiency">
+                    <div v-for="(item, index) in lineUp" :key="index" class="glo-flex">
+                      <div v-for="(itemVal, indexVal) in item.value" :key="indexVal" class="firBoxItem">
+                        {{ itemVal }}
+                      </div>
+                      <div
+                        class="firBoxText"
+                        :style="{ marginRight: index !== firstSecond.length - 1 ? '0.01rem' : '' }"
+                      >
+                        {{ item.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="color-fff font-18 toLeftEfficiency">服务质量排名</div>
+                <div ref="toTableBox2" class="toTableBox" :style="{ height: `${windowHeight / 4.7 - 30}px` }">
+                  <a-table
+                    ref="table"
+                    size="small"
+                    rowKey="id"
+                    :pagination="false"
+                    :columns="columnService"
+                    :data-source="tableDataService"
+                  >
+                    <template slot="pm" slot-scope="text">
+                      <div
+                        :class="[
+                          text === 1 ? 'firstNum' : text === 2 ? 'secondNum' : text === 3 ? 'thirdNum' : 'otherNum'
+                        ]"
+                      >
+                        {{ text }}
+                      </div>
+                    </template>
+                  </a-table>
+                </div>
+              </div>
+            </div>
+          </subTable>
+        </div>
+      </div>
+      <a-modal
+        title="说明"
+        :visible="openExplain"
+        :bodyStyle="{ maxHeight: '500px', overflowY: 'height' > 500 ? 'scroll' : 'auto' }"
+        @ok="() => (openExplain = false)"
+        @cancel="() => (openExplain = false)"
+      >
+        <div>在线宏观监控</div>
+      </a-modal>
+    </div>
+  </div>
+</template>
+<script>
+import './assets/css/chartframe.less'
+import echarts from 'echarts'
+// 引入中国地图数据json
+import china from 'echarts/map/json/china.json'
+export default {
+  components: {
+    subTable: () => import('./components/subTable')
+  },
+  data () {
+    return {
+      heardImg: '',
+      nowTime: null,
+      // 时间定时器
+      timeid: null,
+      chartsOptions: {
+        // 空心饼状图-在线客服人数
+        charts_pieHollow: {
+          color: ['#63A9F8', '#FFD8BE', '#BF65FF', '#7C66FF'],
+          tooltip: {
+            trigger: 'item'
+          },
+          legend: {
+            show: false,
+            icon: 'circle',
+            bottom: 0,
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 12
+            }
+          },
+          series: [
+            {
+              type: 'pie',
+              radius: ['30%', '55%'],
+              labelLine: {
+                length: 33,
+                lineStyle: {
+                  color: '#2D99FF'
+                }
+              },
+              label: {
+                formatter (params) {
+                  return `{b|${params.name}}\n{d|${params.value}}`
+                },
+                rich: {
+                  b: {
+                    color: '#ffffff',
+                    fontSize: 14
+                  },
+                  d: {
+                    color: '#00DDFF',
+                    fontSize: 20
+                  }
+                }
+              },
+              data: [
+                { value: 58, name: '管理员在线' },
+                { value: 10, name: '在线' },
+                { value: 10, name: '挂起' },
+                { value: 10, name: '示忙' }
+              ]
+            }
+          ]
+        },
+        // 坐标状态
+        charts_satisfactRate: {
+          title: {
+            textStyle: {
+              color: '#fff',
+              fontSize: 16
+            },
+            left: 'center',
+            top: 'center'
+          },
+          graphic: { // 添加原生图形元素组件
+            elements: [{
+              type: 'text', // 组件类型
+              left: 'center', // 定位
+              top: '39%', // 定位
+              style: { // 样式
+                text: '65%', // 文字
+                fontSize: 32, // 文字大小
+                textAlign: 'center', // 定位
+                width: 30,
+                height: 50,
+                fontWeight: 'bold',
+                fill: '#fff' // 字体颜色
+              }
+            },
+            {
+              type: 'text',
+              left: 'center',
+              top: '56%',
+              style: {
+                text: '在线满意率',
+                fontSize: 14,
+                textAlign: 'center',
+                width: 30,
+                height: 25,
+                fill: '#fff'
+              }
+            }]
+          },
+          angleAxis: {
+            max: 100, // 满分
+            clockwise: true, // 逆时针
+            // 隐藏刻度线
+            axisLine: {
+              show: false
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              show: false
+            },
+            splitLine: {
+              show: false
+            }
+          },
+          radiusAxis: {
+            type: 'category',
+            // 隐藏刻度线
+            axisLine: {
+              show: false
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              show: false
+            },
+            splitLine: {
+              show: false
+            }
+          },
+          polar: {
+            center: ['50%', '50%'],
+            radius: '140%' // 图形大小
+          },
+          series: [{
+            type: 'bar',
+            data: [{
+              name: '在线满意率',
+              value: 70,
+              itemStyle: {
+                normal: {
+                  color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                    offset: 0,
+                    color: '#1B61FF'
+                  }, {
+                    offset: 1,
+                    color: '#BD61FE'
+                  }]
+                  )
+                }
+              }
+            }],
+            coordinateSystem: 'polar',
+            roundCap: true,
+            barWidth: 15,
+            barGap: '-100%', // 两环重叠
+            radius: ['49%', '52%'],
+            z: 2
+          }, { // 灰色环
+            type: 'bar',
+            data: [{
+              value: 100,
+              itemStyle: {
+                color: '#3B4068'
+              }
+            }],
+            coordinateSystem: 'polar',
+            roundCap: true,
+            barWidth: 15,
+            barGap: '-110%', // 两环重叠
+            radius: ['48%', '53%'],
+            z: 1
+          }]
+        },
+        // 客户服务分布图
+        charts_map: {},
+        // 今日会话分布
+        charts_area: {
+          color: ['#2E64FF', '#00DDFF', '#C63CFF', '#FF0087'],
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+              type: 'cross',
+              label: {
+                backgroundColor: '#6a7985'
+              }
+            }
+          },
+          legend: {
+            icon: 'roundRect',
+            data: ['会话总数', '已接入会话数', '未接入会话数', '排队数'],
+            left: 'right',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 12
+            },
+            itemWidth: 10,
+            itemHeight: 10
+          },
+          grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+          },
+          xAxis: [
+            {
+              type: 'category',
+              boundaryGap: false,
+              axisLine: {
+                lineStyle: {
+                  color: '#18C5FE'
+                }
+              },
+              axisLabel: {
+                color: '#0E8BFF'
+              },
+              axisTick: { show: false },
+              data: ['8:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '24:00']
+            }
+          ],
+          yAxis: [
+            {
+              type: 'value',
+              splitLine: {
+                show: false // 显示隐藏刻度线
+              },
+              axisLine: { show: false },
+              axisTick: { show: false },
+              axisLabel: { show: false }
+            }
+          ],
+          series: [{
+            name: '会话总数',
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#2E64FF'
+            },
+            showSymbol: false,
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                {
+                  offset: 0,
+                  color: 'rgba(46, 100, 255, 0.7)'
+                },
+                {
+                  offset: 1,
+                  color: 'rgba(46, 100, 255, 0.3)'
+                }
+              ])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [140, 232, 101, 264, 90, 340, 250, 100, 10]
+          }, {
+            name: '已接入会话数',
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#18C5FE'
+            },
+            showSymbol: false,
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                {
+                  offset: 0,
+                  color: 'rgba(24, 197, 254, 0.7)'
+                },
+                {
+                  offset: 1,
+                  color: 'rgba(24, 197, 254, 0.3)'
+                }
+              ])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [120, 282, 111, 234, 220, 340, 310, 202, 10]
+          }, {
+            name: '未接入会话数',
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#C63CFF'
+            },
+            showSymbol: false,
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                {
+                  offset: 0,
+                  color: 'rgb(198, 60, 255, 0.7)'
+                },
+                {
+                  offset: 1,
+                  color: 'rgb(198, 60, 255, 0.3)'
+                }
+              ])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [320, 132, 201, 334, 190, 130, 220, 30, 260]
+          }, {
+            name: '排队数',
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#EB3374'
+            },
+            showSymbol: false,
+            label: {
+              show: true,
+              position: 'top'
+            },
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                {
+                  offset: 0,
+                  color: 'rgba(210, 51, 116, 0.7)'
+                },
+                {
+                  offset: 1,
+                  color: 'rgba(210, 51, 116, 0.3)'
+                }
+              ])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [220, 302, 181, 234, 210, 290, 150, 101, 50]
+          }]
+        },
+        // 接通率
+        charts_connectRate: {
+          color: ['#FF2994', '#582472'],
+          // 圆点中间文字
+          title: {
+            textAlign: 'center',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 16
+            },
+            x: 'middle',
+            y: 'center'
+          },
+          tooltip: {
+            show: false
+          },
+          legend: {
+            show: false,
+            textStyle: {
+              color: '#8AC9FF',
+              fontSize: 12
+            },
+            orient: 'vertical',
+            right: 50, // 图例栏偏移
+            top: 20,
+            formatter: function (name) {
+              return name
+            }
+          },
+          series: [{
+            name: '接通率',
+            type: 'pie',
+            hoverAnimation: false,
+            radius: ['75%', '100%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'inner',
+              formatter: '{b}：\n{c}'
+            },
+            labelLine: {
+              normal: {
+                show: true,
+                length: 30,
+                length2: 55
+              },
+              emphasis: {
+                show: true
+              }
+            },
+            data: [
+              { name: '接通率', value: 38 },
+              { name: '不接通率', value: 62 }
+            ]
+          }]
+        },
+        // 接通率
+        charts_partRate: {
+          color: ['#3B6DF1', '#1B3486'],
+          // 圆点中间文字
+          title: {
+            textAlign: 'center',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 16
+            },
+            x: 'middle',
+            y: 'center'
+          },
+          tooltip: {
+            show: false
+          },
+          legend: {
+            show: false,
+            textStyle: {
+              color: '#8AC9FF',
+              fontSize: 12
+            },
+            orient: 'vertical',
+            right: 50, // 图例栏偏移
+            top: 20,
+            formatter: function (name) {
+              return name
+            }
+          },
+          series: [{
+            name: '参评率',
+            type: 'pie',
+            hoverAnimation: false,
+            radius: ['75%', '100%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'inner',
+              formatter: '{b}：\n{c}'
+            },
+            labelLine: {
+              normal: {
+                show: true,
+                length: 30,
+                length2: 55
+              },
+              emphasis: {
+                show: true
+              }
+            },
+            data: [
+              { name: '参评率', value: 65 },
+              { name: '不参评率', value: 35 }
+            ]
+          }]
+        }
+      },
+      fn: null,
+      pieHollow: null,
+      chartArea: null,
+      chartsMap: null,
+      chartsConnectRate: null,
+      chartsPartRate: null,
+      openExplain: false,
+      inSession: [],
+      inLineUp: [],
+      sessionAverage: [{
+        name: '时',
+        alias: 'hours',
+        value: []
+      }, {
+        name: '分',
+        alias: 'minutes',
+        value: []
+      }, {
+        name: '秒',
+        alias: 'seconds',
+        value: []
+      }],
+      columnsEfficiency: [{
+        title: '排名',
+        dataIndex: 'pm',
+        scopedSlots: { customRender: 'pm' },
+        align: 'center'
+      }, {
+        title: '客服',
+        dataIndex: 'service',
+        align: 'center'
+      }, {
+        title: '会话量',
+        dataIndex: 'hhl',
+        align: 'center'
+      }, {
+        title: '客服消息数',
+        dataIndex: 'kfxxs',
+        align: 'center'
+      }, {
+        title: '会话总时长',
+        dataIndex: 'hhzsc',
+        align: 'center'
+      }],
+      tableDataEfficiency: [],
+      satisfactRate: null,
+      firstSecond: [{
+        name: '分',
+        alias: 'minutes',
+        value: []
+      }, {
+        name: '秒',
+        alias: 'seconds',
+        value: []
+      }],
+      lineUp: [{
+        name: '分',
+        alias: 'minutes',
+        value: []
+      }, {
+        name: '秒',
+        alias: 'seconds',
+        value: []
+      }],
+      columnService: [{
+        title: '排名',
+        dataIndex: 'pm',
+        scopedSlots: { customRender: 'pm' },
+        align: 'center'
+      }, {
+        title: '客服',
+        dataIndex: 'service',
+        align: 'center'
+      }, {
+        title: '满意率',
+        dataIndex: 'myl',
+        align: 'center'
+      }, {
+        title: '总会话量',
+        dataIndex: 'zhhl',
+        align: 'center'
+      }, {
+        title: '总评价量',
+        dataIndex: 'zpjl',
+        align: 'center'
+      }, {
+        title: '评价率',
+        dataIndex: 'pjl',
+        align: 'center'
+      }],
+      tableDataService: [],
+      dialogNumList: [],
+      dataList: [],
+      windowHeight: document.documentElement.clientHeight
+    }
+  },
+  activated () {
+    this.changeTime()
+  },
+  // 销毁循环
+  deactivated () {
+    clearInterval(this.timeid)
+    window.removeEventListener('resize', this.fn)
+  },
+  mounted () {
+    this.loaddata()
+    this.changeTime()
+    this.fn = this.resizeHandler()
+    this.$nextTick(() => {
+      this.fn()
+      window.addEventListener('resize', this.fn)
+    })
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+  },
+  methods: {
+    changeTime () {
+      this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      this.timeid = setInterval(() => {
+        this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      }, 1000)
+    },
+    // 请求接口数据
+    loaddata () {
+      this.axios({
+        url: '/monitor/todayData/mockInit',
+        params: { httpget: '', moni: JSON.stringify([1, 1]) },
+        timeout: 5 * 60 * 1000
+      }).then(res => {
+        const result = res.result.data
+        this.tableDataEfficiency = result.tableDataEfficiency
+        this.tableDataService = result.tableDataService
+        const arr = ['inSession', 'inLineUp', 'dialogNumList']
+        arr.forEach(item => {
+          this[item] = result[item].split('')
+        })
+        const arrAlias = ['sessionAverage', 'firstSecond', 'lineUp']
+        arrAlias.forEach(item => {
+          this[item].forEach(itemAlias => {
+            itemAlias.value = result[item][itemAlias.alias].split('')
+          })
+        })
+        this.chartsOptions.charts_map = {
+          visualMap: {
+            show: true,
+            showLabel: true,
+            seriesIndex: [0],
+            textStyle: {
+              color: '#ffffff'
+            },
+            pieces: [
+              {
+                gte: 1000,
+                label: '>= 1000',
+                color: '#151D61'
+              },
+              {
+                gte: 500,
+                lt: 999,
+                label: '500 - 999',
+                color: '#1E2A7F'
+              },
+              {
+                gte: 100,
+                lt: 499,
+                label: '100 - 499',
+                color: '#28389A'
+              },
+              {
+                gte: 10,
+                lt: 99,
+                label: '10 - 99',
+                color: '#2E43B1'
+              },
+              {
+                lt: 10,
+                label: '<10',
+                color: '#3955D3'
+              }
+            ]
+          },
+          geo: {
+            map: 'china',
+            zoom: 1.2,
+            label: {
+              emphasis: {
+                show: false
+              }
+            },
+            itemStyle: {
+              normal: {
+                borderColor: 'rgba(0, 0, 0, 0.2)'
+              },
+              emphasis: {
+                color: '#fff',
+                areaColor: '#002689',
+                shadowOffsetX: 0,
+                shadowOffsetY: 0,
+                borderWidth: 0
+              }
+            }
+          },
+          series: [
+            {
+              name: '突发事件',
+              type: 'map',
+              geoIndex: 0,
+              data: result.dataList
+            },
+            {
+              type: 'effectScatter',
+              coordinateSystem: 'geo',
+              zlevel: 2,
+              rippleEffect: {
+                brushType: 'stroke'
+              },
+              symbol: 'circle',
+              symbolSize: 12,
+              itemStyle: {
+                normal: {
+                  color: '#FF2994' // 标志颜色
+                }
+              },
+              data: [{
+                name: '北京',
+                value: [116.24, 39.55]
+              }, {
+                name: '贵州',
+                value: [106.42, 26.35]
+              }, {
+                name: '山西',
+                value: [112.33, 37.54]
+              }, {
+                name: '江西',
+                value: [115.55, 28.4]
+              }, {
+                name: '广西',
+                value: [108.19, 22.48]
+              }, {
+                name: '广东',
+                value: [113.14, 23.08]
+              }, {
+                name: '广东',
+                value: [113.4, 34.46]
+              }, {
+                name: '广东',
+                value: [113.4, 34.46]
+              }]
+            }
+          ]
+        }
+        echarts.registerMap('china', china)
+        this.pieHollow = echarts.init(this.$refs.charts_pieHollow)
+        const connectRate = this.chartsOptions.charts_connectRate
+        const partRate = this.chartsOptions.charts_partRate
+        connectRate.title.text = `${connectRate.series[0].data[0].value}%`
+        partRate.title.text = `${partRate.series[0].data[0].value}%`
+        this.drowerpic()
+      })
+    },
+    // 渲染图表
+    drowerpic () {
+      this.pieHollow.setOption(this.chartsOptions.charts_pieHollow, true)
+      this.satisfactRate = echarts.init(this.$refs.charts_satisfactRate)
+      this.satisfactRate.setOption(this.chartsOptions.charts_satisfactRate, true)
+      this.chartArea = echarts.init(this.$refs.charts_area)
+      this.chartArea.setOption(this.chartsOptions.charts_area, true)
+      // 客服服务分布图
+      this.chartsMap = echarts.init(this.$refs.charts_map)
+      this.chartsMap.setOption(this.chartsOptions.charts_map, true)
+      // 接通率
+      this.chartsConnectRate = echarts.init(this.$refs.charts_connectRate)
+      this.chartsConnectRate.setOption(this.chartsOptions.charts_connectRate, true)
+      // 参评率
+      this.chartsPartRate = echarts.init(this.$refs.charts_partRate)
+      this.chartsPartRate.setOption(this.chartsOptions.charts_partRate, true)
+    },
+    // 处理页面大小改变
+    resizeHandler () {
+      let timer
+      return () => {
+        if (timer) window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          if (this.chartArea) { this.chartArea.resize() }
+          if (this.pieHollow) { this.pieHollow.resize() }
+          if (this.satisfactRate) { this.satisfactRate.resize() }
+          if (this.chartsMap) { this.chartsMap.resize() }
+          if (this.chartsConnectRate) { this.chartsConnectRate.resize() }
+          if (this.chartsPartRate) { this.chartsPartRate.resize() }
+        }, 500)
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+// 头部
+.toHead {
+  margin-bottom: 0.04rem;
+}
+.glo-row {
+  flex-direction: row;
+}
+
+.toFirBoxBody {
+  padding: 0.06rem 3% 0.25rem 3%;
+  display: flex;
+  flex-direction: column;
+}
+.toTableBox::-webkit-scrollbar {
+  display: none;
+}
+.toTableBox {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+// 左部
+.toPieHollow {
+  width: 100%;
+  height: 1.1rem;
+  margin: 0.15rem 0 0.06rem 0;
+}
+.toLeftMar {
+  margin-right: 3%;
+}
+.toLeftText {
+  margin: 0.13rem 0.02rem 0 0;
+}
+.toLeftAverage {
+  margin: 0.2rem 0 0.15rem 0;
+}
+.toLeftEfficiency {
+  margin-bottom: 0.12rem;
+}
+// 中间部分
+.toCenBox {
+  padding: 0 0.08rem;
+}
+.toCenConver {
+  margin-bottom: 0.01rem;
+}
+.dialogNumListClass {
+  padding: 0.05rem 0 0.1rem 0;
+}
+.toCenRateBox {
+  margin: 0 16% 0 3%;
+}
+.toCenRate {
+  height: 0.45rem;
+  line-height: 0.45rem;
+}
+.toCenConnect {
+  margin-right: 0.05rem;
+}
+.toCenChart {
+  width: 0.45rem;
+  height: 0.45rem;
+}
+.toCenPart {
+  margin: 0 0.05rem 0 0.1rem;
+}
+.toCenText {
+  padding: 0.14rem 0 0.05rem 0;
+}
+.toCenArea {
+  padding: 0.05rem 0.012rem;
+}
+// 右部
+.toRightCoo {
+  width: 100%;
+  height: 1.1rem;
+  margin: 0.12rem 0 0.06rem 0;
+}
+.toRightFirstSound {
+  margin: 0.1rem 0.01rem 0 0;
+}
+.toRightLineup {
+  margin: 0.09rem 0 0.03rem 0;
+}
+
+.flex-1 {
+  flex: 1;
+}
+</style>

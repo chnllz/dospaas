@@ -1,0 +1,306 @@
+<template>
+  <a-spin :spinning="false">
+    <a-tabs type="card" size="small">
+      <a-tab-pane key="role" :tab="$t('角色权限设置')">
+        <a-alert :message="$t('此处权限用于控制队列坐席，个人权限覆盖角色权限')" show-icon style="margin-bottom: 8px" />
+        <s-table ref="roleTable" size="small" rowKey="id" :columns="roleColumns" :data="loadDataRole">
+          <template slot="action" slot-scope="text, record1">
+            <a @click="handleEdit(record1, 'role')">
+              <a-badge v-if="record1.roleStatus == 1" status="success" />
+              <a-badge v-else status="default" />
+              {{ $t('设置') }}
+            </a>
+          </template>
+        </s-table>
+      </a-tab-pane>
+      <a-tab-pane key="user" :tab="$t('个人权限设置')">
+        <a-form layout="inline" class="table-search" style="display: flex; align-items: center">
+          <a-form-item :label="$t('用户名')">
+            <a-input v-model="queryParam.username" placeholder="请输入用户名" />
+          </a-form-item>
+          <a-form-item :label="$t('真实姓名')">
+            <a-input v-model="queryParam.realname" placeholder="请输入真实姓名" />
+          </a-form-item>
+          <a-form-item :label="$t('分机号码')">
+            <a-input v-model="queryParam.extension" placeholder="请输入分机号" />
+          </a-form-item>
+          <a-space>
+            <a-button htmlType="submit" type="primary" @click="$refs.userTable.refresh(true)">
+              {{ $t('搜索') }}
+            </a-button>
+            <a-button
+              @click="
+                () => {
+                  queryParam = {}
+                  $refs.userTable.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+          </a-space>
+        </a-form>
+        <s-table ref="userTable" size="small" rowKey="id" :columns="userColumns" :data="loadDataUser">
+          <template slot="action" slot-scope="text, record1">
+            <a @click="handleEdit(record1, 'user')">
+              <a-badge v-if="record1.roleStatus" status="success" />
+              <a-badge v-else status="default" />
+              {{ $t('设置') }}
+            </a>
+          </template>
+        </s-table>
+      </a-tab-pane>
+    </a-tabs>
+    <a-drawer :title="title" :visible="visible" :destroyOnClose="true" :width="600" @close="visible = !visible">
+      <a-spin :spinning="false">
+        <a-form>
+          <a-tree
+            v-model="checkedKeys"
+            :defaultExpandedKeys="['all-0']"
+            checkable
+            :auto-expand-parent="autoExpandParent"
+            :tree-data="treeData"
+            @check="onCheck"
+          />
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+          <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </a-spin>
+</template>
+<script>
+export default {
+  i18n: window.lang('callcenter'),
+  data () {
+    return {
+      queryParam: {},
+      visible: false,
+      title: '',
+      roleColumns: [
+        {
+          title: this.$t('操作'),
+          dataIndex: 'action',
+          align: 'center',
+          scopedSlots: { customRender: 'action' },
+          width: 100
+        }, {
+          title: 'ID',
+          dataIndex: 'id',
+          width: 80
+        }, {
+          title: this.$t('角色名称'),
+          dataIndex: 'roleName',
+          width: 200
+        }, {
+          title: this.$t('备注'),
+          dataIndex: 'description'
+        }],
+      userColumns: [
+        {
+          title: this.$t('操作'),
+          dataIndex: 'action',
+          align: 'center',
+          scopedSlots: { customRender: 'action' },
+          width: 100
+        }, {
+          title: 'ID',
+          dataIndex: 'id',
+          width: 80
+        }, {
+          title: this.$t('用户名'),
+          dataIndex: 'username'
+        }, {
+          title: this.$t('真实姓名'),
+          dataIndex: 'realname'
+        }, {
+          title: this.$t('分机号码'),
+          dataIndex: 'extension'
+        }, {
+          title: this.$t('所属部门'),
+          dataIndex: 'depname'
+        }, {
+          title: this.$t('所属角色'),
+          dataIndex: 'rolename'
+        }],
+      autoExpandParent: true,
+      checkedKeys: [],
+      treeData: [],
+      page: '',
+      record: {},
+      priv: []
+    }
+  },
+  methods: {
+    loadDataRole (parameter) {
+      return this.axios({
+        url: '/callcenter/queuestat/rolePrivilege',
+        data: Object.assign(parameter)
+      }).then(res => {
+        return res.result
+      })
+    },
+    loadDataUser (parameter) {
+      return this.axios({
+        url: '/callcenter/queuestat/personalPrivilege',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 打开编辑权限
+    handleEdit (record, page) {
+      this.visible = true
+      this.title = this.$t('设置') + '：' + (page === 'user' ? record.username : record.roleName)
+      const treeData = [{
+        checked: false,
+        id: '0',
+        key: 'all-0',
+        title: '全部',
+        type: 'all'
+      }]
+      treeData[0].children = record.roleText
+      this.checkedKeys = this.getKey(record.roleText)
+      this.treeData = treeData
+      this.record = record
+      this.onCheck(this.checkedKeys)
+      this.page = page
+    },
+    getKey (arr) {
+      const result = []
+      arr.forEach(item => {
+        if (item.children) {
+          const flag = item.children.every(child => child.checked)
+          if (flag) {
+            result.push(item.key)
+          } else {
+            item.children.forEach(child => {
+              if (child.checked) {
+                result.push(child.key)
+              }
+            })
+          }
+        } else {
+          if (item.checked) {
+            result.push(item.key)
+          }
+        }
+      })
+      return result
+    },
+    // 清除设置权限
+    handleDelete (record, action) {
+      if (action === 'role') {
+        this.axios({
+          url: '/queuestat/setting/roleDel',
+          data: { type: 'role', roleId: record.id }
+        }).then(res => {
+          if (res.code === 0) {
+            this.$refs.roleTable.refresh()
+            this.$message.success(res.message)
+          }
+        })
+      } else {
+        this.axios({
+          url: '/queuestat/setting/roleDel',
+          data: { type: 'personal', user_id: record.id }
+        }).then(res => {
+          if (res.code === 0) {
+            this.$refs.userTable.refresh()
+            this.$message.success(res.message)
+          }
+        })
+      }
+    },
+    onCheck (keys, e) {
+      if (e) {
+        // 初始化赋值
+        this.treeData[0].children.forEach(node => {
+          node.checked = false
+          if (node.children) {
+            node.children.forEach(child => {
+              child.checked = false
+            })
+          }
+        })
+        // 选中赋值
+        keys.forEach(item => {
+          this.treeData[0].children.forEach(node => {
+            if (node.key === item) {
+              node.checked = true
+            } else if (node.children) {
+              node.children.forEach(child => {
+                if (child.key === item) {
+                  child.checked = true
+                }
+              })
+            }
+          })
+        })
+      }
+      // 给后台传递数据
+      const result = {}
+      this.treeData[0].children.forEach(node => {
+        if (node.checked) {
+          const arr = []
+          if (node.children) {
+            node.children.forEach(child => {
+              arr.push(child.id)
+            })
+          }
+          result[node.id] = arr
+        } else {
+          const flag = node.children ? node.children.some(child => child.checked) : false
+          if (flag) {
+            const arr = []
+            if (node.children) {
+              node.children.forEach(child => {
+                if (child.checked) {
+                  arr.push(child.id)
+                }
+              })
+            }
+            result[node.id] = arr
+          }
+        }
+      })
+      this.priv = result
+    },
+    handleSubmit () {
+      if (this.page === 'role') {
+        this.axios({
+          url: '/callcenter/queuestat/roleEdit',
+          data: {
+            type: 'role', info: { roleText: this.priv, roleId: this.record.roleId }
+          }
+        }).then(res => {
+          this.$refs.roleTable.refresh()
+          this.visible = false
+          if (res.code === 0) {
+            this.$message.success(res.message)
+          } else {
+            this.$message.error(res.message)
+          }
+        })
+      } else {
+        this.axios({
+          url: '/callcenter/queuestat/roleEdit',
+          data: {
+            type: 'personal', info: { roleText: this.priv, userId: this.record.id }
+          }
+        }).then(res => {
+          this.$refs.userTable.refresh()
+          this.visible = false
+          if (res.code === 0) {
+            this.$message.success(res.message)
+          } else {
+            this.$message.error(res.message)
+          }
+        })
+      }
+    }
+  }
+}
+</script>

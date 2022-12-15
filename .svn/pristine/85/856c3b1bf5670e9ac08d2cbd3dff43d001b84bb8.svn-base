@@ -1,0 +1,319 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item
+          v-if="params.type !== 'web_sub_form_view'"
+          :labelCol="labelCol"
+          :wrapperCol="wrapperCol"
+          :required="true"
+        >
+          <span slot="label">
+            {{ $t('关联模式') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>
+                  {{ $t('一对多：如《报销单》与《报销明细》，1条报销单记录关联多条报销单明细记录。') }}
+                  <br />
+                  {{
+                    $t(
+                      '多对多：如《产品信息表》、《配件信息表》与《产品与配件关联表》，1条产品信息关联多条配件信息，1条配件信息也可以关联多条产品信息。'
+                    )
+                  }}
+                </span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-radio-group v-decorator="['pattern', { initialValue: data.pattern || '1' }]" @change="patternChange">
+            <a-radio value="1">{{ $t('一对多关联') }}</a-radio>
+            <a-radio value="2">{{ $t('多对多关联') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('本表关联字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'thisField',
+              { rules: [{ required: true, message: $t('请选择本表关联字段') }], initialValue: data.thisField }
+            ]"
+            :placeholder="$t('请选择本表关联字段')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in params.fieldColumns" :key="key" :value="value.alias">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="data.pattern === '2'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('中间数据表') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>{{ $t('多对多关系时的中间表，如《产品与配件关联表》') }}</span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'middleTable',
+              { rules: [{ required: true, message: $t('请选择中间数据表') }], initialValue: data.middleTable }
+            ]"
+            :placeholder="$t('请选择中间数据表')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+            @change="(value) => middleChange(value)"
+          >
+            <a-select-option v-for="(value, key) in params.tableList" :key="key" :value="value.tableId">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="data.pattern === '2'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('中间表与本表的关联字段') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>{{ $t('从中间数据表中选择，与本表的关联字段，如《产品与配件关联表》中的{关联产品编号}') }}</span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'middleThisField',
+              {
+                rules: [{ required: true, message: $t('请选择中间表与本表关联字段') }],
+                initialValue: data.middleThisField
+              }
+            ]"
+            :placeholder="$t('请选择中间表与本表关联字段')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in thmdField" :key="key" :value="value.alias">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('关联数据表') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>{{ $t('多对多模式下，选择关联表，如《配件信息表》') }}</span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-cascader
+            v-decorator="[
+              'subTable',
+              { initialValue: data.subTable, rules: [{ required: true, message: $t('请选择子表数据表') }] }
+            ]"
+            :placeholder="$t('请选择关联数据表')"
+            :showSearch="true"
+            :options="tableList"
+            @change="(value) => handleChange(value)"
+          />
+          <!-- <a-select
+            v-decorator="[
+              'subTable',
+              { rules: [{ required: true, message: $t('请选择子表数据表') }], initialValue: data.subTable }
+            ]"
+            :placeholder="$t('请选择子表数据表')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+            @change="(value) => handleChange(value)"
+          >
+            <a-select-option v-for="(value, key) in params.tableList" :key="key" :value="value.tableId">
+              {{ value.name }}
+            </a-select-option>
+          </a-select> -->
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('关联表字段') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>{{ $t('从子表中选择，与中间表的关联字段，如{配件编号}') }}</span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'subField',
+              { rules: [{ required: true, message: $t('请选择子表关联字段') }], initialValue: data.subField }
+            ]"
+            :placeholder="$t('请选择关联表字段')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in field" :key="key" :value="value.alias">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="data.pattern === '2'" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('中间表与关联表的关联字段') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>{{ $t('从中间数据表中选择，与子表的关联字段，如{关联配件编号}') }}</span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'middleSubField',
+              {
+                rules: [{ required: true, message: $t('请选择中间表与子表关联字段') }],
+                initialValue: data.middleSubField
+              }
+            ]"
+            :placeholder="$t('请选择中间表与关联表关联字段')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in thmdField" :key="key" :value="value.alias">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('关联表数据窗口') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>{{ $t('选择1个关联表数据窗口') }}</span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'templateId',
+              { rules: [{ required: true, message: $t('请选择子表数据窗口') }], initialValue: data.templateId }
+            ]"
+            :placeholder="$t('请选择关联表数据窗口')"
+            :allowClear="true"
+            show-search
+            option-filter-prop="children"
+          >
+            <a-select-option v-for="(value, key) in tpl" :key="key" :value="value.templateId">
+              {{ value.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 8 },
+      wrapperCol: { span: 16 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      data: {},
+      field: [],
+      thmdField: [],
+      tpl: [],
+      tableList: []
+    }
+  },
+  methods: {
+    async show (config, data) {
+      this.loading = true
+      this.visible = true
+      this.axios({
+        url: 'admin/table/getModuleTableOptions'
+      }).then(res => {
+        this.config = config
+        this.loading = false
+        this.data = config.record
+        if (this.data.middleTable) {
+          this.middleChange(this.data.middleTable)
+        }
+        if (this.data.subTable) {
+          this.handleChange(this.data.subTable)
+        }
+        this.recordIndex = config.index
+        this.form.resetFields()
+        this.tableList = res.result
+      })
+    },
+    handleChange (value) {
+      const tableId = value[value.length - 1]
+      return this.axios({
+        url: '/admin/table/getFieldsAndTemplates',
+        data: Object.assign({ tableId: tableId, type: ['webDataWindow', 'webSubformDataWindow', 'appDataWindow', 'webProcessCenterDataWindow', 'appProcessCenterDataWindow'] })
+      }).then(res => {
+        this.field = res.result.fields
+        this.tpl = res.result.templates
+      })
+    },
+    patternChange (e) {
+      this.data.pattern = e.target.value
+      this.form.resetFields()
+      this.tpl = []
+      this.field = []
+    },
+    middleChange (value) {
+      return this.axios({
+        url: '/admin/table/getFieldsAndTemplates',
+        data: Object.assign({ tableId: value, type: ['webDataWindow', 'webSubformDataWindow', 'appDataWindow'] })
+      }).then(res => {
+        this.thmdField = res.result.fields
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.visible = false
+          values.enable = this.params.relationSetting.enable
+          if (this.params.relationSetting.priv) {
+            values.priv = this.params.relationSetting.priv
+          }
+          if (values.subTable.length > 0) {
+            values.subTableId = values.subTable[1]
+          }
+          if (values.middleTable) {
+            values.middleTableId = values.middleTable
+          }
+          this.$message.success(this.$t('操作成功'))
+          this.$emit('func', values)
+        }
+      })
+    }
+  }
+}
+</script>

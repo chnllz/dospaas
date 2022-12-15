@@ -1,0 +1,171 @@
+<template>
+  <div>
+    <a-drawer :destroyOnClose="true" :title="$t('分配')" :width="1200" :visible="visible" @close="visible = false">
+      <a-spin :spinning="loading">
+        <a-form layout="inline">
+          <a-form-item :label="$t('账号')">
+            <a-input v-model="queryParam.searchString.xtyh" :placeholder="$t('请输入账号')" />
+          </a-form-item>
+          <a-form-item>
+            <a-space>
+              <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParam = {
+                      searchString: {
+                        xtyh: '',
+                        zxdl: {},
+                        tsdl: {},
+                        pjgmdl: {}
+                      },
+                      associated: [],
+                      customColumn: [],
+                      templateId: '7e0427b3f8c4b82346330a18c288ce82'
+                    }
+                    $refs.table.refresh(true)
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+          </a-form-item>
+          <s-table
+            ref="table"
+            style="margin-top: 8px"
+            size="small"
+            rowKey="id"
+            :columns="columns"
+            :data="loadDataTable"
+            :rowSelection="rowSelection"
+            :sorter="{ field: 'id', order: 'descend' }"
+          ></s-table>
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" :disabled="disabled" @click="handleSubmit">{{ $t('分配') }}</a-button>
+          <!--:disabled="disabled" -->
+          <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('crm'),
+  props: {
+    selectKeys: {
+      type: Array,
+      default: () => '',
+      required: true
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      disabled: true,
+      loading: false,
+      // 搜索参数
+      queryParam: {
+        searchString: {
+          xtyh: '',
+          zxdl: {},
+          tsdl: {},
+          pjgmdl: {}
+        },
+        associated: [],
+        customColumn: [],
+        templateId: ''
+      },
+      // 表头
+      columns: [{
+        title: 'ID',
+        dataIndex: 'id',
+        width: 80,
+        sorter: true
+      }, {
+        title: this.$t('系统用户'),
+        dataIndex: 'xtyh'
+      }, {
+        title: this.$t('真实姓名'),
+        dataIndex: 'zsxm'
+      }, {
+        title: this.$t('咨询单量'),
+        dataIndex: 'zxdl',
+        width: 120
+      }, {
+        title: this.$t('当前咨询单量'),
+        dataIndex: 'dqzxdl',
+        width: 120
+      }, {
+        title: this.$t('投诉单量'),
+        dataIndex: 'tsdl',
+        width: 120
+      }, {
+        title: this.$t('投诉单量'),
+        dataIndex: 'dqtsdl',
+        width: 120
+      }, {
+        title: this.$t('配件购买单量'),
+        dataIndex: 'pjgmdl',
+        width: 120
+      }, {
+        title: this.$t('当前配件购买单量'),
+        dataIndex: 'dqpmdl',
+        width: 120
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+          if (this.selectedRowKeys.length > 0) {
+            this.disabled = false
+          } else {
+            this.disabled = true
+          }
+        }
+      }
+    }
+  },
+  methods: {
+    // 编辑器代码里接收的show方法
+    show (parameter) {
+      this.workflowId = parameter.workflowId
+      // 如果没配置tplviewid 默认取后面的中台客服视图id 反之，取维权客服视图id
+      this.queryParam.templateId = parameter.templateId || '7e0427b3f8c4b82346330a18c288ce82'
+      if (this.selectKeys.length !== 0) {
+        this.visible = true
+      } else {
+        this.$message.warning(this.$t('请先选择要分配的工单'))
+      }
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/crm/followAgent/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleSubmit () {
+      const agentId = this.selectedRowKeys
+      const orderId = this.selectKeys
+      this.axios({
+        url: '/crm/followAgent/allocationAgent',
+        data: { 'agentId': agentId, 'orderId': orderId, 'workflowId': this.workflowId }
+      }).then(res => {
+        if (res.code === 0) {
+          this.queryParam.searchString.xtyh = ''
+          this.$message.success(res.message)
+          this.visible = false
+          this.$emit('ok')
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+      // this.selectKeys 父页面选中的id
+    }
+  }
+}
+</script>

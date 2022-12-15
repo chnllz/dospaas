@@ -1,0 +1,235 @@
+<template>
+  <code-mirror
+    ref="mycode"
+    class="mycode"
+    :style="codeStyle"
+    :value="codeValue"
+    :options="cmOptions"
+    @ready="setValue"
+    @blur="onChange"
+    @mousedown.native="cmOptions.readOnly = false"
+  ></code-mirror>
+</template>
+<script>
+import { codemirror as CodeMirror } from 'vue-codemirror'
+import 'codemirror/theme/ambiance.css'
+import 'codemirror/theme/monokai.css'
+import 'codemirror/lib/codemirror.css'
+import 'codemirror/addon/hint/show-hint.css'
+require('@/views/admin/Formula/mymodel/mymodel.js')
+require('codemirror/mode/javascript/javascript')
+require('codemirror/lib/codemirror')
+require('codemirror/addon/hint/show-hint')
+require('codemirror/mode/xml/xml')
+require('codemirror/mode/sql/sql')
+require('codemirror/mode/htmlmixed/htmlmixed')
+require('codemirror/addon/edit/matchbrackets')
+require('codemirror/mode/python/python')
+require('codemirror/addon/fold/foldcode')
+require('codemirror/addon/fold/foldgutter')
+require('codemirror/addon/fold/brace-fold')
+require('codemirror/addon/fold/xml-fold')
+require('codemirror/addon/fold/indent-fold')
+require('codemirror/addon/fold/markdown-fold')
+require('codemirror/addon/fold/comment-fold')
+require('codemirror/mode/groovy/groovy')
+export default {
+  components: {
+    CodeMirror
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    lineStyle: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      codeStyle: {
+        height: '100%',
+        fontSize: '13px',
+        fontWeight: '600',
+        color: 'rgb(95, 97, 97)',
+        lineHeight: this.lineStyle && this.lineStyle.lineHeight ? this.lineStyle.lineHeight : '14px',
+        background: '#FFFFFF',
+        border: '1px solid #D9D9D9'
+      },
+      // 高亮代码
+      codeValue: '',
+      cmOptions: {
+        value: '',
+        styleActiveLine: true,
+        lineNumbers: false,
+        lineWrapping: 'wrap',
+        foldGutter: true,
+        mode: 'text/x-mymodel',
+        // theme: 'monokai',
+        ukeys: '$if $ifs $boolean $isempty $and $or $sum $average $max $min $round $int $mod $product $num $rmbupper $roundup $rounddown $abs $concat $mid $left $right $len $upper $lower $replace $startwith $contains $trim $urlencode $urldecode $year $month $day $hour $minute $second $today $now $years $days $hours $minutes $addday $addmonth $addyear $quarter $weekday $weeknum $curUserInfo $getUserInfo $delete $insert $update $updateMe $upsert $rdid $getData $getTableData $username $deptname $curUser $rolename $getuser $sendSms $deptUser $roleUser $innerUser $joinUser $creator $transitionUser $caseInfo $execIf $getConfig $callMethod $getRequest $compute',
+        hintOptions: {
+          // 当匹配只有一项的时候是否自动补全
+          completeSingle: true
+        },
+        // keyMap: 'sublime',
+        matchBrackets: true, // 括号匹配
+        readOnly: false
+      }
+    }
+  },
+  watch: {
+    params (val) {
+      this.setValue()
+    }
+  },
+  methods: {
+    onChange (e) {
+      this.cmOptions.readOnly = 'nocursor'
+      this.$emit('update:params', this.getValue())
+    },
+    // 添加文本
+    addText (value, name, cls) {
+      const editor = this.$refs.mycode.codemirror
+      name = name || value
+      var msg = document.createElement('a-tag')
+      msg.className = cls || 'cm-else'
+      msg.innerHTML = name
+      msg.readOnly = true
+      const cur = editor.getDoc().getCursor()
+      var str = '<#' + name + '|' + value + '|' + msg.className + '#>'
+      var length = str.length
+      editor.replaceSelection(str)
+      const options = {
+        replacedWith: msg,
+        atomic: true,
+        selectLeft: true,
+        selectRight: true,
+        handleMouseEvents: true
+      }
+      editor.getDoc().markText({
+        line: cur.line,
+        ch: cur.ch
+      }, {
+        line: cur.line,
+        ch: cur.ch + length
+      }, options)
+      editor.setCursor({
+        line: cur.line,
+        ch: cur.ch + length
+      })
+      editor.focus()
+    },
+    // 添加函数
+    addFun (func) {
+      const editor = this.$refs.mycode.codemirror
+      editor.replaceSelection(func)
+      editor.focus()
+    },
+    // 解析
+    getValue () {
+      var editor = this.$refs.mycode.codemirror
+      var html = editor.getValue()
+      var value = html
+      const strList = html.split('#>')
+      strList.forEach(item => {
+        if (item) {
+          item += '#>'
+        }
+        var start = item.lastIndexOf('<#')
+        var end = item.indexOf('#>')
+        if (start > -1 && end > -1) {
+          const json = item.substring(start + 2, end)
+          const arr = json.split('|')
+          if (arr[0] && arr[1]) {
+            value = value.replace('<#' + json + '#>', arr[1])
+          }
+        }
+      })
+      return { 'html': html, 'value': value }
+    },
+    // 默认赋值
+    setValue () {
+      this.$refs.mycode.codemirror.setValue('')
+      const text = this.params.html
+      if (text) {
+        const strList = text.split('#>')
+        for (var i in strList) {
+          if (!strList[i]) continue
+          const arr = strList[i].split('<#')
+          if (arr[0]) {
+            this.addFun(arr[0])
+          }
+          if (arr[1]) {
+            var json = arr[1].split('|')
+            this.addText(json[1], json[0], json[2])
+          }
+        }
+      }
+    }
+  }
+}
+</script>
+<style scoped>
+.mycode >>> .CodeMirror {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Helvetica Neue', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  font-size: 13px;
+  font-weight: normal;
+}
+.mycode >>> .cm-field,
+.mycode >>> .cm-table,
+.mycode >>> .cm-dict,
+.mycode >>> .cm-handle,
+.mycode >>> .cm-transition,
+.mycode >>> .cm-else {
+  display: inline-block;
+  line-height: 18px;
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 6px;
+  margin: 4px;
+  letter-spacing: 1px;
+}
+
+/*字段：#5FB257*/
+.mycode >>> .cm-field {
+  background: #5fb257;
+}
+
+/*表：#D4584A*/
+.mycode >>> .cm-table {
+  background: #d4584a;
+}
+
+/*字典：#9C6A46*/
+.mycode >>> .cm-dict {
+  background: #377ff7;
+}
+
+/*办理方式：#58B8B3*/
+.mycode >>> .cm-handle {
+  background: #58b8b3;
+}
+
+/*流程变迁：#58B8B3*/
+.mycode >>> .cm-transition {
+  background: rgb(136, 166, 212);
+}
+
+/*组织+角色+其他：#8F30AA*/
+.mycode >>> .cm-else {
+  background: #8f30aa;
+}
+
+.mycode >>> .cm-function {
+  color: #aa04bf;
+}
+</style>

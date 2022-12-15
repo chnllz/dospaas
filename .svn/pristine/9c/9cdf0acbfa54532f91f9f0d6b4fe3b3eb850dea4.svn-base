@@ -1,0 +1,1250 @@
+<template>
+  <a-drawer :title="config.title" width="80%" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin
+      :spinning="$store.state.app.globalSpin.spinning || loading"
+      :tip="$store.state.app.globalSpin.tip || tip"
+      :size="$store.state.app.globalSpin.size"
+    >
+      <a-tabs
+        v-if="orderData.data"
+        type="editable-card"
+        style="height: 100%"
+        :activeKey="activeKey"
+        :hideAdd="true"
+        @change="tabsChange"
+        @edit="onEdit"
+      >
+        <a-tab-pane key="order" :tab="$t('工单详情')" :closable="false">
+          <a-row :gutter="8">
+            <a-col :span="18" style="display: flex; flex-flow: wrap row; height: calc(100vh - 169px); overflow-y: auto">
+              <div style="margin-bottom: 8px">
+                <user-table-form-view
+                  ref="userTableFormView"
+                  :params="{
+                    tableName,
+                    template,
+                    fieldRule,
+                    parentParams,
+                    remarksRule,
+                    handleFormRules,
+                    handleWayData,
+                    remarksMaxRows,
+                    remarksMinRows,
+                    templateOther: orderData.template || [],
+                    action: 'edit',
+                    page:
+                      orderData.data &&
+                      (['all_process'].includes(orderData.data.type) ||
+                        (['my_process'].includes(orderData.data.type) &&
+                          orderData.data.process_current_user &&
+                          orderData.data.process_current_user.includes(userInfo.username)))
+                        ? 'workflow'
+                        : 'over'
+                  }"
+                  :formThis="this"
+                  @ok="submitReturn"
+                />
+                <a-row>
+                  <a-col :span="24" style="text-align: right">
+                    <a-space>
+                      <a-button @click="jumpAce">{{ $t('一键ACE系统') }}</a-button>
+                      <a-button @click="handleEmail('create')">{{ $t('写邮件') }}</a-button>
+                      <a-button
+                        v-if="
+                          ['all_process'].includes(orderData.data.type) ||
+                          (['my_process'].includes(orderData.data.type) &&
+                            orderData.data.process_current_user &&
+                            orderData.data.process_current_user.includes(userInfo.username))
+                        "
+                        type="primary"
+                        @click="handleSubmit"
+                      >
+                        {{ $t('提交') }}
+                      </a-button>
+                    </a-space>
+                  </a-col>
+                </a-row>
+              </div>
+              <a-tabs
+                :animated="false"
+                :activeKey="chatsActiveKey"
+                style="width: 100%; height: calc(100vh - 470px); overflow-y: auto"
+                @change="chatsChange"
+              >
+                <a-tab-pane key="mail" tab="From Email">
+                  <div ref="chats">
+                    <template v-if="mailList.length > 0">
+                      <div v-for="(mailItem, mailIndex) in mailList" :key="mailIndex">
+                        <template v-if="mailItem.type === 1">
+                          <a-row type="flex" justify="end" style="padding-right: 32px">
+                            <a-col :span="4" style="text-align: right">{{ mailItem.sendTime }}</a-col>
+                            <a-col :span="8" style="text-align: right">Sent To {{ mailItem.senderToDisplay }}</a-col>
+                            <a-col :span="13" class="reItemStyle myReItemStyle">
+                              <div style="padding-bottom: 8px">{{ mailItem.title }}</div>
+                              <a-space>
+                                <a @click="handleEmail('reply', mailItem, 'replyAgain')">Reply</a>
+                                <a @click="handleEmail('forward', mailItem, 'replyAgain')">Forward</a>
+                                <a @click="handleEmail('view', mailItem)">View</a>
+                              </a-space>
+                              <div style="position: absolute; top: 55px; right: 8px; color: gray">
+                                {{ mailItem.isread === 1 ? $t('已读') : $t('未读') }}
+                              </div>
+                            </a-col>
+                          </a-row>
+                        </template>
+                        <template v-else>
+                          <a-row>
+                            <a-col :span="4">{{ mailItem.sendTime }}</a-col>
+                            <a-col :span="12">Sent From {{ mailItem.senderDisplay }}</a-col>
+                            <a-col :span="13" class="reItemStyle">
+                              <div style="padding-bottom: 8px">{{ mailItem.title }}</div>
+                              <a-space>
+                                <a @click="handleEmail('reply', mailItem)">Reply</a>
+                                <a @click="handleEmail('forward', mailItem)">Forward</a>
+                                <a @click="handleEmail('view', mailItem)">View</a>
+                              </a-space>
+                            </a-col>
+                          </a-row>
+                        </template>
+                      </div>
+                    </template>
+                    <a-empty v-else />
+                  </div>
+                </a-tab-pane>
+                <a-tab-pane key="log" tab="Overview">
+                  <a-timeline v-if="logList.length">
+                    <a-timeline-item v-for="(logItem, logIndex) in logList" :key="logIndex">
+                      <div>{{ logItem.inputTime }}</div>
+                      <div>{{ $t('办理人：') }}{{ logItem.inputUser }}</div>
+                      <div>{{ $t('办理方式：') }}{{ logItem.type }}</div>
+                      <div>{{ $t('办理备注：') }}{{ logItem.content || '--' }}</div>
+                    </a-timeline-item>
+                  </a-timeline>
+                  <a-empty v-else />
+                </a-tab-pane>
+                <a-tab-pane v-if="suspendLogFlag" key="suspendLog" tab="Suspend Log">
+                  <a-timeline v-if="suspendLogList.length">
+                    <a-timeline-item v-for="(logItem, logIndex) in suspendLogList" :key="logIndex">
+                      <div>{{ logItem.suspendDate }}</div>
+                      <div>{{ $t('请求单ID：') }}{{ logItem.relateRequestId || '--' }}</div>
+                      <div>{{ $t('处理人：') }}{{ logItem.suspendUser }}</div>
+                      <div>{{ $t('暂停类型：') }}{{ logItem.suspendTypeName }}</div>
+                      <div>{{ $t('暂停原因：') }}{{ logItem.suspendReason || '--' }}</div>
+                      <div>{{ $t('暂停备注：') }}{{ logItem.suspendRemark || '--' }}</div>
+                      <div>{{ $t('是否发邮件：') }}{{ logItem.sendEmailName || '--' }}</div>
+                    </a-timeline-item>
+                  </a-timeline>
+                  <a-empty v-else />
+                </a-tab-pane>
+                <!-- <a-tab-pane tab="From Chat" key="msg">
+                <div ref="msgChats">
+                  <div v-for="(mailItem, mailIndex) in msgList" :key="mailIndex">
+                    <template v-if="userInfo.username === mailItem.from">
+                      <a-row type="flex" justify="end">
+                        <a-col :span="12">
+                          <a-row type="flex" justify="end" style="margin-right: 12px;" >
+                            <a-col :span="24" style="text-align: right">
+                              <span style="padding-right: 24px">Sunny</span>
+                              {{ mailItem.time }}</a-col>
+                            <a-col :span="24" class="reItemStyle myReItemStyle">{{ mailItem.re }}</a-col>
+                          </a-row>
+                        </a-col>
+                        <a-col :span="1">
+                          <img style="width: 32px; height: auto" :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=static/image/man.png`" alt="">
+                        </a-col>
+                      </a-row>
+                    </template>
+                    <template v-else>
+                      <a-row>
+                        <a-col :span="1">
+                          <img style="width: 32px; height: auto" :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=static/image/man.png`" alt="">
+                        </a-col>
+                        <a-col :span="12">
+                          <a-row>
+                            <a-col :span="24">{{ mailItem.time }} <span style="padding-left: 24px">Visitor002864</span></a-col>
+                            <a-col :span="24" class="reItemStyle">{{ mailItem.re }}</a-col>
+                          </a-row>
+                        </a-col>
+                      </a-row>
+                    </template>
+                  </div>
+                </div>
+              </a-tab-pane> -->
+              </a-tabs>
+            </a-col>
+            <a-col :span="6">
+              <a-tabs>
+                <a-tab-pane key="order" :tab="$t('订单信息')" style="height: calc(100vh - 220px); overflow-y: auto">
+                  <a-form :labelCol="{ span: 7 }" :wrapperCol="{ span: 17 }" class="formStyle">
+                    <a-form-item>
+                      <span slot="label" class="handStyle" @click="copyForm(orderData.data.ddh || '--')">
+                        {{ $t('订单号') }}
+                      </span>
+                      <a @click="orderNumberJump(orderData.data.ddh)">{{ orderData.data.ddh || '--' }}</a>
+                      <a-button
+                        v-if="['my_process', 'all_process'].includes(orderData.data.type)"
+                        type="link"
+                        icon="search"
+                        @click="changeOrder"
+                      />
+                    </a-form-item>
+                    <a-form-item :label="$t('支付类型')">
+                      <span style="background: #ffec3d">{{ orderData.data.zfqd || '--' }}</span>
+                    </a-form-item>
+                    <a-form-item :label="$t('信用卡类型')">{{ orderData.data.xyklx || '--' }}</a-form-item>
+                    <a-form-item :label="$t('订单类型')">{{ orderData.data.ddlx || '--' }}</a-form-item>
+                    <a-form-item :label="$t('流量来源')">{{ orderData.data.ddly || '--' }}</a-form-item>
+                    <a-form-item :label="$t('是否有case')">
+                      {{ orderData.data.sfcscase === 's' ? $t('是') : $t('否') || '--' }}
+                    </a-form-item>
+                    <a-form-item :label="$t('是否有预警')">
+                      {{ orderData.data.sfyjfx === 's' ? $t('是') : $t('否') || '--' }}
+                    </a-form-item>
+                    <a-form-item :label="$t('订单来源(设备)')">{{ orderData.data.ddlysb || '--' }}</a-form-item>
+                    <a-form-item :label="$t('订单状态')">{{ orderData.data.ddzt || '--' }}</a-form-item>
+                    <a-form-item>
+                      <span
+                        slot="label"
+                        class="handStyle"
+                        @click="copyForm((orderData.data.syb || '--') + '/' + (orderData.data.zd || '--'))"
+                      >
+                        {{ $t('事业部/站点') }}
+                      </span>
+                      {{ orderData.data.syb || '--' }}/{{ orderData.data.zd || '--' }}
+                    </a-form-item>
+                    <a-form-item>
+                      <span slot="label" class="handStyle" @click="copyForm(orderData.data.khmc)">
+                        {{ $t('客户名称') }}
+                      </span>
+                      {{ orderData.data.khmc || '--' }}
+                    </a-form-item>
+                    <a-form-item>
+                      <span slot="label" class="handStyle" @click="copyForm(orderData.data.yxdz)">
+                        {{ $t('客户邮箱') }}
+                      </span>
+                      {{ orderData.data.yxdz || '--' }}
+                    </a-form-item>
+                    <a-form-item>
+                      <span slot="label" class="handStyle" @click="copyForm(orderData.data.khdh)">
+                        {{ $t('电话') }}
+                      </span>
+                      {{ orderData.data.khdh || '--' }}
+                    </a-form-item>
+                    <a-form-item>
+                      <span slot="label" class="handStyle" @click="copyForm(orderData.data.jyh)">
+                        {{ $t('交易号') }}
+                      </span>
+                      {{ orderData.data.jyh || '--' }}
+                    </a-form-item>
+                    <a-form-item :label="$t('付款时间')">
+                      {{ orderData.data.fksj || '--' }} (历时{{ orderData.data.ddls || '--' }}天)
+                    </a-form-item>
+                  </a-form>
+                  <a-divider orientation="center">{{ $t('订单处理') }}</a-divider>
+                  <a-form :labelCol="{ span: 7 }" :wrapperCol="{ span: 17 }">
+                    <a-alert v-if="orderStatus" type="error" :message="$t('订单自动更新失败，请手动更新')" />
+                    <a-form-item :label="$t('订单状态')">
+                      <div style="display: flex; justify-content: center; align-items: center; margin-top: 4px">
+                        <a-input v-model="orderData.data.ddzt" :disabled="true" />
+                        <a-tooltip :title="$t('同步')">
+                          <a-button style="margin-left: -1px" icon="sync" @click="handleSync" />
+                        </a-tooltip>
+                      </div>
+                    </a-form-item>
+                    <a-row style="margin-left: 16px" :gutter="[0, 16]">
+                      <a-col
+                        v-for="(syncItem, syncIndex) in syncActions"
+                        :key="syncIndex"
+                        :span="8"
+                        style="text-align: center"
+                      >
+                        <a
+                          :disabled="
+                            (syncItem.value === 'ztdd' && orderData.data.suspend_request_id) ||
+                            (syncItem.value === 'hfdd' && !orderData.data.suspend_request_id)
+                          "
+                          @click="syncOpen(syncItem)"
+                        >
+                          {{ syncItem.label }}
+                        </a>
+                      </a-col>
+                    </a-row>
+                  </a-form>
+                </a-tab-pane>
+                <a-tab-pane key="associated">
+                  <span slot="tab">
+                    <a-badge :count="associatedTotal" :offset="[15, 0]">{{ $t('关联工单') }}</a-badge>
+                  </span>
+                  <div v-if="associatedList.length" style="height: calc(100vh - 220px); overflow-y: auto">
+                    <a-form
+                      v-for="(assItem, assIndex) in associatedList"
+                      :key="assIndex"
+                      :labelCol="{ span: 7 }"
+                      :wrapperCol="{ span: 17 }"
+                      class="formStyle"
+                    >
+                      <a-form-item :label="$t('工单编号')">
+                        <a @click="orderShow(assItem)">{{ assItem.caseNumber || '--' }}</a>
+                      </a-form-item>
+                      <a-form-item :label="$t('工单类型')">
+                        {{
+                          orderType.find((item) => item.value === assItem.gdlx)
+                            ? orderType.find((item) => item.value === assItem.gdlx).label
+                            : '--'
+                        }}
+                      </a-form-item>
+                      <a-form-item :label="$t('工单子状态')">{{ assItem.processSubStatus || '--' }}</a-form-item>
+                      <a-form-item :label="$t('当前办理人')">{{ assItem.processCurrentUser || '--' }}</a-form-item>
+                      <a-form-item :label="$t('创建时间')">{{ assItem.inputTime || '--' }}</a-form-item>
+                      <a-form-item :label="$t('更新时间')">{{ assItem.updateTime || '--' }}</a-form-item>
+                      <a-divider v-if="assIndex + 1 !== associatedList.length" :dashed="true" style="margin: 4px 0" />
+                    </a-form>
+                  </div>
+                  <a-empty v-else />
+                </a-tab-pane>
+              </a-tabs>
+            </a-col>
+          </a-row>
+        </a-tab-pane>
+        <a-tab-pane
+          v-for="(emailItem, emailIndex) in emailList"
+          :key="emailItem.data.id + emailItem.type"
+          :closable="true"
+          :tab="emailItem.name + (emailIndex + 1)"
+        >
+          <a-button-group style="margin-bottom: 8px">
+            <a-button type="primary" @click="sendMail('out', emailItem, emailIndex)">{{ $t('发送') }}</a-button>
+            <a-button @click="sendMail('draft', emailItem, emailIndex)">{{ $t('存草稿') }}</a-button>
+            <a-button @click="closeTabs(emailIndex)">{{ $t('取消') }}</a-button>
+          </a-button-group>
+          <mail-card-details
+            :ref="'mailCardDetails' + emailIndex"
+            :infoData="
+              Object.assign(emailItem, {
+                isOnlyMail: false,
+                action: emailItem.type === 'create' ? 'create' : 'reply',
+                mailShowType: 'workbench',
+                orderData: orderData.data
+              })
+            "
+            :imageFileList="emailItem.imageFileList"
+            @handleImageChange="(fileList) => handleImageChange(fileList, emailItem)"
+          />
+        </a-tab-pane>
+      </a-tabs>
+      <mail-info ref="mailInfo" @ok="getMailInfo" />
+      <a-modal
+        :title="$t('绑定订单号')"
+        :visible="modalVisible"
+        :destroyOnClose="true"
+        :closable="!modalLoading"
+        :maskClosable="!modalLoading"
+        :confirmLoading="modalLoading"
+        @ok="orderSubmit"
+        @cancel="modalVisible = !modalVisible"
+      >
+        <a-form :form="orderForm" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+          <a-form-item :label="$t('订单编号')">
+            <a-input
+              v-decorator="[
+                'orderNumber',
+                {
+                  initialValue: orderData.data ? orderData.data.ddh : '',
+                  rules: [{ required: true, message: $t('请输入订单编号') }]
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-form>
+      </a-modal>
+      <a-modal
+        :title="$t('暂停订单')"
+        :visible="suspendedVisible"
+        :destroyOnClose="true"
+        :closable="!suspendedLoading"
+        :maskClosable="!suspendedLoading"
+        :confirmLoading="suspendedLoading"
+        @ok="suspendedSubmit"
+        @cancel="suspendedVisible = !suspendedVisible"
+      >
+        <a-form :form="suspendedForm" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+          <a-form-item :label="$t('暂停原因')">
+            <a-select
+              v-decorator="[
+                'reasonId',
+                { initialValue: undefined, rules: [{ required: true, message: $t('请选择暂停原因') }] }
+              ]"
+            >
+              <a-select-option v-for="reasonItem in suspendedOption" :key="reasonItem.id" :value="reasonItem.id">
+                {{ reasonItem.nameCh }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('备注')">
+            <a-textarea
+              v-decorator="['remark', { rules: [{ required: true, message: $t('请填写备注') }] }]"
+              :auto-size="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+        </a-form>
+      </a-modal>
+      <WorkbenchCard ref="workbenchCard" :workObj="{ type: 'my_handle' }" />
+      <!-- 添加办理备注 -->
+      <user-table-workflow-remarks ref="userTableWorkflowRemarks" />
+      <div class="bbar">
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import Vue from 'vue'
+import { mapGetters } from 'vuex'
+import imagesLoaded from 'vue-images-loaded'
+import { Timeline } from 'ant-design-vue'
+import VueClipBoard from 'vue-clipboard2'
+Vue.use(Timeline)
+Vue.use(VueClipBoard)
+export default {
+  i18n: window.lang('crm'),
+  name: 'WorkbenchCard',
+  components: {
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    MailInfo: () => import('@/views/mail/MailInfo'),
+    MailCardDetails: () => import('@/views/mail/MailCardDetails'),
+    UserTableWorkflowRemarks: () => import('@/views/admin/UserTable/UserTableWorkflowRemarks'),
+    UserTableFormView: () => import('@/views/admin/UserTable/UserTableFormView')
+  },
+  directives: {
+    imagesLoaded
+  },
+  props: {
+    workObj: {
+      type: Object,
+      default: () => { }
+    },
+    workThis: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      loading: false,
+      visible: false,
+      tip: '',
+      orderData: {},
+      msgVisible: false,
+      modalVisible: false,
+      modalLoading: false,
+      suspendedVisible: false,
+      suspendedLoading: false,
+      copyValue: '',
+      data: {},
+      config: {},
+      flowList: [],
+      variableList: [],
+      labelCol: { style: 'width: 100px; display: inline-block' },
+      wrapperCol: { style: 'width: calc(100% - 150px); display: inline-block' },
+      copyAlias: ['caseNumber', 'zd', 'ddh', 'yhyx', 'khm', 'ydh', 'zydh', 'bgh', 'jyh'],
+      mailList: [],
+      msgList: [],
+      suspendedOption: [], // 暂停原因列表
+      content: '',
+      nowWay: '',
+      orderStatus: 1,
+      form: this.$form.createForm(this),
+      orderForm: this.$form.createForm(this),
+      suspendedForm: this.$form.createForm(this),
+      activeKey: 'order',
+      chatsActiveKey: 'mail',
+      logList: [],
+      suspendLogList: [],
+      suspendLogFlag: false,
+      associatedList: [],
+      syncActions: [{
+        label: this.$t('发前处理'),
+        value: 'fqcl',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/handleBeforeShipView`
+      }, {
+        label: this.$t('发后处理'),
+        value: 'fhcl',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/handleAfterShipView`
+      }, {
+        label: this.$t('暂停订单'),
+        value: 'ztdd'
+      }, {
+        label: this.$t('刷新物流'),
+        value: 'sxwl',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/orderDetailView`
+      }, {
+        label: this.$t('重派地址'),
+        value: 'cpdz',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/editResendAddress`
+      }, {
+        label: this.$t('修改地址'),
+        value: 'xgdz',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/orderDetailView`
+      }, {
+        label: this.$t('恢复订单'),
+        value: 'hfdd'
+      }, {
+        label: this.$t('修改物流方式'),
+        value: 'xgwlfs',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/orderDetailView`
+      }, {
+        label: this.$t('查看支付信息'),
+        value: 'cxzfxx',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/orderDetailView`
+      }, {
+        label: this.$t('查看物流信息'),
+        value: 'ckwlxx',
+        url: `${location.protocol}//${location.host}/rest/customerService/orderView/orderDetailView`
+      }],
+      emailList: [],
+      tableName: '',
+      template: [],
+      fieldRule: [],
+      remarksRule: [],
+      remarksMaxRows: 4,
+      remarksMinRows: 2,
+      timer: null,
+      handleFormRules: [],
+      handleWayData: [],
+      orderType: [],
+      templateOther: [],
+      associatedTotal: null,
+      // 商品SPU内容
+      goodsSpu: [],
+      treeData: [],
+      spuColumns: [{
+        title: this.$t('产品图片'),
+        dataIndex: 'cptp',
+        customRender: (text, record) => {
+          if (text) {
+            return (<div slot="cptp" slot-scope="text, record" v-viewer>
+              <img src={text} alt="" style="width: 64px; height: auto; cursor: pointer; margin-right: 2px;" />
+            </div>)
+          } else {
+            return '--'
+          }
+        },
+        width: 100
+      }, {
+        title: this.$t('产品id'),
+        dataIndex: 'cpid',
+        width: 100
+      }, {
+        title: this.$t('SPU/SKU'),
+        dataIndex: 'spu',
+        customRender: (text, record) => {
+          return (<div><div>{record.spu}</div><div>{record.sku}</div></div>)
+        }
+      }, {
+        title: this.$t('产品名称/规格/物品码'),
+        dataIndex: 'cpmc',
+        customRender: (text, record) => {
+          return (<div><div>{record.cpmc}</div><div>{record.gg}</div><div>{record.wpm}</div></div>)
+        },
+        width: 200
+      }, {
+        title: this.$t('客诉原因'),
+        dataIndex: 'ksyy',
+        scopedSlots: { customRender: 'ksyy' }
+      }]
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+
+  methods: {
+    show (config) {
+      this.config = config
+      const item = config.data
+      if (item.ddh) {
+        this.axios({
+          url: 'crm/spu/orderSPU',
+          data: {
+            orderNo: item.ddh || '',
+            workOrderNumber: item.caseNumber || ''
+          }
+        }).then(res => {
+          this.goodsSpu = res.code === 0 ? res.result : []
+        })
+      }
+      this.orderData.data = item
+      this.parentParams = {
+        tplviewUrl: '/admin/centerflow/handleOrder',
+        url: '/admin/workitem/processing',
+        flowCondition: config.parent.flowCondition,
+        viewType: 'handle',
+        tableId: '9cf401eb8793408686bba8cf8d38fc25'
+      }
+      const dataValue = {}
+      if (['all_process'].includes(item.type) || ['my_process'].includes(item.type) && item.process_current_user && item.process_current_user.includes(this.userInfo.username)) {
+        dataValue.url = '/admin/centerflow/handleOrder'
+        dataValue.data = {
+          caseId: item.caseId,
+          flowCondition: config.parent.flowCondition,
+          viewType: 'handle'
+        }
+      } else {
+        dataValue.url = '/admin/centerflow/viewOrder'
+        dataValue.data = {
+          caseId: item.caseId,
+          flowCondition: config.parent.flowCondition,
+          templateId: 'd2b4017dc8044c528b503369580fd21a',
+          viewType: 'view'
+        }
+      }
+      this.visible = true
+      this.loading = true
+      const p = new Promise((resolve, reject) => {
+        this.axios({
+          url: dataValue.url,
+          data: dataValue.data
+        }).then(res => {
+          this.template = []
+          if (res.code) {
+            setTimeout(() => {
+              this.visible = false
+            }, 1000)
+            this.$message.warning(res.message)
+            reject(res)
+          } else {
+            res.result.data.type = this.workObj ? this.workObj.searchType : ''
+            this.orderData = res.result
+            this.getMailInfo()
+            this.orderData.data.type = item.type
+            const val = res.result
+            if (this.$refs.userTableFormView) {
+              this.$refs.userTableFormView.form.resetFields()
+            }
+            if (this.orderData.data) {
+              this.parentParams.caseId = this.orderData.data.caseId
+              this.parentParams.record = this.orderData.data
+              if (this.orderData.data.fksj) {
+                const currentTime = this.moment(this.moment().format('YYYY-MM-DD HH:mm:ss'))
+                const fksj = this.moment(this.orderData.data.fksj)
+                const days = currentTime.diff(fksj, 'days')
+                this.orderData.data.ddls = days
+              }
+              // 获取 overview流程日志
+              this.axios({
+                url: '/admin/centerflow/workflowLog',
+                data: {
+                  pageNo: 1,
+                  pageSize: 100,
+                  sortField: 'id',
+                  sortOrder: 'descend',
+                  caseId: this.orderData.data.caseId
+                }
+              }).then(res => {
+                this.logList = res.result.data
+              })
+              // 获取 Suspend Log暂停工单 日志
+              this.suspendLogFlag = false
+              this.suspendLogList = []
+              if (this.orderData.data.gdlx === 'zanting_gd') {
+                this.axios({
+                  url: '/crm/assist/workOrderSuspendInfo',
+                  data: {
+                    workOrderNumber: this.orderData.data.caseNumber
+                  }
+                }).then(res => {
+                  this.suspendLogFlag = true
+                  this.suspendLogList = res.result
+                })
+              }
+            }
+            this.axios({
+              url: '/admin/dict/initData',
+              data: {
+                pageNo: 1,
+                pageSize: 999,
+                dictCategoryNumber: 'xksyy',
+                sortField: 'listOrder',
+                sortOrder: 'ascend'
+              }
+            }).then(res => {
+              this.treeData = res.result
+            })
+            this.$nextTick(() => {
+              this.emailList = []
+              this.mailList = []
+              this.activeKey = 'order'
+              this.chatsActiveKey = 'mail'
+              this.associatedList = []
+              if (!item.ddh) {
+                this.goodsSpu = []
+              }
+            })
+            if (val.template) {
+              // 表单初始化loader
+              if (val.templateScript && val.templateScript.afterInit) {
+                var initAttribute = val.templateScript.afterInit
+                var initTemplate = {
+                  type: 'component',
+                  attribute: initAttribute
+                }
+                val.template.push(initTemplate)
+              }
+              const getComponent = (array) => {
+                array.forEach((item, index) => {
+                  if (item.columns) {
+                    getComponent(item.columns)
+                  } else if (item.trs) {
+                    getComponent(item.trs)
+                  } else if (item.list) {
+                    getComponent(item.list)
+                  } else {
+                    if (item.type === 'component') {
+                      item.component = {
+                        template: `<span>${item.attribute}</span>`,
+                        data: () => {
+                          return {
+                            parent: this
+                          }
+                        }
+                      }
+                    }
+                  }
+                })
+              }
+              getComponent(val.template)
+            }
+            this.tableName = val.tableName
+            this.$nextTick(() => {
+              this.template = val.template
+            })
+            this.fieldRule = val.fieldRule
+            this.remarksRule = val.remarksRule
+            this.handleFormRules = val.handleFormRules
+            this.handleWayData = val.handleMethods
+            this.templateOther = val.template
+            this.remarksMinRows = val.remarksMinRows
+            this.remarksMaxRows = val.remarksMaxRows
+            this.$emit('get', res.result)
+            resolve()
+          }
+        })
+      })
+      p.then(() => {
+        // 订单同步
+        if (item.ddh && (['all_process'].includes(item.type) || ['my_process'].includes(item.type) && item.process_current_user && item.process_current_user.includes(this.userInfo.username))) {
+          this.tip = this.$t('正在同步订单信息，请稍候...')
+          this.axios({
+            url: '/crm/assist/syncOrderInfo',
+            data: {
+              workOrderNumber: item.caseNumber,
+              sid: this.$store.getters.userInfo.sid
+            },
+            timeout: 3000
+          }).then(res => {
+            this.loading = false
+            this.orderData.data = Object.assign(this.orderData.data, res.result.data)
+            if (this.orderData.data && this.orderData.data.fksj) {
+              const currentTime = this.moment(this.moment().format('YYYY-MM-DD HH:mm:ss'))
+              const fksj = this.moment(this.orderData.data.fksj)
+              const days = currentTime.diff(fksj, 'days')
+              this.orderData.data.ddls = days
+            }
+            this.orderStatus = res.code
+          }).catch(() => {
+            this.$message.warning(this.$t('订单同步超时'))
+          }).finally(() => {
+            this.tip = ''
+            this.loading = false
+          })
+        } else {
+          this.loading = false
+        }
+        this.getAssList()
+      })
+    },
+    imageProgress (instance, image) {
+      const result = image.isLoaded ? 'loaded' : 'broken'
+      if (result === 'loaded') {
+        this.$refs.chats.scrollTop = this.$refs.chats.scrollHeight
+      }
+    },
+    handleSync () {
+      this.loading = true
+      this.tip = this.$t('正在同步订单信息，请稍候...')
+      this.axios({
+        url: '/crm/assist/syncOrderInfo',
+        data: {
+          workOrderNumber: this.orderData.data.caseNumber,
+          sid: this.$store.getters.userInfo.sid
+        },
+        timeout: 3000
+      }).then(res => {
+        this.orderStatus = res.code
+        if (res.code) {
+          this.$message.warning(res.message)
+        } else {
+          this.$message.success(res.message)
+          this.orderData.data = Object.assign(this.orderData.data, res.result.data)
+        }
+      }).catch(() => {
+        this.$message.warning(this.$t('订单同步超时'))
+      }).finally(() => {
+        this.tip = ''
+        this.loading = false
+      })
+    },
+    orderNumberJump (orderId) {
+      if (orderId) {
+        const url = `${location.protocol}//${location.host}/rest/customerService/orderView/orderDetailView/${orderId}?sid=${this.$store.getters.userInfo.sid}`
+        window.open(url)
+      }
+    },
+    syncOpen (record) {
+      if (this.orderData.data.ddh) {
+        if (record.url) {
+          const url = `${record.url}/${this.orderData.data.ddh}?sid=${this.$store.getters.userInfo.sid}`
+          window.open(url)
+        } else if (record.value === 'ztdd') {
+          if (!this.suspendedOption.length) {
+            this.axios({
+              url: '/crm/workbench/querySuspendRequestReasonList',
+              data: {
+                sid: this.$store.getters.userInfo.sid
+              }
+            }).then(res => {
+              this.suspendedVisible = true
+              this.suspendedOption = res.result.item || []
+            })
+          } else {
+            this.suspendedVisible = true
+          }
+        } else if (record.value === 'hfdd') {
+          this.$refs.userTableWorkflowRemarks.show({
+            url: '/crm/workbench/recoverOrder',
+            data: {
+              suspendRequestId: this.orderData.data.suspend_request_id,
+              sid: this.$store.getters.userInfo.sid
+            }
+          })
+        }
+      } else {
+        this.$message.error(this.$t('未绑定订单号'))
+      }
+    },
+    // 邮件操作
+    handleEmail (type, mailItem, replyAgain) {
+      if (type === 'create') {
+        this.axios({
+          url: '/crm/assist/preSendInfo',
+          data: {
+            orderNo: this.orderData.data.ddh,
+            workOrderNumber: this.orderData.data.caseNumber,
+            sid: this.$store.getters.userInfo.sid
+          }
+        }).then(res => {
+          const createItem = {
+            id: this.emailList.length + 1,
+            senderTo: this.orderData.data.yxdz || res.result.receiver,
+            sender: res.result.sender
+          }
+          this.emailList.splice(this.emailList.length, 0, {
+            type: type,
+            data: createItem,
+            name: this.$t('写邮件'),
+            imageFileList: []
+          })
+          this.activeKey = createItem.id + type
+        })
+      } else if (type !== 'view') {
+        const data = JSON.parse(JSON.stringify(mailItem))
+        if (type === 'forward') {
+          data.senderTo = undefined
+        }
+        if (!replyAgain) {
+          data.sender = mailItem.senderTo
+          data.senderTo = type === 'reply' ? mailItem.sender : undefined
+        }
+        data.title = data.title ? data.title.replace(/Re: |Fw: /, '') : ''
+        if (type === 'reply') {
+          data.title = 'Re: ' + data.title
+        } else if (type === 'forward') {
+          data.title = 'Fw: ' + data.title
+        }
+        // 回复邮件
+        if (this.emailList.every(item => (item.data.id + item.type) !== (mailItem.id + type))) {
+          this.emailList.splice(this.emailList.length, 0, {
+            type: type,
+            data: data,
+            name: type === 'reply' ? this.$t('回复邮件') : this.$t('转发邮件'),
+            imageFileList: []
+          })
+        }
+        this.activeKey = mailItem.id + type
+        this.$nextTick(() => {
+          this.emailList.forEach((emailItem, emailIndex) => {
+            if (this.$refs['mailCardDetails' + emailIndex] && this.$refs['mailCardDetails' + emailIndex][0] && this.$refs['mailCardDetails' + emailIndex][0].$refs.tinyMce) {
+              this.$refs['mailCardDetails' + emailIndex][0].$refs.tinyMce.tinyKey++
+              this.$refs['mailCardDetails' + emailIndex][0].getIframe()
+            }
+          })
+        })
+      } else {
+        // 查看邮件
+        this.$refs.mailInfo.show({
+          data: Object.assign(mailItem, { caseNumber: this.orderData.data.caseNumber || '' }),
+          title: this.$t('详情'),
+          type: 'workbench'
+        })
+      }
+    },
+    handleImageChange (fileList, emailItem) {
+      emailItem.imageFileList = fileList
+    },
+    tabsChange (e) {
+      this.emailList.forEach((emailItem, emailIndex) => {
+        this.$refs['mailCardDetails' + emailIndex][0].$refs.tinyMce.tinyKey++
+        this.$refs['mailCardDetails' + emailIndex][0].getIframe()
+      })
+      this.$nextTick(() => {
+        this.activeKey = e
+      })
+    },
+    getAssList () {
+      if (!this.associatedList.length) {
+        this.axios({
+          url: '/crm/workbench/relatedWorkOrder',
+          data: {
+            curWorkOrderNumber: this.orderData.data.caseNumber,
+            orderNumber: this.orderData.data.ddh
+          }
+        }).then(res => {
+          if (!res.code) {
+            this.associatedList = res.result
+            this.associatedTotal = res.result.length
+            this.axios({
+              url: '/admin/search/dictSearch',
+              data: { dictCategoryNumber: 'gdlx' }
+            }).then(res => {
+              this.orderType = res.result
+            })
+          }
+        })
+      }
+    },
+    onEdit (targetKey, action) {
+      this[action](targetKey)
+    },
+    remove (targetKey) {
+      this.emailList = this.emailList.filter((item, index) => (item.data.id + item.type) !== targetKey)
+      this.activeKey = 'order'
+    },
+    chatsChange (e) {
+      this.chatsActiveKey = e
+      this.$nextTick(() => {
+        if (e === 'msg') {
+          this.$refs.msgChats.scrollTop = this.$refs.msgChats.scrollHeight
+        }
+      })
+    },
+    getMailInfo () {
+      this.axios({
+        url: '/crm/assist/workOrderMailData',
+        data: { workOrderNumber: this.orderData.data.caseNumber || '' }
+      }).then(res => {
+        this.mailList = res.result
+        this.$refs.chats.scrollTop = this.$refs.chats.scrollHeight
+      })
+    },
+    copyForm (value) {
+      this.copyValue = value
+      const that = this
+      this.$copyText(this.copyValue).then(function (e) {
+        that.$message.success(this.$t('复制成功'))
+      }, function (e) {
+        that.$message.success(this.$t('复制失败'))
+      })
+    },
+    closeTabs (key) {
+      this.emailList = this.emailList.filter((item, index) => index !== key)
+      this.activeKey = 'order'
+    },
+    changeOrder () {
+      this.modalVisible = true
+      this.modalLoading = false
+    },
+    jumpAce () {
+      window.open(`${location.protocol}//${location.host}/rest/customerService/orderView/orderListView?opt=request&sid=${this.$store.getters.userInfo.sid}`)
+    },
+    orderShow (record) {
+      this.$refs.workbenchCard.show({
+        title: this.$t('查看关联工单'),
+        data: record,
+        parent: this.config.parent
+      })
+    },
+    suspendedSubmit () {
+      this.suspendedForm.validateFields((errors, values) => {
+        if (!errors) {
+          this.suspendedLoading = true
+          this.axios({
+            url: '/crm/workbench/createSuspendRequest',
+            data: Object.assign(values, {
+              orderNo: this.orderData.data.ddh,
+              workOrderNumber: this.orderData.data.caseNumber,
+              sid: this.$store.getters.userInfo.sid
+            })
+          }).then(res => {
+            this.suspendedLoading = false
+            if (res.code) {
+              this.$message.error(res.message)
+            } else {
+              this.suspendedVisible = false
+              this.orderData.data.suspend_request_id = res.result.suspendRequestId
+              this.$message.success(res.message)
+            }
+          })
+        }
+      })
+    },
+    // 发送邮件
+    sendMail (type, infoData, index) {
+      this.$refs['mailCardDetails' + index][0].form.validateFields((errors, values) => {
+        if (!errors) {
+          let imageFileList = []
+          if (infoData.imageFileList.length > 0) {
+            imageFileList = infoData.imageFileList.map(item => {
+              const obj = {
+                fileName: item.response.result.fileName,
+                filePath: item.response.result.filePath
+              }
+              return obj
+            })
+          }
+          values.files = imageFileList
+          // 正则匹配发件人收件人邮箱改成字符格式标签  防止 在html直接当成标签解析 如 <123.com>在页面上v-html直接被解析成 <123.com></123.com> 导致不显示
+          infoData.data.senderDisplay = infoData.data.senderDisplay ? infoData.data.senderDisplay.replace(/</, '&lt;').replace(/>/, '&gt;') : ''
+          infoData.data.senderToDisplay = infoData.data.senderToDisplay ? infoData.data.senderToDisplay.replace(/</, '&lt;').replace(/>/, '&gt;') : ''
+          const title = infoData.data.title ? infoData.data.title.replace(/Re: |Fw: /, '') : ''
+          let content = this.$refs['mailCardDetails' + index][0].textContent
+          if (infoData.action !== 'create') {
+            content = this.$refs['mailCardDetails' + index][0].textContent + `<br /><br /><hr style="width: 100%; height: 1px;" align="left" size="1" />
+        <div style="background: #EEE">
+         <div><span style="font-weight: 600">From：</span><span> ${infoData.data.senderDisplay || '--'}</span></div>
+         <div><span style="font-weight: 600">Time：</span><span>${infoData.data.sendTime || '--'}</span></div>
+         <div><span style="font-weight: 600">To：</span><span> ${infoData.data.senderToDisplay || '--'}</span></div>
+         <div><span style="font-weight: 600">Subject：</span><span>${title || '--'}</span></div>
+        </div>
+        ` + this.$refs['mailCardDetails' + index][0].InitContent
+          }
+          values.content = content
+          if (values.bccs) {
+            values.bccs = values.bccs.includes(';') ? values.bccs.split(';') : [values.bccs] // 暗送人
+          } else {
+            values.bccs = []
+          }
+          if (values.ccs) {
+            values.ccs = values.ccs.includes(';') ? values.ccs.split(';') : [values.ccs] // 抄送人
+          } else {
+            values.ccs = []
+          }
+          if (values.tos) {
+            values.tos = values.tos.includes(';') ? values.tos.split(';') : [values.tos] // 收件人
+          } else {
+            values.tos = []
+          }
+          const url = type === 'draft' ? '/crm/assist/saveDraft ' : '/crm/assist/replyMail'
+          this.loading = true
+          const formData = {
+            workOrderNumber: this.orderData.data.caseNumber,
+            mailData: values
+          }
+          this.axios({
+            url: url,
+            data: formData
+          }).then((res) => {
+            this.loading = false
+            if (res.code === 0) {
+              this.$message.success(this.$t('操作成功'))
+              this.$emit('ok', '')
+              this.getMailInfo()
+              this.emailList.splice(index, 1)
+              this.activeKey = 'order'
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    },
+    // 绑定订单提交
+    orderSubmit () {
+      this.orderForm.validateFields((errors, values) => {
+        if (!errors) {
+          this.modalLoading = true
+          const formData = this.$refs.userTableFormView.form.getFieldsValue()['record']
+          new Promise((resolve, reject) => {
+            this.axios({
+              url: '/crm/assist/restrictOrderType',
+              data: {
+                orderNo: values.orderNumber,
+                workOrderType: formData.gdlx,
+                workOrderNumber: formData.caseNumber
+              }
+            }).then(res => {
+              if (res.code) {
+                this.modalLoading = false
+                this.$message.error(res.message)
+              } else {
+                resolve()
+              }
+            })
+          }).then(() => {
+            this.axios({
+              url: '/crm/assist/bindOrderNo',
+              data: {
+                orderNo: values.orderNumber,
+                updateFieldName: 'ddh',
+                sid: this.$store.getters.userInfo.sid,
+                tableName: 'crm_gdb',
+                conditionFieldName: 'gdbh',
+                conditionFieldValue: this.orderData.data.caseNumber
+              }
+            }).then(res => {
+              this.modalLoading = false
+              if (res.code) {
+                this.$message.error(res.message)
+              } else {
+                this.$message.success(res.message)
+                const obj = {}
+                for (const i in res.result.data) {
+                  if (res.result.data[i]) {
+                    this.orderData.data[i] = res.result.data[i]
+                    obj['record' + '[' + i + ']'] = res.result.data[i]
+                  }
+                }
+                this.$refs.userTableFormView.form.setFieldsValue(obj)
+                this.modalVisible = false
+                this.handleSync()
+              }
+            })
+          })
+        }
+      })
+    },
+    handleSubmit () {
+      const formData = this.$refs.userTableFormView.form.getFieldsValue()['record']
+      // if (this.goodsSpu.length === 0 && formData.gdlx === 'thh' && this.$refs.userTableFormView.form.getFieldsValue().handleWay === 'yjj') {
+      //   this.$message.warning('当前工单类型为退换货，请选择至少一件商品SPU添加客诉原因')
+      //   return
+      // }
+      // if (this.goodsSpu.length !== 0 && formData.gdlx === 'thh' && this.$refs.userTableFormView.form.getFieldsValue().handleWay === 'yjj') {
+      //   const bool = this.goodsSpu.every(item => !item.ksyy)
+      //   if (bool) {
+      //     this.$message.warning('当前工单类型为退换货，请选择至少一件商品SPU添加客诉原因')
+      //     return
+      //   } else {
+      //   }
+      // }
+      this.loading = true
+      if (this.orderData.data.ddh && formData.gdlx !== 'wlwt') {
+        this.axios({
+          url: '/crm/assist/restrictOrderType',
+          data: {
+            orderNo: this.orderData.data.ddh,
+            workOrderType: formData.gdlx,
+            workOrderNumber: formData.caseNumber
+          }
+        }).then(res => {
+          if (res.code) {
+            this.loading = false
+            this.$message.error(res.message)
+          } else {
+            this.$refs.userTableFormView.handleSubmit().then(() => {
+              this.visible = false
+              this.config.parent.refresh('noRefresh')
+            })
+          }
+        })
+      } else {
+        this.$refs.userTableFormView.handleSubmit().then(() => {
+          this.visible = false
+          this.config.parent.refresh('noRefresh')
+        })
+      }
+    },
+    submitReturn (data, tableName, status) {
+      this.loading = false
+      if (!status) {
+        this.visible = false
+        this.$emit('ok')
+        if (this.goodsSpu && this.goodsSpu.length) {
+          const complainReasonList = this.goodsSpu.map(item => {
+            const obj = {
+              commodityId: item.ddspid,
+              complainReason: item.ksyy
+            }
+            return obj
+          })
+          this.axios({
+            url: '/crm/spu/customerComplain',
+            data: {
+              complainReasonList: complainReasonList
+            }
+          })
+        }
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.labelStyle {
+  font-weight: 600;
+}
+/deep/ img {
+  max-height: 200px;
+}
+.reItemStyle {
+  padding: 16px 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 5px;
+  margin-top: 4px;
+  background: #f2f2f2;
+}
+.myReItemStyle {
+  background: @primary-2;
+}
+.handStyle {
+  cursor: pointer;
+}
+.formStyle {
+  /deep/ .ant-form-item-label {
+    line-height: 28px;
+  }
+  /deep/ .ant-form-item-control {
+    line-height: 28px;
+  }
+}
+::-webkit-scrollbar {
+  /*滚动条整体样式*/
+  width: 8px;
+  /*高宽分别对应横竖滚动条的尺寸*/
+  height: 6px;
+  scrollbar-arrow-color: red;
+}
+::-webkit-scrollbar-thumb {
+  /*滚动条里面小方块*/
+  border-radius: 5px;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+  scrollbar-arrow-color: red;
+}
+::-webkit-scrollbar-track {
+  /*滚动条里面轨道*/
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.2);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.1);
+}
+</style>

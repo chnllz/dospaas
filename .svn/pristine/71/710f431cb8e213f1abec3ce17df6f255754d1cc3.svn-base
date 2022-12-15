@@ -1,0 +1,1146 @@
+<template>
+  <div class="useMonitor">
+    <div ref="box" class="box">
+      <div class="content">
+        <div class="color-fff gloTime font-12">
+          <div>{{ nowTime }}</div>
+          <div>{{ $t(monitor.technical) }}</div>
+        </div>
+        <!-- 头部 -->
+        <div class="globalClass toHead">
+          <div class="topLogo topLogoImg">
+            <img :src="heardImg" />
+          </div>
+          <div class="centerTitleHeight centerTitleImg">
+            <div class="centerTitle">{{ $t(monitor.title) }}</div>
+          </div>
+        </div>
+        <!-- 说明 -->
+        <div
+          v-if="monitor.help"
+          class="gloExplainClass"
+          @click="
+            () => {
+              openExplain = true
+            }
+          "
+        >
+          <img src="./assets/image/explain.png" class="explainImage" alt="" />
+          <div class="color-ffc font-12">{{ $t('帮助说明') }}</div>
+        </div>
+        <!-- 中间 -->
+        <div class="glo-row tableBox">
+          <!-- 左部分 -->
+          <subTable class="flex-1">
+            <div slot="body" class="fullClass toFirBoxBody" style="">
+              <div class="flex-1">
+                <div class="color-fff font-18">{{ $t('在线客服人数') }}</div>
+                <div ref="charts_pieHollow" class="toPieHollow"></div>
+              </div>
+              <div class="flex-1">
+                <div class="glo-flex glo-wrap">
+                  <div class="glo-flex toLeftMar">
+                    <div class="font-18 color-fff toLeftText">{{ $t('正在会话') }}</div>
+                    <div class="firBox">
+                      <div v-for="(item, index) in currentConversationNumber" :key="index" class="firBoxItem">
+                        {{ item }}
+                      </div>
+                      <div class="firBoxText">{{ $t('人') }}</div>
+                    </div>
+                  </div>
+                  <div class="glo-flex">
+                    <div class="font-18 color-fff toLeftText">{{ $t('正在排队') }}</div>
+                    <div class="firBox">
+                      <div v-for="(item, index) in currentQueueNumber" :key="index" class="firBoxItem">{{ item }}</div>
+                      <div class="firBoxText">{{ $t('人') }}</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="glo-flex toLeftAverage">
+                  <div class="font-18 color-fff toLeftText">{{ $t('平均会话时长') }}</div>
+                  <div class="firBox glo-wrap">
+                    <div v-for="(item, index) in avgConversationTimeFormatted" :key="index" class="glo-flex">
+                      <div v-for="(itemVal, indexVal) in item.value" :key="indexVal" class="firBoxItem">
+                        {{ itemVal }}
+                      </div>
+                      <div
+                        class="firBoxText"
+                        :style="{ marginRight: index !== avgConversationTimeFormatted.length - 1 ? '0.01rem' : '' }"
+                      >
+                        {{ item.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="color-fff font-18 toLeftEfficiency">{{ $t('客服效率排名') }}</div>
+                <div ref="toTableBox" class="toTableBox" :style="{ height: `${windowHeight / 4.7 - 30}px` }">
+                  <a-table
+                    ref="table"
+                    size="small"
+                    rowKey="id"
+                    :pagination="false"
+                    :columns="columnsEfficiency"
+                    :data-source="efficienciesRanking"
+                  >
+                    <template slot="pm" slot-scope="text">
+                      <div
+                        :class="[
+                          text === 1 ? 'firstNum' : text === 2 ? 'secondNum' : text === 3 ? 'thirdNum' : 'otherNum'
+                        ]"
+                      >
+                        {{ text }}
+                      </div>
+                    </template>
+                  </a-table>
+                </div>
+              </div>
+            </div>
+          </subTable>
+          <!-- 中间部分 -->
+          <div class="flex-2 glo-col glo-flex toCenBox">
+            <div>
+              <div class="color-fff font-21 toCenConver">{{ $t('会话总数') }}</div>
+            </div>
+            <div class="glo-col glo-flex flex-4 fullHeight">
+              <div class="glo-flex-bet fullWidth">
+                <div class="dialogNumListClass glo-flex">
+                  <div v-for="(item, index) in conversationNumber" :key="index" class="dialogNumBox">
+                    <div class="dialogNumItem dialogNumFirst"></div>
+                    <div class="dialogNumItem dialogNumSecond"></div>
+                    <div class="color-fff dialogNumText">{{ item }}</div>
+                  </div>
+                </div>
+                <div class="glo-flex toCenRateBox">
+                  <div class="font-14 color-fff toCenRate toCenConnect">{{ $t('接通率') }}</div>
+                  <div ref="charts_connectRate" class="toCenChart"></div>
+                  <div class="font-14 color-fff toCenRate toCenPart">{{ $t('参评率') }}</div>
+                  <div ref="charts_partRate" class="toCenChart"></div>
+                </div>
+              </div>
+
+              <div class="glo-flex fullHeight">
+                <div class="flex-1 glo-flex-bet glo-col fullHeight toCenText">
+                  <div class="color-fff font-21">{{ $t('客户服务分布图') }}</div>
+                  <div class="color-fff font-21">{{ $t('今日会话分布') }}</div>
+                </div>
+                <div class="flex-3">
+                  <div ref="charts_map" class="fullClass"></div>
+                </div>
+              </div>
+            </div>
+            <div class="flex-2">
+              <subTable class="flex-1 fullHeight">
+                <div slot="body" class="fullClass">
+                  <div ref="charts_area" class="fullClass toCenArea"></div>
+                </div>
+              </subTable>
+            </div>
+          </div>
+          <!-- 右部分 -->
+          <subTable class="flex-1">
+            <div slot="body" class="fullClass toFirBoxBody">
+              <div class="flex-1">
+                <div class="color-fff font-21">{{ $t('坐标状态') }}</div>
+                <div ref="charts_satisfactRate" class="toRightCoo"></div>
+              </div>
+              <div class="flex-1">
+                <div class="glo-flex">
+                  <div class="font-18 color-fff toRightFirstSound">{{ $t('平均首响时长') }}</div>
+                  <div class="firBox glo-wrap toLeftEfficiency">
+                    <div v-for="(item, index) in firstReplyAverageTimeFormatted" :key="index" class="glo-flex">
+                      <div v-for="(itemVal, indexVal) in item.value" :key="indexVal" class="firBoxItem">
+                        {{ itemVal }}
+                      </div>
+                      <div
+                        class="firBoxText"
+                        :style="{ marginRight: index !== firstReplyAverageTimeFormatted.length - 1 ? '0.01rem' : '' }"
+                      >
+                        {{ item.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="glo-flex toRightLineup">
+                  <div class="font-18 color-fff toRightFirstSound">{{ $t('平均排队时长') }}</div>
+                  <div class="firBox glo-wrap toLeftEfficiency">
+                    <div v-for="(item, index) in averageQueueTimeFormatted" :key="index" class="glo-flex">
+                      <div v-for="(itemVal, indexVal) in item.value" :key="indexVal" class="firBoxItem">
+                        {{ itemVal }}
+                      </div>
+                      <div
+                        class="firBoxText"
+                        :style="{ marginRight: index !== firstReplyAverageTimeFormatted.length - 1 ? '0.01rem' : '' }"
+                      >
+                        {{ item.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="color-fff font-18 toLeftEfficiency">{{ $t('服务质量排名') }}</div>
+                <div ref="toTableBox2" class="toTableBox" :style="{ height: `${windowHeight / 4.7 - 30}px` }">
+                  <a-table
+                    ref="table"
+                    size="small"
+                    rowKey="id"
+                    :pagination="false"
+                    :columns="columnService"
+                    :data-source="qualityRankings"
+                  >
+                    <template slot="pm" slot-scope="text">
+                      <div
+                        :class="[
+                          text === 1 ? 'firstNum' : text === 2 ? 'secondNum' : text === 3 ? 'thirdNum' : 'otherNum'
+                        ]"
+                      >
+                        {{ text }}
+                      </div>
+                    </template>
+                  </a-table>
+                </div>
+              </div>
+            </div>
+          </subTable>
+        </div>
+      </div>
+      <a-modal
+        title="说明"
+        :visible="openExplain"
+        :bodyStyle="{ maxHeight: '500px', overflowY: 'height' > 500 ? 'scroll' : 'auto' }"
+      >
+        <div>{{ $t(monitor.help) }}</div>
+        <div slot="footer">
+          <a-button @click="() => (openExplain = false)">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-modal>
+    </div>
+  </div>
+</template>
+<script>
+import './assets/css/chartframe.less'
+import echarts from 'echarts'
+// 引入中国地图数据json
+import china from 'echarts/map/json/china.json'
+import { todayData } from './mock/monitordata.js'
+export default {
+  components: {
+    subTable: () => import('./components/subTable')
+  },
+  data () {
+    return {
+      legendData: [this.$t('会话总数'), this.$t('已接入会话数'), this.$t('未接入会话数'), this.$t('排队数')],
+      heardImg: '',
+      nowTime: null,
+      // 时间定时器
+      timeid: null,
+      chartsOptions: {
+        // 空心饼状图-在线客服人数
+        charts_pieHollow: {
+          color: ['#63A9F8', '#FFD8BE', '#BF65FF', '#7C66FF'],
+          tooltip: {
+            trigger: 'item',
+            formatter: (params) => {
+              return `${this.$t(params.name)}\n${params.value}`
+            }
+          },
+          legend: {
+            show: false,
+            icon: 'circle',
+            bottom: 0,
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 12
+            }
+          },
+          series: [
+            {
+              type: 'pie',
+              radius: ['30%', '55%'],
+              center: ['50%', '70%'],
+              labelLine: {
+                length: 0,
+                lineStyle: {
+                  color: '#2D99FF'
+                }
+              },
+              label: {
+                formatter: (params) => {
+                  return `{b|${this.$t(params.name)}}\n{d|${params.value}}`
+                },
+                rich: {
+                  b: {
+                    color: '#ffffff',
+                    fontSize: 14
+                  },
+                  d: {
+                    color: '#00DDFF',
+                    fontSize: 20
+                  }
+                }
+              },
+              data: []
+            }
+          ]
+        },
+        // 在线满意率
+        charts_satisfactRate: {
+          title: {
+            textStyle: {
+              color: '#fff',
+              fontSize: 16
+            },
+            left: 'center',
+            top: 'center'
+          },
+          graphic: { // 添加原生图形元素组件
+            elements: [{
+              type: 'text', // 组件类型
+              left: 'center', // 定位
+              top: '39%', // 定位
+              style: { // 样式
+                text: '65%', // 文字
+                fontSize: 32, // 文字大小
+                textAlign: 'center', // 定位
+                width: 30,
+                height: 50,
+                fontWeight: 'bold',
+                fill: '#fff' // 字体颜色
+              }
+            }, {
+              type: 'text',
+              left: 'center',
+              top: '56%',
+              style: {
+                text: this.$t('在线满意率'),
+                fontSize: 14,
+                textAlign: 'center',
+                width: 30,
+                height: 25,
+                fill: '#fff'
+              }
+            }]
+          },
+          angleAxis: {
+            max: 100, // 满分
+            clockwise: true, // 逆时针
+            // 隐藏刻度线
+            axisLine: {
+              show: false
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              show: false
+            },
+            splitLine: {
+              show: false
+            }
+          },
+          radiusAxis: {
+            type: 'category',
+            // 隐藏刻度线
+            axisLine: {
+              show: false
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              show: false
+            },
+            splitLine: {
+              show: false
+            }
+          },
+          polar: {
+            center: ['50%', '50%'],
+            radius: '140%' // 图形大小
+          },
+          series: [{
+            type: 'bar',
+            data: [{
+              name: '在线满意率',
+              value: 0,
+              itemStyle: {
+                normal: {
+                  color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                    offset: 0,
+                    color: '#1B61FF'
+                  }, {
+                    offset: 1,
+                    color: '#BD61FE'
+                  }]
+                  )
+                }
+              }
+            }],
+            coordinateSystem: 'polar',
+            roundCap: true,
+            barWidth: 15,
+            barGap: '-100%', // 两环重叠
+            radius: ['49%', '52%'],
+            z: 2
+          }, { // 灰色环
+            type: 'bar',
+            data: [{
+              value: 0,
+              itemStyle: {
+                color: '#3B4068'
+              }
+            }],
+            coordinateSystem: 'polar',
+            roundCap: true,
+            barWidth: 15,
+            barGap: '-110%', // 两环重叠
+            radius: ['48%', '53%'],
+            z: 1
+          }]
+        },
+        // 客户服务分布图
+        charts_map: {},
+        // 今日会话分布
+        charts_area: {
+          color: ['#2E64FF', '#00DDFF', '#C63CFF', '#FF0087'],
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+              type: 'cross',
+              label: {
+                backgroundColor: '#6a7985'
+              }
+            }
+          },
+          legend: {
+            icon: 'roundRect',
+            data: this.legendData,
+            left: 'right',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 12
+            },
+            itemWidth: 10,
+            itemHeight: 10
+          },
+          grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+          },
+          xAxis: [
+            {
+              type: 'category',
+              boundaryGap: false,
+              axisLine: {
+                lineStyle: {
+                  color: '#18C5FE'
+                }
+              },
+              axisLabel: {
+                color: '#0E8BFF'
+              },
+              axisTick: { show: false },
+              data: []
+            }
+          ],
+          yAxis: [
+            {
+              type: 'value',
+              splitLine: {
+                show: false // 显示隐藏刻度线
+              },
+              axisLine: { show: false },
+              axisTick: { show: false },
+              axisLabel: { show: false }
+            }
+          ],
+          series: [{
+            name: this.$t('会话总数'),
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#2E64FF'
+            },
+            showSymbol: false,
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0,
+                color: 'rgba(46, 100, 255, 0.7)'
+              }, {
+                offset: 1,
+                color: 'rgba(46, 100, 255, 0.3)'
+              }])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [140, 232, 101, 264, 90, 340, 250, 100, 10]
+          }, {
+            name: this.$t('已接入会话数'),
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#18C5FE'
+            },
+            showSymbol: false,
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0,
+                color: 'rgba(24, 197, 254, 0.7)'
+              }, {
+                offset: 1,
+                color: 'rgba(24, 197, 254, 0.3)'
+              }])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [120, 282, 111, 234, 220, 340, 310, 202, 10]
+          }, {
+            name: this.$t('未接入会话数'),
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#C63CFF'
+            },
+            showSymbol: false,
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0,
+                color: 'rgb(198, 60, 255, 0.7)'
+              }, {
+                offset: 1,
+                color: 'rgb(198, 60, 255, 0.3)'
+              }])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [320, 132, 201, 334, 190, 130, 220, 30, 260]
+          }, {
+            name: this.$t('排队数'),
+            type: 'line',
+            stack: 'Total',
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#EB3374'
+            },
+            showSymbol: false,
+            label: {
+              show: true,
+              position: 'top'
+            },
+            areaStyle: {
+              opacity: 0.8,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0,
+                color: 'rgba(210, 51, 116, 0.7)'
+              }, {
+                offset: 1,
+                color: 'rgba(210, 51, 116, 0.3)'
+              }])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: [220, 302, 181, 234, 210, 290, 150, 101, 50]
+          }]
+        },
+        // 接通率
+        charts_connectRate: {
+          color: ['#FF2994', '#582472'],
+          // 圆点中间文字
+          title: {
+            textAlign: 'center',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 16
+            },
+            x: 'middle',
+            y: 'center'
+          },
+          tooltip: {
+            show: false
+          },
+          legend: {
+            show: false,
+            textStyle: {
+              color: '#8AC9FF',
+              fontSize: 12
+            },
+            orient: 'vertical',
+            right: 50, // 图例栏偏移
+            top: 20,
+            formatter: function (name) {
+              return name
+            }
+          },
+          series: [{
+            name: '接通率',
+            type: 'pie',
+            hoverAnimation: false,
+            radius: ['75%', '100%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'inner',
+              formatter: '{b}：\n{c}'
+            },
+            labelLine: {
+              normal: {
+                show: true,
+                length: 30,
+                length2: 55
+              },
+              emphasis: {
+                show: true
+              }
+            },
+            data: [
+              { name: '接通率', value: 0 },
+              { name: '不接通率', value: 0 }
+            ]
+          }]
+        },
+        // 参评率
+        charts_partRate: {
+          color: ['#3B6DF1', '#1B3486'],
+          // 圆点中间文字
+          title: {
+            textAlign: 'center',
+            textStyle: {
+              color: '#ffffff',
+              fontSize: 16
+            },
+            x: 'middle',
+            y: 'center'
+          },
+          tooltip: {
+            show: false
+          },
+          legend: {
+            show: false,
+            textStyle: {
+              color: '#8AC9FF',
+              fontSize: 12
+            },
+            orient: 'vertical',
+            right: 50, // 图例栏偏移
+            top: 20,
+            formatter: function (name) {
+              return name
+            }
+          },
+          series: [{
+            name: '参评率',
+            type: 'pie',
+            hoverAnimation: false,
+            radius: ['75%', '100%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'inner',
+              formatter: '{b}：\n{c}'
+            },
+            labelLine: {
+              normal: {
+                show: true,
+                length: 30,
+                length2: 55
+              },
+              emphasis: {
+                show: true
+              }
+            },
+            data: [
+              { name: '参评率', value: 0 },
+              { name: '不参评率', value: 0 }
+            ]
+          }]
+        }
+      },
+      fn: null,
+      pieHollow: null,
+      chartArea: null,
+      chartsMap: null,
+      chartsConnectRate: null,
+      chartsPartRate: null,
+      openExplain: false,
+      currentConversationNumber: [],
+      currentQueueNumber: [],
+      avgConversationTimeFormatted: [{
+        name: this.$t('分'),
+        alias: 'minutes',
+        value: []
+      }, {
+        name: this.$t('秒'),
+        alias: 'seconds',
+        value: []
+      }],
+      columnsEfficiency: [{
+        title: this.$t('排名'),
+        dataIndex: 'pm',
+        scopedSlots: { customRender: 'pm' },
+        align: 'center'
+      }, {
+        title: this.$t('客服'),
+        dataIndex: 'nickName',
+        align: 'center'
+      }, {
+        title: this.$t('会话量'),
+        dataIndex: 'conversationNumber',
+        align: 'center'
+      }, {
+        title: this.$t('客服消息数'),
+        dataIndex: 'messageCount',
+        align: 'center'
+      }, {
+        title: this.$t('会话总时长'),
+        dataIndex: 'conversationTime',
+        align: 'center'
+      }],
+      efficienciesRanking: [],
+      satisfactRate: null,
+      firstReplyAverageTimeFormatted: [{
+        name: this.$t('分'),
+        alias: 'minutes',
+        value: []
+      }, {
+        name: this.$t('秒'),
+        alias: 'seconds',
+        value: []
+      }],
+      averageQueueTimeFormatted: [{
+        name: this.$t('分'),
+        alias: 'minutes',
+        value: []
+      }, {
+        name: this.$t('秒'),
+        alias: 'seconds',
+        value: []
+      }],
+      columnService: [{
+        title: this.$t('排名'),
+        dataIndex: 'pm',
+        scopedSlots: { customRender: 'pm' },
+        align: 'center'
+      }, {
+        title: this.$t('客服'),
+        dataIndex: 'nickName',
+        align: 'center'
+      }, {
+        title: this.$t('满意率'),
+        dataIndex: 'satisfyRate',
+        align: 'center'
+      }, {
+        title: this.$t('总会话量'),
+        dataIndex: 'conversationNumber',
+        align: 'center'
+      }, {
+        title: this.$t('总评价量'),
+        dataIndex: 'evaluationNumber',
+        align: 'center'
+      }, {
+        title: this.$t('评价率'),
+        dataIndex: 'commentRate',
+        align: 'center'
+      }],
+      qualityRankings: [],
+      conversationNumber: [],
+      dataList: [],
+      windowHeight: document.documentElement.clientHeight,
+      busyList: [{
+        value: 0,
+        label: this.$t('就绪')
+      }, {
+        value: 1,
+        label: this.$t('离开')
+      }, {
+        value: 3,
+        label: this.$t('登出')
+      }],
+      timeLoaddata: null,
+      initNum: 0,
+      monitor: {}
+    }
+  },
+  activated () {
+    if (this.initNum > 1) {
+      this.getInit()
+      this.changeTime()
+      this.changePageCurrent()
+    }
+  },
+  // 销毁循环
+  deactivated () {
+    clearInterval(this.timeid)
+    clearTimeout(this.timeLoaddata)
+    window.removeEventListener('resize', this.fn)
+  },
+  mounted () {
+    this.getBaseList()
+    this.getInit()
+    this.changeTime()
+    this.fn = this.resizeHandler()
+    this.$nextTick(() => {
+      this.fn()
+      window.addEventListener('resize', this.fn)
+    })
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+  },
+  methods: {
+    getInit () {
+      this.axios({
+        url: '/monitor/base/getConfig'
+      }).then(res => {
+        if (res.code === 0) {
+          const result = res.result
+          if (result.monitorLogo) {
+            this.heardImg = `${this.$store.state.env.VUE_APP_API_BASE_URL}/admin/api/download/?filePath=/${result.monitorLogo.filePath}`
+          }
+          this.monitor = {
+            title: result.monitorMacroSurveillanceTitle,
+            enable: result.monitorMacroSurveillanceEnable,
+            help: result.monitorMacroSurveillanceHelp,
+            refresh: result.monitorMacroSurveillanceRefresh,
+            technical: result.monitorTechnicalSupport
+          }
+          if (res.result.monitorMacroSurveillanceEnable) {
+            const data = todayData().result.data
+            this.changeData(data)
+          } else {
+            this.loaddata()
+          }
+        }
+      })
+    },
+    getBaseList () {
+      this.axios({
+        url: '/chat/setting/base',
+        data: { action: 'get' }
+      }).then(res => {
+        this.settingControl = res.result.info
+        if (this.settingControl.busyEnable) {
+          const arr = JSON.parse(this.settingControl.furtherStates)
+          this.busyList = [...this.busyList, ...arr]
+        } else {
+          this.busyList = [...this.busyList, { alias: 2, label: this.$t('示忙') }]
+        }
+        this.busyList.forEach(item => {
+          item.name = item.label
+          item.alias = item.value
+        })
+      })
+    },
+    changeTime () {
+      this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      this.timeid = setInterval(() => {
+        this.nowTime = this.moment().format('YYYY-MM-DD HH:mm:ss')
+      }, 1000)
+    },
+    changeLoaddataTime () {
+      this.timeLoaddata = setTimeout(() => {
+        this.loaddata()
+      }, (this.monitor.refresh || 5) * 1000)
+    },
+    // 请求接口数据
+    loaddata () {
+      const timeData = []
+      for (let i = 0; i < 24; i++) {
+        timeData.push(`${i}:00`)
+      }
+      this.chartsOptions.charts_area.xAxis[0].data = timeData
+      this.axios({
+        url: 'chat/customerReport/macroSurveillance',
+        timeout: 5 * 60 * 1000
+      }).then(res => {
+        this.initNum++
+        this.changeData(res.result)
+      })
+    },
+    changeData (result) {
+      result.efficienciesRanking.forEach((item, index) => { item.pm = index + 1 })
+      this.efficienciesRanking = result.efficienciesRanking
+      result.qualityRankings.forEach((item, index) => { item.pm = index + 1 })
+      this.qualityRankings = result.qualityRankings
+      const arr = ['currentConversationNumber', 'currentQueueNumber', 'conversationNumber']
+      arr.forEach(item => {
+        this[item] = result[item].toString().split('')
+      })
+      const arrAlias = ['avgConversationTimeFormatted', 'firstReplyAverageTimeFormatted', 'averageQueueTimeFormatted']
+      arrAlias.forEach(item => {
+        this[item].forEach(itemAlias => {
+          itemAlias.value = result[item][itemAlias.alias].toString().split('')
+        })
+      })
+
+      // 在线客服
+      this.busyList.forEach(item => {
+        const obj = result.serviceStatus.find(itemStatus => itemStatus.status === item.alias)
+        if (obj) {
+          item.value = obj.sum
+        } else {
+          item.value = 0
+        }
+      })
+      this.chartsOptions.charts_pieHollow.series[0].data = this.busyList
+
+      // 接通率赋值
+      const connectionRate = parseFloat(result.connectionRate.replace('%', ''))
+      this.chartsOptions.charts_connectRate.series[0].data[0].value = connectionRate
+      this.chartsOptions.charts_connectRate.series[0].data[1].value = 100 - connectionRate
+
+      // 参评率赋值
+      const evaluationRate = parseFloat(result.evaluationRate.replace('%', ''))
+      this.chartsOptions.charts_partRate.series[0].data[0].value = evaluationRate
+      this.chartsOptions.charts_partRate.series[0].data[1].value = 100 - evaluationRate
+
+      // 在线满意率赋值
+      const satisfactionRate = parseFloat(result.satisfactionRate.replace('%', ''))
+      this.chartsOptions.charts_satisfactRate.series[0].data[0].value = satisfactionRate
+      this.chartsOptions.charts_satisfactRate.series[1].data[0].value = 100 - satisfactionRate
+
+      // 今日会话分布
+      // 会话总数
+      this.chartsOptions.charts_area.series[0].data = result.conversations
+      // 已接入会话数
+      this.chartsOptions.charts_area.series[1].data = result.connecteNumbers
+      // 未接入会话数
+      this.chartsOptions.charts_area.series[2].data = result.unConnecteNumbers
+      // 排队数
+      this.chartsOptions.charts_area.series[3].data = result.waitNumbers
+
+      // 地图参数
+      this.chartsOptions.charts_map = {
+        visualMap: {
+          show: true,
+          showLabel: true,
+          seriesIndex: [0],
+          textStyle: {
+            color: '#ffffff'
+          },
+          pieces: [{
+            gte: 1000,
+            label: '>= 1000',
+            color: '#151D61'
+          }, {
+            gte: 500,
+            lt: 999,
+            label: '500 - 999',
+            color: '#1E2A7F'
+          }, {
+            gte: 100,
+            lt: 499,
+            label: '100 - 499',
+            color: '#28389A'
+          }, {
+            gte: 10,
+            lt: 99,
+            label: '10 - 99',
+            color: '#2E43B1'
+          }, {
+            lt: 10,
+            label: '<10',
+            color: '#3955D3'
+          }]
+        },
+        geo: {
+          map: 'china',
+          zoom: 1.2,
+          label: {
+            emphasis: {
+              show: false
+            }
+          },
+          itemStyle: {
+            normal: {
+              borderColor: 'rgba(0, 0, 0, 0.2)'
+            },
+            emphasis: {
+              color: '#fff',
+              areaColor: '#002689',
+              shadowOffsetX: 0,
+              shadowOffsetY: 0,
+              borderWidth: 0
+            }
+          }
+        },
+        series: [{
+          name: '突发事件',
+          type: 'map',
+          geoIndex: 0,
+          data: result.areasFormatted
+        }, {
+          type: 'effectScatter',
+          coordinateSystem: 'geo',
+          zlevel: 2,
+          rippleEffect: {
+            brushType: 'stroke'
+          },
+          symbol: 'circle',
+          symbolSize: 12,
+          itemStyle: {
+            normal: {
+              color: '#FF2994' // 标志颜色
+            }
+          },
+          data: result.conversationLocation
+        }]
+      }
+      echarts.registerMap('china', china)
+      this.pieHollow = echarts.init(this.$refs.charts_pieHollow)
+      const connectRate = this.chartsOptions.charts_connectRate
+      const partRate = this.chartsOptions.charts_partRate
+      const satisfactRate = this.chartsOptions.charts_satisfactRate
+      connectRate.title.text = result.connectionRate
+      partRate.title.text = result.evaluationRate
+      satisfactRate.graphic.elements[0].style.text = result.satisfactionRate
+      this.drowerpic()
+      clearTimeout(this.timeLoaddata)
+      if (!this.monitor.enable) {
+        this.changeLoaddataTime()
+      }
+    },
+    // 渲染图表
+    drowerpic () {
+      this.pieHollow.setOption(this.chartsOptions.charts_pieHollow, true)
+      this.satisfactRate = echarts.init(this.$refs.charts_satisfactRate)
+      this.satisfactRate.setOption(this.chartsOptions.charts_satisfactRate, true)
+      this.chartArea = echarts.init(this.$refs.charts_area)
+      this.chartArea.setOption(this.chartsOptions.charts_area, true)
+      // 客服服务分布图
+      this.chartsMap = echarts.init(this.$refs.charts_map)
+      this.chartsMap.setOption(this.chartsOptions.charts_map, true)
+      // 接通率
+      this.chartsConnectRate = echarts.init(this.$refs.charts_connectRate)
+      this.chartsConnectRate.setOption(this.chartsOptions.charts_connectRate, true)
+      // 参评率
+      this.chartsPartRate = echarts.init(this.$refs.charts_partRate)
+      this.chartsPartRate.setOption(this.chartsOptions.charts_partRate, true)
+    },
+    // 处理页面大小改变
+    resizeHandler () {
+      let timer
+      return () => {
+        if (timer) window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          if (this.chartArea) { this.chartArea.resize() }
+          if (this.pieHollow) { this.pieHollow.resize() }
+          if (this.satisfactRate) { this.satisfactRate.resize() }
+          if (this.chartsMap) { this.chartsMap.resize() }
+          if (this.chartsConnectRate) { this.chartsConnectRate.resize() }
+          if (this.chartsPartRate) { this.chartsPartRate.resize() }
+        }, 500)
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+// 头部
+.toHead {
+  margin-bottom: 0.04rem;
+}
+.glo-row {
+  flex-direction: row;
+}
+
+.toFirBoxBody {
+  padding: 0.06rem 3% 0.25rem 3%;
+  display: flex;
+  flex-direction: column;
+}
+.toTableBox::-webkit-scrollbar {
+  display: none;
+}
+.toTableBox {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+// 左部
+.toPieHollow {
+  width: 100%;
+  height: 1.1rem;
+  margin: 0.15rem 0 0.06rem 0;
+}
+.toLeftMar {
+  margin-right: 3%;
+}
+.toLeftText {
+  margin: 0.13rem 0.02rem 0 0;
+}
+.toLeftAverage {
+  margin: 0.2rem 0 0.15rem 0;
+}
+.toLeftEfficiency {
+  margin-bottom: 0.12rem;
+}
+// 中间部分
+.toCenBox {
+  padding: 0 0.08rem;
+}
+.toCenConver {
+  margin-bottom: 0.01rem;
+}
+.dialogNumListClass {
+  padding: 0.05rem 0 0.1rem 0;
+}
+.toCenRateBox {
+  margin: 0 16% 0 3%;
+}
+.toCenRate {
+  height: 0.45rem;
+  line-height: 0.45rem;
+}
+.toCenConnect {
+  margin-right: 0.05rem;
+}
+.toCenChart {
+  width: 0.45rem;
+  height: 0.45rem;
+}
+.toCenPart {
+  margin: 0 0.05rem 0 0.1rem;
+}
+.toCenText {
+  padding: 0.14rem 0 0.05rem 0;
+}
+.toCenArea {
+  padding: 0.05rem 0.012rem;
+}
+// 右部
+.toRightCoo {
+  width: 100%;
+  height: 1.1rem;
+  margin: 0.12rem 0 0.06rem 0;
+}
+.toRightFirstSound {
+  margin: 0.1rem 0.01rem 0 0;
+}
+.toRightLineup {
+  margin: 0.09rem 0 0.03rem 0;
+}
+
+.flex-1 {
+  flex: 1;
+}
+</style>

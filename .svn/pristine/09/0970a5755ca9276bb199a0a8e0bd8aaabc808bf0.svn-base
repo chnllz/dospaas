@@ -1,0 +1,232 @@
+<template>
+  <a-modal :title="$t('示忙状态设置')" :destroyOnClose="true" :visible="visible" @cancel="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-form-item>
+          <span slot="label">
+            {{ $t('启动细分状态') }}
+            <a-tooltip
+              :title="
+                $t(
+                  '开启后，客服可选择示忙细分状态，对应的细分状态项会在数据报表及监控中体现。设置会立即生效，建议在非工作时间操作。'
+                )
+              "
+            >
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-switch
+            v-decorator="[
+              'mailBusyEnable',
+              {
+                initialValue: mailBusyEnable,
+                valuePropName: 'checked'
+              }
+            ]"
+            @change="(e) => (mailBusyEnable = e)"
+          />
+        </a-form-item>
+        <a-form-item v-if="mailBusyEnable">
+          <span slot="label">
+            {{ $t('细分状态') }}
+            <a-tooltip :title="$t('至少勾选1个细分状态，状态文案必填，输入范围2-6个字符')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <draggable v-model="busyList" animation="200" handle=".handle" @start="drag = true" @end="drag = false">
+            <a-row v-for="(element, key) in busyList" :key="key" :gutter="8" type="flex">
+              <a-col flex="30px" class="handle">
+                <span style="display: inline-block">
+                  <a-icon type="drag" />
+                </span>
+              </a-col>
+              <a-col flex="30px">
+                <a-form-item>
+                  <a-checkbox
+                    :value="element.value"
+                    :checked="element.check"
+                    @change="
+                      (e) => {
+                        element.check = e.target.checked
+                        if (element.check) {
+                          busyValue.push(element.value)
+                        } else {
+                          busyValue = busyValue.filter((item) => item !== element.value)
+                        }
+                        form.setFieldsValue({
+                          mailFurtherStates: busyValue.join(',')
+                        })
+                      }
+                    "
+                  ></a-checkbox>
+                </a-form-item>
+              </a-col>
+              <a-col flex="140px">
+                <a-form-item
+                  :validate-status="element.status ? element.status : 'success'"
+                  :help="element.msg ? element.msg : ''"
+                >
+                  <a-input
+                    v-model="element.label"
+                    @change="
+                      (e) => {
+                        if (!e.target.value) {
+                          $set(element, 'status', 'error')
+                          $set(element, 'msg', $t('请输入细分状态名称'))
+                        } else {
+                          if (e.target.value.length < 2) {
+                            $set(element, 'status', 'error')
+                            $set(element, 'msg', $t('请输入至少两个字符'))
+                          } else if (e.target.value.length > 6) {
+                            $set(element, 'status', 'error')
+                            $set(element, 'msg', $t('请输入少于六个字符'))
+                          } else {
+                            $set(element, 'status', undefined)
+                            $set(element, 'msg', undefined)
+                          }
+                        }
+                      }
+                    "
+                  />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </draggable>
+          <a-input
+            v-show="false"
+            v-decorator="[
+              'mailFurtherStates',
+              {
+                initialValue: busyValue.length ? busyValue.join(',') : '',
+                rules: [{ required: true, message: $t('请选择细分状态') }]
+              }
+            ]"
+          />
+        </a-form-item>
+      </a-form>
+    </a-spin>
+    <a-space slot="footer">
+      <a-button type="primary" :loading="loading" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+    </a-space>
+  </a-modal>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    draggable: () => import('vuedraggable')
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      config: {},
+      data: {},
+      busyList: [],
+      form: this.$form.createForm(this),
+      busyValue: [],
+      mailBusyEnable: false
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.loading = true
+      this.busyList = [{
+        value: 11,
+        label: this.$t('就餐'),
+        check: false
+      }, {
+        value: 12,
+        label: this.$t('会议'),
+        check: false
+      }, {
+        value: 13,
+        label: this.$t('培训'),
+        check: false
+      }, {
+        value: 14,
+        label: this.$t('休息'),
+        check: false
+      }, {
+        value: 15,
+        label: this.$t('洗手间'),
+        check: false
+      }, {
+        value: 16,
+        label: this.$t('其他'),
+        check: false
+      }]
+      this.busyValue = []
+      this.axios({
+        url: '/admin/index/init',
+        data: {
+          redirectPath: ''
+        }
+      }).then(res => {
+        this.loading = false
+        this.mailBusyEnable = res.result.setting.mailBusyEnable
+        if (res.result.setting.mailFurtherStates) {
+          this.busyList = JSON.parse(res.result.setting.mailFurtherStates)
+          this.busyValue = this.busyList.map(item => {
+            if (item.check) {
+              return item.value
+            }
+          }).filter(item => item)
+        }
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((err, values) => {
+        if (!err) {
+          this.busyList.forEach((item, index) => {
+            if (!item.label) {
+              this.$set(item, 'status', 'error')
+              this.$set(item, 'msg', this.$t('请输入细分状态名称'))
+            } else {
+              if (item.label.length < 2) {
+                this.$set(item, 'status', 'error')
+                this.$set(item, 'msg', this.$t('请输入至少两个字符'))
+              } else if (item.label.length > 6) {
+                this.$set(item, 'status', 'error')
+                this.$set(item, 'msg', this.$t('请输入少于六个字符'))
+              } else {
+                this.$set(item, 'status', undefined)
+                this.$set(item, 'msg', undefined)
+              }
+            }
+          })
+          if (this.busyList.some(item => item.status === 'error')) {
+            return
+          }
+          values.mailFurtherStates = JSON.stringify(this.busyList)
+          values.busyList = undefined
+          this.loading = true
+          this.axios({
+            url: '/admin/index/setting',
+            data: { action: 'submit', adminCommonSetting: values }
+          }).then(res => {
+            this.loading = false
+            if (res.code === 0) {
+              this.$emit('ok')
+              this.visible = false
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

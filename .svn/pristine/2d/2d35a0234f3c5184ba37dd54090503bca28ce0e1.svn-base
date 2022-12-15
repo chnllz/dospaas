@@ -1,0 +1,102 @@
+<template>
+  <code-mirror
+    ref="mycode"
+    class="mycode"
+    :style="codeStyle"
+    :value="codeValue"
+    :options="cmOptions"
+    @ready="setValue"
+  ></code-mirror>
+</template>
+<script>
+import { codemirror as CodeMirror } from 'vue-codemirror'
+import 'codemirror/theme/ambiance.css'
+import 'codemirror/theme/monokai.css'
+import 'codemirror/lib/codemirror.css'
+import 'codemirror/addon/hint/show-hint.css'
+require('./mymodel/mymodel')
+require('codemirror/mode/javascript/javascript')
+require('codemirror/lib/codemirror')
+require('codemirror/addon/hint/show-hint')
+require('codemirror/mode/xml/xml')
+require('codemirror/mode/sql/sql')
+require('codemirror/mode/htmlmixed/htmlmixed')
+require('codemirror/addon/edit/matchbrackets')
+require('codemirror/mode/python/python')
+require('codemirror/addon/fold/foldcode')
+require('codemirror/addon/fold/foldgutter')
+require('codemirror/addon/fold/brace-fold')
+require('codemirror/addon/fold/xml-fold')
+require('codemirror/addon/fold/indent-fold')
+require('codemirror/addon/fold/markdown-fold')
+require('codemirror/addon/fold/comment-fold')
+require('codemirror/mode/groovy/groovy')
+export default {
+  components: {
+    CodeMirror
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    }
+  },
+  data () {
+    return {
+      codeStyle: {
+        height: '100%',
+        fontSize: '14px',
+        fontWeight: '600',
+        color: 'rgb(95, 97, 97)',
+        lineHeight: '20px',
+        background: '#FFFFFF',
+        padding: 0,
+        border: '1px dashed #a9a7a7'
+      },
+      // 高亮代码
+      codeValue: '',
+      cmOptions: {
+        value: '',
+        styleActiveLine: true,
+        lineNumbers: true,
+        lineWrapping: 'wrap',
+        foldGutter: true,
+        mode: 'javascript',
+        // theme: 'monokai',
+        ukeys: '',
+        hintOptions: {
+          // 当匹配只有一项的时候是否自动补全
+          completeSingle: true
+        },
+        // keyMap: 'sublime',
+        matchBrackets: true, // 括号匹配
+        readOnly: false
+      },
+      form: this.$form.createForm(this)
+    }
+  },
+  watch: {
+    params (val) {
+      this.setValue()
+    }
+  },
+  methods: {
+    // 解析
+    getValue () {
+      return this.$refs.mycode.codemirror.getValue()
+    },
+    // 默认赋值
+    setValue () {
+      this.$refs.mycode.codemirror.setValue(this.params.value)
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.mycode /deep/ .CodeMirror {
+  height: 100%;
+}
+</style>

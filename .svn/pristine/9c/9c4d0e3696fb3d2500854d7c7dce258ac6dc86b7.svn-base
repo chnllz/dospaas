@@ -1,0 +1,25 @@
+<template>
+  <div class="page">
+    <a-form-design
+      ref="kFormDesign"
+      :fieldColumns="[]"
+      :myTemplate="cardTemplate"
+      :formdata="{}"
+      :setting="{}"
+    ></a-form-design>
+  </div>
+</template>
+
+<script>
+import Vue from 'vue'
+import AFormDesign from '@/views/admin/AppFormDesign/packages/index'
+Vue.use(AFormDesign)
+export default {
+  data () {
+    return {
+      cardTemplate: []
+
+    }
+  }
+}
+</script>

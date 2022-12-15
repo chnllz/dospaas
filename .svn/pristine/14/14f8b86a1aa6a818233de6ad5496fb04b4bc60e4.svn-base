@@ -1,0 +1,176 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="700" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol" :label="$t('字段规则')">
+          <a-select v-model="allRule" @change="handleRule">
+            <a-select-option value="inherit">{{ $t('继承') }}</a-select-option>
+            <a-select-option value="allow">{{ $t('允许') }}</a-select-option>
+            <a-select-option value="readonly">{{ $t('只读') }}</a-select-option>
+            <a-select-option value="hidden">{{ $t('隐藏') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-table
+          v-if="tableShow"
+          ref="table"
+          rowKey="alias"
+          :columns="columns"
+          :dataSource="fieldPrivData"
+          size="small"
+          :pagination="false"
+        >
+          <template slot="rule" slot-scope="text, record">
+            <a-select v-model="record.rule" :defaultValue="record.rule" style="width: 70px" size="small">
+              <a-select-option value="inherit">{{ $t('继承') }}</a-select-option>
+              <a-select-option value="allow">{{ $t('允许') }}</a-select-option>
+              <a-select-option value="readonly">{{ $t('只读') }}</a-select-option>
+              <a-select-option value="hidden">{{ $t('隐藏') }}</a-select-option>
+            </a-select>
+          </template>
+          <template slot="name" slot-scope="text">
+            <span>{{ $t(text) }}</span>
+          </template>
+          <div slot="usePermissions" slot-scope="text, record, index">
+            <a @click="handleEdit(record, index)">
+              <a-badge v-if="text && text.length > 0" status="success" :text="$t('设置')" />
+              <a-badge v-else status="default" :text="$t('设置')" />
+            </a>
+          </div>
+        </a-table>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <!-- 授权 -->
+    <priv-visit-form ref="privVisitForm" @func="getData" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: { PrivVisitForm: () => import('./PrivVisitForm') },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 3 },
+      wrapperCol: { span: 21 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      // 表头
+      columns: [{
+        title: this.$t('系统名称'),
+        dataIndex: 'alias'
+      }, {
+        title: this.$t('显示名称'),
+        dataIndex: 'name',
+        scopedSlots: { customRender: 'name' }
+      }, {
+        title: this.$t('字段规则'),
+        dataIndex: 'rule',
+        scopedSlots: { customRender: 'rule' }
+      }, {
+        title: this.$t('权限'),
+        dataIndex: 'usePermissions',
+        width: 100,
+        scopedSlots: { customRender: 'usePermissions' }
+      }],
+      fieldPrivData: [],
+      actionOption: {
+        inherit: this.$t('继承'),
+        allow: this.$t('允许'),
+        readonly: this.$t('只读'),
+        hidden: this.$t('隐藏')
+      },
+      allRule: 'inherit',
+      data: [],
+      tableShow: false
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.data = config.record
+      this.recordIndex = config.index
+      this.fieldPrivData = this.data.fieldPermissions || []
+      this.tableShow = false
+      if (this.config.page === 'workflowForm') {
+        this.allRule = 'readonly'
+      }
+      this.axios({
+        url: `/admin/userTable/tableFields?tableId=${typeof config.tableId === 'string' ? config.tableId : config.tableId[1]}`
+      }).then((res) => {
+        this.loading = false
+        this.tableShow = true
+        const newFieldData = []
+        for (var kk in this.fieldPrivData) {
+          newFieldData[this.fieldPrivData[kk].alias] = this.fieldPrivData[kk]
+        }
+        const fieldPermissions = []
+        for (var k in res.result) {
+          fieldPermissions.push({
+            id: res.result[k].id,
+            alias: res.result[k].alias,
+            name: res.result[k].name,
+            usePermissions: newFieldData[res.result[k].alias] ? newFieldData[res.result[k].alias].usePermissions : [],
+            rule: newFieldData[res.result[k].alias] ? newFieldData[res.result[k].alias].rule : 'inherit'
+          })
+        }
+        this.fieldPrivData = fieldPermissions
+      })
+    },
+    onCellChange (key, dataIndex, value) {
+      const newData = [...this.fieldPrivData]
+      const target = newData.find(item => item.id === key)
+      if (target) {
+        target[dataIndex] = value
+        this.fieldPrivData = newData
+      }
+    },
+    handleEdit (record, index) {
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: this.$t('设置操作权限'),
+        record: record,
+        index: index,
+        key: 'fieldPermissions',
+        selectType: 'radio',
+        privArr: {
+          inherit: this.$t('继承'),
+          allow: this.$t('允许'),
+          readonly: this.$t('只读'),
+          hidden: this.$t('隐藏')
+        },
+        defaultpriv: 'inherit'
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.data = Object.assign(this.data, { fieldPermissions: this.fieldPrivData || [] })
+          this.$emit('func', this.data, this.recordIndex)
+          this.visible = false
+          this.$message.success(this.$t('操作成功'))
+        }
+      })
+    },
+    handleRule (value) {
+      const len = this.fieldPrivData.length
+      const arr = this.fieldPrivData
+      for (let i = 0; i < len; i++) {
+        arr[i].rule = value
+      }
+      this.fieldPrivData = arr
+    },
+    getData (usePermissions, index) {
+      const item = this.fieldPrivData[index]
+      item.usePermissions = usePermissions
+      this.fieldPrivData.splice(index, 1, item)
+    }
+  }
+}
+</script>

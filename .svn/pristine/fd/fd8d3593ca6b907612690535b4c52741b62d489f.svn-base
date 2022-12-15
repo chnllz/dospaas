@@ -1,0 +1,240 @@
+<template>
+  <a-drawer
+    :destroyOnClose="true"
+    :title="$t('数据联动设置')"
+    :width="600"
+    :visible="visible"
+    @close="visible = !visible"
+  >
+    <a-spin :spinning="loading">
+      <div>
+        <a-form :form="form">
+          <a-form-item
+            v-if="data.formType === 'combobox'"
+            :label="$t('联动模式')"
+            :labelCol="{ span: 3 }"
+            :wrapperCol="{ span: 21 }"
+          >
+            <a-radio-group v-model="linkModel" @change="(e) => (linkModel = e.target.value)">
+              <a-radio value="1">{{ $t('本表字段联动') }}</a-radio>
+              <a-radio value="2">{{ $t('其他表联动') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <div v-if="linkModel === '1'">
+            <a-form-item :label="$t('联动字段')">
+              <a-select
+                :placeholder="$t('请选择当前表字段')"
+                show-search
+                option-filter-prop="children"
+                :defaultValue="currentFieldCause"
+                :allowClear="true"
+                @change="changeCurrent"
+              >
+                <a-select-option v-for="item in updown" :key="item.fieldId" :value="item.alias">
+                  {{ item.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </div>
+          <div v-if="linkModel === '2'">
+            <a-form-item :label="$t('联动数据表')">
+              <a-cascader
+                :show-search="true"
+                :placeholder="$t('请选择源数据表')"
+                :defaultValue="dataSource"
+                :options="tableField"
+                @change="changeTable"
+              />
+            </a-form-item>
+            <a-form-item :label="$t('数据联动')">
+              <a-row>
+                <a-col :span="9">
+                  <a-select
+                    :placeholder="$t('请选择当前表字段')"
+                    show-search
+                    option-filter-prop="children"
+                    :defaultValue="currentFieldCause"
+                    :allowClear="true"
+                    @change="changeCurrent"
+                  >
+                    <a-select-option v-for="item in currentFieldsCause" :key="item.fieldId" :value="item.alias">
+                      {{ item.name }}
+                    </a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col :span="3">
+                  <div style="width: 100%; text-align: center">{{ $t('值等于') }}</div>
+                </a-col>
+                <a-col :span="9">
+                  <a-select
+                    :placeholder="$t('请选择联动数据表字段')"
+                    show-search
+                    option-filter-prop="children"
+                    :defaultValue="sourceFieldCause"
+                    :allowClear="true"
+                    @change="changeSource"
+                  >
+                    <a-select-option v-for="item in sourceFields" :key="item.fieldId" :value="item.alias">
+                      {{ item.name }}
+                    </a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col :span="3">
+                  <div style="width: 100%; text-align: center">{{ $t('的值时') }}</div>
+                </a-col>
+              </a-row>
+              <a-row>
+                <a-col :span="9">
+                  <a-input :placeholder="$t('当前前端名称')" :value="data.name" disabled />
+                </a-col>
+                <a-col :span="3">
+                  <div style="width: 100%; text-align: center">{{ $t('联动显示') }}</div>
+                </a-col>
+                <a-col :span="9">
+                  <a-select
+                    :placeholder="$t('请选择联动数据表字段')"
+                    show-search
+                    option-filter-prop="children"
+                    :defaultValue="sourceFieldEffect"
+                    @change="changeSourceEffect"
+                  >
+                    <a-select-option v-for="item in sourceFields" :key="item.fieldId" :value="item.alias">
+                      {{ item.name }}
+                    </a-select-option>
+                  </a-select>
+                </a-col>
+              </a-row>
+            </a-form-item>
+          </div>
+        </a-form>
+      </div>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('确定') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      loading: false,
+      visible: false,
+      form: this.$form.createForm(this),
+      data: [],
+      title: '',
+      config: {},
+      tableField: [],
+      dataSource: [],
+      currentFields: [],
+      currentFieldsCause: [],
+      updown: [],
+      linkModel: '2',
+      currentFieldsObj: {},
+      sourceFields: [],
+      sourceFieldsObj: {},
+      currentFieldCause: '',
+      sourceFieldCause: '',
+      sourceFieldEffect: ''
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.data = config.data || {}
+      this.linkModel = this.data.formType === 'combobox' ? '1' : '2'
+      this.tableField = config.tableField
+      const currentTableField = config.tableId
+      this.loading = true
+      const param = {
+        pageNo: 1,
+        pageSize: 1000,
+        sortField: 'id',
+        sortOrder: 'descend'
+      }
+      this.axios({
+        url: '/admin/field/init',
+        data: Object.assign(param, { tableId: currentTableField })
+      }).then(res => {
+        this.loading = false
+        if (res.code === 0) {
+          this.currentFields = JSON.parse(JSON.stringify(res.result.data))
+          res.result.data.forEach(item => {
+            this.currentFieldsObj[item.alias] = item
+          })
+          this.currentFieldsCause = this.currentFields
+          this.updown = this.currentFieldsCause.filter(item => item.formType === 'combobox' && item.name !== this.data.name)
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+      const setting = config.setting
+      if (setting.form && setting.form.defaultValueLink) {
+        this.currentFieldCause = setting.form.defaultValueLink.currentFieldCause
+        this.linkModel = setting.form.defaultValueLink.linkModel
+        this.dataSource = setting.form.defaultValueLink.dataSource
+        this.sourceFieldCause = setting.form.defaultValueLink.sourceFieldCause
+        this.sourceFieldEffect = setting.form.defaultValueLink.sourceFieldEffect
+        this.changeTable(this.dataSource)
+      }
+    },
+    // 选择数据表
+    changeTable (val) {
+      if (!val || val.length === 0) {
+        this.sourceFields = []
+      } else {
+        this.dataSource = val
+        const tableField = val[val.length - 1]
+        const param = {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'descend'
+        }
+        this.axios({
+          url: '/admin/field/init',
+          data: Object.assign(param, { tableId: tableField })
+        }).then(res => {
+          if (res.code === 0) {
+            this.sourceFields = JSON.parse(JSON.stringify(res.result.data))
+            res.result.data.forEach(item => {
+              this.sourceFieldsObj[item.alias] = item
+            })
+          } else {
+            this.$message.error(res.message)
+          }
+        })
+      }
+    },
+    // 选择当前字段
+    changeCurrent (val) {
+      this.currentFieldCause = val
+    },
+    changeSource (val) {
+      this.sourceFieldCause = val
+    },
+    changeSourceEffect (val) {
+      this.sourceFieldEffect = val
+    },
+    handleSubmit () {
+      const obj = {}
+      obj.currentFieldCause = this.currentFieldCause
+      if (this.linkModel === '1') {
+        obj.sourceFieldCause = ''
+        obj.sourceFieldEffect = ''
+        obj.dataSource = []
+      } else {
+        obj.sourceFieldCause = this.sourceFieldCause
+        obj.sourceFieldEffect = this.sourceFieldEffect
+        obj.dataSource = this.dataSource
+      }
+      obj.linkModel = this.linkModel
+      this.$emit('ok', obj)
+      this.visible = false
+    }
+  }
+}
+</script>

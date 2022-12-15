@@ -1,0 +1,287 @@
+<template>
+  <a-modal :title="config.title" :destroyOnClose="true" :width="900" :visible="visible" @cancel="visible = !visible">
+    <a-spin :spinning="loading">
+      <div>
+        <a-alert
+          :message="$t('系统说明')"
+          :description="description"
+          type="info"
+          show-icon
+          style="margin-bottom: 8px"
+        />
+        <a-table
+          ref="table"
+          size="small"
+          rowKey="value"
+          :columns="columns"
+          :pagination="false"
+          :dataSource="actionTab"
+          :sorter="{ field: 'id', order: 'descend' }"
+        >
+          <div slot="title">
+            <a-button @click="handleSort()">{{ $t('排序') }}</a-button>
+          </div>
+          <div slot="customName" slot-scope="text, record">
+            <a-input v-if="config.type === 'workflow'" v-model="record.customName" size="small" />
+            <span v-else>{{ text }}</span>
+          </div>
+          <div slot="help" slot-scope="text, record">
+            <a-input v-if="config.type === 'workflow'" v-model="record.help" size="small" />
+            <span v-else>{{ text }}</span>
+          </div>
+          <div slot="action" slot-scope="text, record, index">
+            <a @click="handleSearchPriv(record, index)">
+              <a-badge v-if="record.searchPriv" status="success" />
+              <a-badge v-else status="default" />
+              {{ $t('授权') }}
+            </a>
+            <a-divider type="vertical" />
+            <a @click="copyPrivShow(record)">{{ $t('复制权限给') }}</a>
+          </div>
+        </a-table>
+      </div>
+    </a-spin>
+    <drag-sort ref="dragSort" @ok="getSort" />
+    <priv-visit-form ref="privVisitForm" :params="privData" @func="getPrivs" />
+    <a-modal v-model="visibleCopy" :title="$t('复制权限给')" @ok="getCopy" @cancel="visibleCopy = !visibleCopy">
+      <div :style="{ borderBottom: '1px solid #E9E9E9', marginBottom: '8px' }">
+        <a-checkbox :indeterminate="indeterminate" :checked="checkAll" @change="onCheckAllChange">
+          {{ $t('全选') }}
+        </a-checkbox>
+      </div>
+      <a-checkbox-group v-model="copyCheck" @change="onChange">
+        <a-row :gutter="[8, 8]">
+          <a-col v-for="data in plainOptions" :key="data.value" :span="6">
+            <a-checkbox :value="data.value">{{ data.label }}</a-checkbox>
+          </a-col>
+        </a-row>
+      </a-checkbox-group>
+    </a-modal>
+    <div slot="footer">
+      <a-spin :spinning="loading">
+        <span slot="indicator"></span>
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </a-spin>
+    </div>
+  </a-modal>
+</template>
+<script>
+export default {
+  components: {
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    PrivVisitForm: () => import('./PrivVisitForm')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      visibleCopy: false,
+      description: '',
+      privData: {},
+      copyCheck: [],
+      plainOptions: [{}],
+      copyType: '',
+      indeterminate: false,
+      checkAll: false,
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 150,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '#',
+        width: 40,
+        align: 'center',
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('按钮名称'),
+        dataIndex: 'name',
+        width: 100
+      }, {
+        title: this.$t('自定义名称'),
+        dataIndex: 'customName',
+        width: 100,
+        scopedSlots: { customRender: 'customName' }
+      }, {
+        title: this.$t('自定义帮助'),
+        dataIndex: 'help',
+        scopedSlots: { customRender: 'help' }
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remark'
+      }],
+      actionTab: [{
+        name: this.$t('我的待办'),
+        value: 'my_process',
+        enable: '1',
+        customName: '',
+        remark: this.$t('{当前办理人}包含当前登录用户的变迁'),
+        help: ''
+      }, {
+        name: this.$t('我的已办'),
+        value: 'my_handle',
+        enable: '1',
+        customName: '',
+        remark: this.$t('当前登录用户办理过的变迁'),
+        help: ''
+      }, {
+        name: this.$t('我的发起'),
+        value: 'my_create',
+        enable: '1',
+        customName: '',
+        remark: this.$t('当前登录用户发起的流程'),
+        help: ''
+      }, {
+        name: this.$t('我的挂起'),
+        value: 'my_suspend',
+        enable: '1',
+        customName: '',
+        remark: this.$t('当前登录用户挂起的流程'),
+        help: ''
+      }, {
+        name: this.$t('抄送给我'),
+        value: 'my_cc',
+        enable: '1',
+        customName: '',
+        remark: this.$t('抄送给当前登录用户的流程'),
+        help: ''
+      }, {
+        name: this.$t('委托给我'),
+        value: 'my_entrust',
+        enable: '1',
+        customName: '',
+        remark: this.$t('委托给当前登录用户的流程'),
+        help: ''
+      }, {
+        name: this.$t('所有挂起'),
+        value: 'all_suspend',
+        enable: '1',
+        customName: '',
+        remark: this.$t('所有挂起的流程'),
+        help: ''
+      }, {
+        name: this.$t('所有流程'),
+        value: 'all_flow',
+        enable: '1',
+        customName: '',
+        remark: this.$t('所有流程（遵循数据窗口的条件设置）'),
+        help: ''
+      }, {
+        name: this.$t('所有待办'),
+        value: 'all_process',
+        enable: '1',
+        customName: '',
+        remark: this.$t('流程的所有待办变迁（遵循数据窗口的条件设置）'),
+        help: ''
+      }]
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.loading = true
+      this.description = (<div>
+        <div>{this.$t('1、流程筛选按钮组的“自定义名称”、“自定义帮助”是全局设置，《流程中心》依照该设置，《数据窗口》初次默认加载该设置。')}</div>
+        <div>{this.$t('2、此处的【授权】控制《流程中心》的权限机制，没有授权时，所有人都有权限使用。授权后，仅有权限的人可以使用。')}</div></div>)
+      this.axios({
+        url: '/admin/workflow/flowSetting',
+        data: { action: 'get' }
+      }).then(res => {
+        this.loading = false
+        if (res.result.actionTab) {
+          const newArray = this.actionTab.filter(item => res.result.actionTab.every(someItem => someItem.value !== item.value))
+          this.actionTab = [...res.result.actionTab, ...newArray]
+        }
+      })
+    },
+    handleSort (type) {
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        placement: 'right',
+        width: 600,
+        sortId: 'value',
+        sortData: this.actionTab
+      })
+    },
+    getSort (data) {
+      this.actionTab = data
+    },
+    copyPrivShow (record) {
+      this.copyPriv = record.searchPriv
+      this.copyCheck = []
+      this.indeterminate = false
+      this.checkAll = false
+      this.plainOptions = this.actionTab.map(item => {
+        const obj = {
+          label: item.name,
+          value: item.value
+        }
+        return obj
+      })
+      this.visibleCopy = true
+    },
+    onCheckAllChange (e) {
+      Object.assign(this, {
+        copyCheck: e.target.checked ? this.plainOptions.map(item => item.value) : [],
+        indeterminate: false,
+        checkAll: e.target.checked
+      })
+    },
+    onChange (checkedList) {
+      this.indeterminate = !!checkedList.length && checkedList.length < this.plainOptions.length
+      this.checkAll = checkedList.length === this.plainOptions.length
+    },
+    handleSearchPriv (record, index) {
+      this.privData = record
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: this.$t('授权'),
+        record: record,
+        index: index,
+        key: 'searchPriv',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    getPrivs (all, data) {
+      this.$forceUpdate()
+    },
+    getCopy () {
+      this.actionTab.forEach(item => {
+        if (this.copyCheck.includes(item.value)) {
+          item.searchPriv = this.copyPriv
+        }
+      })
+      this.visibleCopy = false
+      this.$forceUpdate()
+    },
+    handleSubmit () {
+      if (this.config.type === 'workflow') {
+        this.axios({
+          url: '/admin/workflow/flowSetting',
+          data: { actionTab: this.actionTab, action: 'post' }
+        }).then(res => {
+          if (res.code === 0) {
+            this.$message.success(res.message)
+            this.visible = false
+          } else {
+            this.$message.error(res.message)
+          }
+        })
+      } else {
+        this.$message.success(this.$t('操作成功'))
+        this.visible = false
+      }
+    }
+  }
+}
+</script>

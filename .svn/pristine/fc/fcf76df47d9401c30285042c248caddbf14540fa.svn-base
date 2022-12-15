@@ -1,0 +1,1034 @@
+<template>
+  <a-modal
+    :title="$t('组合搜索')"
+    :width="1200"
+    :closable="true"
+    :visible="visible"
+    :bodyStyle="{ height: '500px' }"
+    @cancel="
+      visible = !visible
+      $emit('save', data, newFlag)
+    "
+  >
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item>
+          <a-row v-show="!loading" type="flex" :gutter="8">
+            <a-col :span="18" style="height: 450px; overflow: auto">
+              <a-form-item>
+                {{ $t('以下条件组合方式') }}：
+                <a-select v-model="data.logic" style="width: 80px; padding-left: 10px" size="small">
+                  <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+                  <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-row v-for="(item, index) in data.searchConditions" :key="index" type="flex" align="middle" :gutter="8">
+                <a-col :span="4">
+                  <a-select
+                    style="width: 100%"
+                    show-search
+                    :placeholder="$t('请选择字段')"
+                    :value="item.alias"
+                    option-filter-prop="children"
+                    @change="
+                      (value) => {
+                        choiceField(value, item)
+                      }
+                    "
+                  >
+                    <a-select-option
+                      v-for="(fieldItem, fieldIndex) in fieldArr"
+                      :key="fieldIndex"
+                      :value="fieldItem.alias"
+                    >
+                      {{ fieldItem.name }}
+                    </a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col flex="auto">
+                  <a-row
+                    v-for="(conItem, conIndex) in item.searchCondition"
+                    :key="conIndex"
+                    type="flex"
+                    align="middle"
+                    :gutter="8"
+                  >
+                    <a-col :span="5">
+                      <a-select
+                        v-model="conItem.include"
+                        @change="
+                          (value) => {
+                            choiceInclude(value, conItem)
+                          }
+                        "
+                      >
+                        <a-select-option
+                          v-for="(includeItem, includeIndex) in item.condiArr"
+                          :key="includeIndex"
+                          :value="includeItem.enName"
+                        >
+                          {{ includeItem.cnName }}
+                        </a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col flex="auto">
+                      <template v-if="!conItem.type">
+                        <a-input
+                          v-if="
+                            item.formType === 'text' ||
+                            item.formType === 'textarea' ||
+                            item.formType === 'associated' ||
+                            item.formType === 'serialnumber'
+                          "
+                          v-model="conItem.value"
+                        />
+                        <a-input-number
+                          v-else-if="item.formType === 'number' && item.optionValue.length === 0"
+                          v-model="conItem.value"
+                          style="width: 100%"
+                        />
+                        <!-- 日期 -->
+                        <a-date-picker
+                          v-else-if="item.formType === 'datetime' && item.fieldType === 'DATETIME'"
+                          style="width: 100%"
+                          :defaultValue="conItem.value ? moment(conItem.value, 'YYYY-MM-DD HH:mm:ss') : null"
+                          :showTime="{ defaultValue: moment('00:00:00', 'HH:mm:ss') }"
+                          format="YYYY-MM-DD HH:mm:ss"
+                          @change="
+                            (dates, dateStrings) => {
+                              conItem.value = dateStrings
+                            }
+                          "
+                        ></a-date-picker>
+                        <a-date-picker
+                          v-else-if="item.formType === 'datetime' && item.fieldType === 'DATE'"
+                          style="width: 100%"
+                          :defaultValue="conItem.value ? moment(conItem.value, 'YYYY-MM-DD') : null"
+                          format="YYYY-MM-DD"
+                          @change="
+                            (dates, dateStrings) => {
+                              conItem.value = dateStrings
+                            }
+                          "
+                        ></a-date-picker>
+                        <a-time-picker
+                          v-else-if="item.formType === 'datetime' && item.fieldType === 'TIME'"
+                          style="width: 100%"
+                          :defaultValue="conItem.value ? moment(conItem.value, 'HH:mm:ss') : null"
+                          format="HH:mm:ss"
+                          @change="
+                            (dates, dateStrings) => {
+                              conItem.value = dateStrings
+                            }
+                          "
+                        ></a-time-picker>
+                        <!-- 开关 -->
+                        <a-select v-else-if="item.formType === 'switch'" v-model="conItem.value">
+                          <a-select-option :value="1">{{ item.word[0] }}</a-select-option>
+                          <a-select-option :value="0">{{ item.word[1] }}</a-select-option>
+                        </a-select>
+                        <!-- 树选择 -->
+                        <template v-else-if="item.formType === 'treeselect'">
+                          <data-picker
+                            :ref="'dataPicker' + item.alias"
+                            :name="item.alias"
+                            :allowClear="true"
+                            :parentId="
+                              item.settings && item.settings.attribute.dataSource === 'addressBook'
+                                ? 'parentNumber'
+                                : 'parentDictDataNumber'
+                            "
+                            :parameter="
+                              item.settings && item.settings.attribute.dataSource === 'addressBook'
+                                ? {}
+                                : { dictCategoryNumber: item.settings ? item.settings.form.src : '' }
+                            "
+                            displayType="tree"
+                            :url="
+                              item.settings && item.settings.attribute.dataSource === 'addressBook'
+                                ? '/admin/address/getAddressChildren'
+                                : '/admin/dict/initData'
+                            "
+                            :searchUrl="
+                              item.settings && item.settings.attribute.dataSource === 'addressBook'
+                                ? '/admin/search/addressSearch'
+                                : '/admin/search/dictSearch'
+                            "
+                            :scope="scope"
+                            :value="conItem.optionValue"
+                            :optionsConversion="
+                              (list, displayType, searchType) =>
+                                optionsConversionTreeselect(item, list, displayType, searchType)
+                            "
+                            @select="
+                              (data, options) => {
+                                conItem.value = data
+                                conItem.optionCustom = options
+                              }
+                            "
+                          />
+                        </template>
+                        <!-- 地址 -->
+                        <template v-else-if="item.formType === 'address'">
+                          <address-select
+                            :defaultValue="conItem.value"
+                            fieldType="search"
+                            :series="item.settings && item.settings.form ? item.settings.form.showSeries : ''"
+                            :display="conItem.value"
+                            @send="
+                              (display, val) => {
+                                conItem.value = val
+                              }
+                            "
+                          />
+                        </template>
+                        <template v-else-if="item.formType === 'organization'">
+                          <data-picker
+                            ref="dataPicker"
+                            :placeholder="
+                              $t(
+                                `请选择${
+                                  item.settings && item.settings.form.optionType === 'department'
+                                    ? '部门'
+                                    : item.settings && item.settings.form.optionType === 'role'
+                                    ? '角色'
+                                    : '用户'
+                                }`
+                              )
+                            "
+                            name="dataPicker"
+                            :parameter="
+                              item.settings && item.settings.form.optionType === 'user' ? { sortField: 'username' } : {}
+                            "
+                            parentId="parentDepartmentId"
+                            :displayType="
+                              item.settings && item.settings.form.optionType === 'department' ? 'tree' : 'list'
+                            "
+                            :url="
+                              item.settings && item.settings.form.optionType === 'department'
+                                ? '/admin/department/init'
+                                : item.settings && item.settings.form.optionType === 'role'
+                                ? '/admin/search/roleSearch'
+                                : '/admin/search/userSearch'
+                            "
+                            :searchUrl="
+                              item.settings && item.settings.form.optionType === 'department'
+                                ? '/admin/search/departmentSearch'
+                                : item.settings && item.settings.form.optionType === 'role'
+                                ? '/admin/search/roleSearch'
+                                : '/admin/search/userSearch'
+                            "
+                            :required="item.fieldRule !== 'hidden' && item.settings && item.settings.attribute.required"
+                            :scope="scope"
+                            :value="conItem.optionValue"
+                            :optionsConversion="
+                              (list, displayType, searchType) => optionsConversion(item, list, displayType, searchType)
+                            "
+                            @select="
+                              (data, options) => {
+                                conItem.value = data
+                                conItem.optionCustom = options
+                              }
+                            "
+                          />
+                        </template>
+                        <!-- 标签 -->
+                        <div v-else-if="item.formType === 'tag'" style="padding-top: 8px; width: 366px">
+                          <tag-data-picker
+                            ref="tagDataPicker"
+                            :placeholder="item.placeholder || $t('请选择标签')"
+                            :name="item.alias"
+                            :allowClear="false"
+                            :rnumber="item.settings ? item.settings.form.tagSetting.rnumber : []"
+                            :tagDeafultData="conItem.tagData"
+                            :value="conItem.value ? conItem.value : null"
+                            pageType="search"
+                            @select="
+                              (e) => {
+                                $set(conItem, 'value', e)
+                              }
+                            "
+                          />
+                        </div>
+                        <a-select
+                          v-else-if="
+                            item.formType === 'combobox' &&
+                            item.settings &&
+                            (item.settings.form.loadMode === 'dynamic' ||
+                              item.settings.attribute.dataSource === 'otherTable')
+                          "
+                          v-model="conItem.value"
+                          show-search
+                          option-filter-prop="children"
+                          @search="
+                            (value) => {
+                              getSelectOption(item, value)
+                            }
+                          "
+                        >
+                          <a-select-option
+                            v-for="(optionItem, optionIndex) in item.optionValue"
+                            :key="optionIndex"
+                            :value="optionItem.value"
+                          >
+                            {{ optionItem.label }}
+                          </a-select-option>
+                        </a-select>
+                        <a-select
+                          v-else-if="item.formType !== 'cascader' && item.optionValue && item.optionValue.length"
+                          v-model="conItem.value"
+                          show-search
+                          option-filter-prop="children"
+                        >
+                          <a-select-option
+                            v-for="(optionItem, optionIndex) in item.optionValue"
+                            :key="optionIndex"
+                            :value="optionItem.value"
+                          >
+                            {{ optionItem.label }}
+                          </a-select-option>
+                        </a-select>
+                        <!-- 级联选择 -->
+                        <div v-else-if="item.formType === 'cascader'">
+                          <tabs-select
+                            :defaultValue="conItem.value"
+                            :valueKey="item.settings ? item.settings.form.src : item.src || ''"
+                            action="edit"
+                            :display="conItem.display"
+                            :field="conItem"
+                            :writeBack="item.settings ? item.settings.form.writeBack : []"
+                            fieldType="search"
+                            @send="
+                              (val, alias, display) => {
+                                conItem.value = val
+                                conItem.display = display
+                              }
+                            "
+                          />
+                        </div>
+                        <div v-else>
+                          <a-input v-model="conItem.value" />
+                        </div>
+                      </template>
+                      <template v-else>
+                        <a-input type="text" disabled />
+                      </template>
+                    </a-col>
+                    <a-col flex="65px" style="display: flex; align-items: center">
+                      <a-icon
+                        :style="{ fontSize: '24px', color: '#52c41a' }"
+                        type="plus-square"
+                        theme="filled"
+                        @click="handlePlus(item, conIndex)"
+                      />
+                      <a-icon
+                        :style="{
+                          fontSize: '24px',
+                          color: item.searchCondition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                          'padding-left': '8px'
+                        }"
+                        type="minus-square"
+                        theme="filled"
+                        @click="item.searchCondition.length === 1 ? '' : handleSub(item, conIndex)"
+                      />
+                    </a-col>
+                  </a-row>
+                </a-col>
+                <a-col flex="100px">
+                  <a-select v-model="item.logic">
+                    <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+                    <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col flex="70px" style="display: flex; align-items: center">
+                  <a-icon
+                    :style="{ fontSize: '24px', color: '#52c41a' }"
+                    type="plus-square"
+                    theme="filled"
+                    @click="handleDataPlus(data.searchConditions, index)"
+                  />
+                  <a-icon
+                    :style="{
+                      fontSize: '24px',
+                      color: data.searchConditions.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                      'padding-left': '8px'
+                    }"
+                    type="minus-square"
+                    theme="filled"
+                    @click="data.searchConditions.length === 1 ? '' : handleDataSub(data.searchConditions, index)"
+                  />
+                </a-col>
+              </a-row>
+            </a-col>
+            <a-col :span="6">
+              <a-card
+                size="small"
+                :title="$t('保存的搜索')"
+                style="width: 100%"
+                :headStyle="{ height: '30px', 'line-height': '15px' }"
+              >
+                <div class="list_box">
+                  <div
+                    v-for="(item, index) in condiList"
+                    :key="index"
+                    class="list"
+                    :class="data.id === item.id ? 'active' : ''"
+                    @click="showCondi(item, index)"
+                  >
+                    <span>{{ item.name }}</span>
+                    <a-popconfirm
+                      :title="$t('您确定要删除该项吗？')"
+                      :ok-text="$t('确定')"
+                      :cancel-text="$t('取消')"
+                      @confirm="handleDelList(item, index)"
+                    >
+                      <a-icon type="delete" class="list_icon" @click.stop />
+                    </a-popconfirm>
+                  </div>
+                </div>
+              </a-card>
+            </a-col>
+          </a-row>
+        </a-form-item>
+        <a-modal v-model="visibleN" :destroyOnClose="true" :title="$t('请输入需要保存的搜索条件名称')" @ok="hideModal">
+          <a-form-item>
+            <a-input
+              v-decorator="[
+                'name',
+                { rules: [{ required: true, message: $t('搜索条件名不能为空') }], initialValue: dataName }
+              ]"
+            />
+          </a-form-item>
+        </a-modal>
+      </a-form>
+    </a-spin>
+    <div slot="footer" class="bbar">
+      <a-row>
+        <a-col :span="12" style="text-align: left">
+          <a-button @click="reset">{{ $t('重置') }}</a-button>
+          <a-button style="margin-left: 15px" @click="handleSave">
+            <span v-if="!newFlag">{{ $t('更新搜索条件') }}</span>
+            <span v-else>{{ $t('添加搜索条件') }}</span>
+          </a-button>
+        </a-col>
+        <a-col :span="12">
+          <a-button type="primary" @click="handleSubmit">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              visible = !visible
+              $emit('save', data, newFlag)
+            "
+          >
+            {{ $t('关闭') }}
+          </a-button>
+        </a-col>
+      </a-row>
+    </div>
+  </a-modal>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    AddressSelect: () => import('@/views/admin/Field/AddressSelect'),
+    TabsSelect: () => import('@/views/admin/Field/TabsSelect'),
+    TagDataPicker: () => import('../Tag/TagDataPicker')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      visibleN: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      fields: {},
+      fieldArr: [],
+      tableId: '',
+      newFlag: true, // 新的搜索条件
+      condiObj: {},
+      tagOption: [],
+      // 初始化搜索条件
+      initData: {
+        name: '',
+        logic: 'or',
+        searchConditions: [{
+          alias: '',
+          logic: 'or',
+          formType: 'text',
+          optionValue: [],
+          condiArr: [
+            { enName: 'eq', cnName: this.$t('等于') },
+            { enName: 'ne', cnName: this.$t('不等于') }],
+          searchCondition: [{
+            include: '',
+            value: ''
+          }]
+        }]
+      },
+      // 搜索条件
+      data: {},
+      condiList: [],
+      dataName: '',
+      scope: this
+    }
+  },
+  created () {
+    this.condiObj.text = this.condiObj.textarea = this.condiObj.associated = [
+      { enName: 'eq', cnName: this.$t('等于') },
+      { enName: 'ne', cnName: this.$t('不等于') },
+      { enName: 'cn', cnName: this.$t('包含') },
+      { enName: 'nc', cnName: this.$t('不包含') },
+      { enName: 'bw', cnName: this.$t('开始于') },
+      { enName: 'ew', cnName: this.$t('结束于') },
+      { enName: 'em', cnName: this.$t('为空') },
+      { enName: 'nem', cnName: this.$t('不为空') }]
+    this.condiObj.number = this.condiObj.datetime = this.condiObj.serialnumber = [
+      { enName: 'eq', cnName: this.$t('等于') },
+      { enName: 'ne', cnName: this.$t('不等于') },
+      { enName: 'gt', cnName: this.$t('大于') },
+      { enName: 'ge', cnName: this.$t('大于等于') },
+      { enName: 'lt', cnName: this.$t('小于') },
+      { enName: 'le', cnName: this.$t('小于等于') },
+      { enName: 'em', cnName: this.$t('为空') },
+      { enName: 'nem', cnName: this.$t('不为空') }]
+    const arr = ['radio']
+    arr.forEach(item => {
+      this.condiObj[item] = [
+        { enName: 'eq', cnName: this.$t('等于') },
+        { enName: 'ne', cnName: this.$t('不等于') },
+        { enName: 'em', cnName: this.$t('为空') },
+        { enName: 'nem', cnName: this.$t('不为空') }]
+    })
+    this.condiObj.switch = [
+      { enName: 'eq', cnName: this.$t('等于') },
+      { enName: 'ne', cnName: this.$t('不等于') }
+    ]
+    const arr2 = ['cascader', 'address', 'organization', 'combobox', 'checkbox', 'treeselect', 'tag']
+    arr2.forEach(item => {
+      this.condiObj[item] = [
+        { enName: 'cn', cnName: this.$t('包含') },
+        { enName: 'nc', cnName: this.$t('不包含') },
+        { enName: 'em', cnName: this.$t('为空') },
+        { enName: 'nem', cnName: this.$t('不为空') }]
+    })
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.tableId = config.tableId
+      this.loading = true
+      this.condiList = config.customSearch.length > 0 ? config.customSearch.map(item => {
+        const obj = JSON.parse(item.setting)
+        obj.id = item.id
+        return obj
+      }) : []
+      this.newFlag = config.newFlag
+      if (config.newFlag) {
+        this.data = Object.keys(config.data).length > 0 ? config.data : JSON.parse(JSON.stringify(this.initData))
+      } else {
+        this.data = config.data
+        this.condiList.forEach((item, index) => {
+          if (this.data.id === item.id) {
+            this.condiListIndex = index
+          }
+        })
+      }
+      // 搜索列表
+      this.axios({
+        url: '/admin/field/init',
+        data: {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'ascend',
+          tableId: this.tableId
+        }
+      }).then(res => {
+        res.result.data.forEach(item => {
+          this.fields[item.alias] = item
+        })
+        this.condiList.forEach(item => {
+          this.handleInit(item.searchConditions)
+        })
+        if (this.newFlag) {
+          this.handleInit(this.data.searchConditions)
+        }
+        this.loading = false
+        this.fieldArr = res.result.data.filter(item => {
+          return ['text', 'textarea', 'radio', 'checkbox', 'combobox', 'number', 'datetime', 'cascader', 'organization', 'associated', 'switch', 'address', 'treeselect', 'serialnumber', 'tag'].indexOf(item.formType) !== -1
+        })
+      })
+    },
+    getTagOption (rnumber) {
+      this.axios({
+        url: '/admin/tag/tagOption',
+        data: { tagCategoryNumber: rnumber }
+      }).then(res => {
+        this.tagOption = res.result.option.map(item => {
+          const obj = item
+          if (!item.children.length) {
+            item.disabled = true
+          }
+          return obj
+        })
+        // 给对应的tagData赋值
+        this.data.searchConditions.forEach(conItem => {
+          conItem.searchCondition.forEach(ssItem => {
+            ssItem.tagData = []
+            this.tagOption.forEach(tagItem => {
+              tagItem.children.forEach(childItem => {
+                if (ssItem.value && ssItem.value.includes(childItem.value)) {
+                  ssItem.tagData.push({
+                    category: tagItem.value,
+                    name: childItem.label,
+                    number: childItem.value,
+                    selectType: tagItem.selectType,
+                    tagType: tagItem.tagType
+                  })
+                }
+              })
+            })
+          })
+        })
+      })
+    },
+    onLoadData (treeNode, item) {
+      const { value } = treeNode.dataRef
+      if (item.settings.attribute.dataSource === 'addressBook') {
+        return new Promise((resolve) => {
+          this.axios({
+            url: '/admin/address/getAddressChildren',
+            data: { parentNumber: value }
+          }).then(res => {
+            item.option.forEach(item => {
+              if (item.value === value && !item.children) {
+                const arr = []
+                res.result.forEach(arrItem => {
+                  const obj = { label: arrItem.name, value: arrItem.number }
+                  arr.push(obj)
+                })
+                this.$set(item, 'children', arr)
+              } else if (item.children) {
+                item.children.forEach(childItem => {
+                  if (childItem.value === value && !childItem.children) {
+                    const arr = []
+                    res.result.forEach(arrItem => {
+                      const obj = { label: arrItem.name, value: arrItem.number }
+                      arr.push(obj)
+                    })
+                    this.$set(childItem, 'children', arr)
+                  } else if (childItem.children) {
+                    childItem.children.forEach(childrenItem => {
+                      if (childrenItem.value === value && !childrenItem.children) {
+                        const arr = []
+                        res.result.forEach(arrItem => {
+                          const obj = { label: arrItem.name, value: arrItem.number, isLeaf: true }
+                          arr.push(obj)
+                        })
+                        this.$set(childrenItem, 'children', arr)
+                      }
+                    })
+                  }
+                })
+              }
+            })
+          })
+          resolve()
+        })
+      } else {
+        return new Promise((resolve) => {
+          this.axios({
+            url: '/admin/userTable/getFieldForm',
+            data: { fieldId: this.fields[item.alias].fieldId, value: value }
+          }).then(res => {
+            this.$set(item, 'option', res.result.option)
+          })
+          resolve()
+        })
+      }
+    },
+    // 初始化函数
+    handleInit (searchConditions) {
+      searchConditions.forEach(item1 => {
+        if (item1.alias) {
+          item1.formType = this.fields[item1.alias].formType
+          item1.settings = JSON.parse(this.fields[item1.alias].setting)
+          item1.field = this.fields[item1.alias]
+          if (['radio', 'checkbox', 'combobox'].indexOf(item1.formType) !== -1) {
+            if (item1.settings.attribute.dataSource === 'custom') {
+              item1.optionValue = item1.settings.form.customDataList.map(item => {
+                const obj = {
+                  value: item.value,
+                  label: item.value
+                }
+                return obj
+              })
+            } else if (item1.formType === 'combobox' && item1.settings.form.loadMode === 'dynamic') {
+              item1.optionValue = []
+            } else {
+              this.getOption(item1)
+            }
+          } else if (item1.formType === 'tag') {
+            if (this.tagOption.length === 0) {
+              this.getTagOption(item1.settings.form.tagSetting.rnumber)
+            }
+          } else if (['organization', 'treeselect'].includes(item1.formType)) {
+            item1.searchCondition.forEach(condItem => {
+              condItem.optionValue = condItem.optionCustom
+            })
+          }
+          item1.condiArr = this.condiObj[item1.formType]
+          item1.fieldType = this.fields[item1.alias].fieldType
+        } else {
+          item1.optionValue = []
+        }
+      })
+    },
+    getOption (item) {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: { dictCategoryNumber: item.settings.form.src }
+      }).then(res => {
+        this.$set(item, 'optionValue', res.result)
+      })
+    },
+    getSelectOption (item, value) {
+      if (item.settings.form.loadMode === 'dynamic') {
+        clearTimeout(this.selectTimeout)
+        this.selectTimeout = setTimeout(() => {
+          const src = item.settings.form.src
+          if (value) {
+            this.axios({
+              url: '/admin/search/dictSearch',
+              data: {
+                dictCategoryNumber: src,
+                searchName: value
+              }
+            }).then(res => {
+              item.optionValue = res.result
+            })
+          } else {
+            item.optionValue = []
+          }
+        }, 300)
+      } else if (item.settings.attribute.dataSource === 'otherTable') {
+        clearTimeout(this.selectTimeout)
+        this.selectTimeout = setTimeout(() => {
+          const form = item.settings.form
+          if (value) {
+            this.axios({
+              url: '/admin/userTable/getAnyTableData',
+              data: {
+                tableId: form.otherTable[1],
+                fieldName: form.otherTableField,
+                condition: value
+              }
+            }).then(res => {
+              item.optionValue = res.result
+            })
+          } else {
+            item.optionValue = []
+          }
+        }, 300)
+      }
+    },
+    // 选择字段
+    choiceField (value, item) {
+      const field = this.fields[value]
+      item.formType = field.formType
+      item.alias = field.alias
+      item.fieldType = field.fieldType
+      item.fieldId = field.fieldId
+      item.settings = JSON.parse(field.setting)
+      const formType = field.formType
+      item.condiArr = this.condiObj[formType]
+      // 根据字段，给出相应条件
+      if (['text', 'textarea', 'associated', 'address'].indexOf(formType) !== -1) {
+        item.optionValue = ''
+      } else if (item.formType === 'tag' && this.tagOption.length === 0) {
+        this.getTagOption(item.settings.form.tagSetting.rnumber)
+      } else if (['radio', 'checkbox', 'combobox'].indexOf(formType) !== -1) {
+        if (item.settings.attribute.dataSource === 'custom') {
+          item.optionValue = item.settings.form.customDataList.map(item => {
+            const obj = {
+              value: item.value,
+              label: item.value
+            }
+            return obj
+          })
+        } else if (item.formType === 'combobox' && item.settings.form.loadMode === 'dynamic') {
+          item.optionValue = []
+        } else if (item.settings.attribute.dataSource === 'dictionary') {
+          this.getOption(item)
+        }
+      } else if (['number', 'datetime'].indexOf(formType) !== -1) {
+        item.optionValue = ''
+      } else if (['cascader'].indexOf(formType) !== -1) {
+        item.src = item.settings.form.src
+      } else if (formType === 'switch') {
+        item.word = []
+        item.word[0] = item.settings.form.word.value[1]
+        item.word[1] = item.settings.form.word.value[0]
+      } else if (formType === 'treeselect') {
+        this.getTreeOption(item)
+      }
+      item.searchCondition = [{
+        include: '',
+        value: undefined
+      }]
+    },
+    // 组织结构options转换
+    optionsConversion (record, list, displayType, searchType) {
+      if (record.settings.form.optionType === 'department') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.departmentId
+            obj.label = item.fullDepartmentName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.departmentId
+            obj.label = item.departmentName
+            return obj
+          })
+        }
+      } else if (record.settings.form.optionType === 'role') {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.roleId
+          obj.label = item.roleName
+          return obj
+        })
+      } else {
+        return list.map(item => {
+          const obj = item
+          obj.key = item.username
+          obj.label = `${item.username}(${item.realName})`
+          return obj
+        })
+      }
+    },
+    // 组织结构options转换
+    optionsConversionTreeselect (record, list, displayType, searchType) {
+      if (record.settings.attribute.dataSource === 'addressBook') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.name
+            return obj
+          })
+        }
+      } else {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.dictDataName
+            return obj
+          })
+        }
+      }
+    },
+    getTreeOption (item) {
+      this.axios({
+        url: '/admin/userTable/getFieldForm',
+        data: { fieldId: this.fields[item.alias].fieldId, value: item.value }
+      }).then(res => {
+        this.$set(item, 'option', res.result.option)
+      })
+    },
+    // 选择关系
+    choiceInclude (value, conItem) {
+      if (value === 'em' || value === 'nem') {
+        conItem.type = 'empty'
+      } else {
+        conItem.type = undefined
+      }
+    },
+    // 增加
+    handlePlus (item, conIndex) {
+      item.searchCondition.splice(conIndex + 1, 0, {
+        include: '',
+        value: ''
+      })
+    },
+    handleSub (item, conIndex) {
+      item.searchCondition.splice(conIndex, 1)
+    },
+    handleDataPlus (searchConditions, index) {
+      searchConditions.splice(index + 1, 0, {
+        alias: '',
+        logic: 'or',
+        formType: 'text',
+        optionValue: [],
+        condiArr: [
+          { enName: 'eq', cnName: this.$t('等于') },
+          { enName: 'ne', cnName: this.$t('不等于') }],
+        searchCondition: [{
+          include: '',
+          value: ''
+        }]
+      })
+    },
+    handleDataSub (searchConditions, index) {
+      searchConditions.splice(index, 1)
+    },
+    // 重置
+    reset () {
+      this.data = JSON.parse(JSON.stringify(this.initData))
+      this.newFlag = true
+    },
+    // 打开设置名称
+    handleSave () {
+      if (!this.data.searchConditions[0].alias) {
+        this.$message.error(this.$t('请选择字段'))
+        return
+      }
+      this.visibleN = true
+      this.dataName = this.data.name
+    },
+    // 保存名称
+    hideModal () {
+      const { getFieldValue, validateFields } = this.form
+      validateFields((error, values) => {
+        if (!error) {
+          this.dataName = getFieldValue('name')
+          this.data.name = this.dataName
+          this.visibleN = false
+          const id = this.newFlag ? undefined : this.data.id
+          const data = JSON.parse(JSON.stringify(this.data))
+          // 不保存这些参数
+          data.searchConditions.forEach(item => {
+            item.fieldType = item.formType = item.optionValue = item.condiArr = undefined
+            item.searchCondition.forEach(item1 => {
+              if (item1.type) {
+                item1.include = item1.include === 'em' ? 'eq' : 'ne'
+              }
+            })
+          })
+          this.axios({
+            url: '/admin/userTable/customTemplate',
+            data: {
+              uid: this.config.tplviewid,
+              tableId: this.config.tableId,
+              type: 'list_search',
+              data: data,
+              action: this.newFlag ? 'add' : 'edit',
+              id
+            }
+          }).then(res => {
+            this.data.id = res.result.id
+            if (this.newFlag) {
+              this.$emit('change', 'add', data)
+              this.condiList.push(this.data)
+              this.condiListIndex = this.condiList.length - 1
+            } else {
+              this.$emit('change', 'edit', data, this.condiListIndex)
+              this.condiList.splice(this.condiListIndex, 1, this.data)
+            }
+            this.newFlag = false
+          })
+        }
+      })
+    },
+    // 显示搜索
+    showCondi (item, index) {
+      this.data = []
+      this.$nextTick(() => {
+        this.data = JSON.parse(JSON.stringify(item))
+        if (this.data.searchConditions.some(item => item.formType === 'tag' && !this.tagOption.length)) {
+          const rnumber = this.data.searchConditions.find(item => item.formType === 'tag' && !this.tagOption.length).settings.form.tagSetting.rnumber
+          this.getTagOption(rnumber)
+        }
+        this.condiListIndex = index
+        this.newFlag = false
+      })
+    },
+    // 删除搜索列表项
+    handleDelList (item, index) {
+      this.axios({
+        url: '/admin/userTable/customTemplate',
+        data: {
+          action: 'delete',
+          id: item.id
+        }
+      }).then(res => {
+        this.condiList.splice(index, 1)
+        this.$emit('change', 'delete', index)
+      })
+    },
+    // 搜索
+    handleSubmit () {
+      const data = JSON.parse(JSON.stringify(this.data))
+      if (!data.searchConditions[0].alias) {
+        this.$message.error(this.$t('请选择字段'))
+        return
+      }
+      data.searchConditions.forEach(item => { delete item.settings })
+      this.$emit('ok', data, this.newFlag)
+      this.visible = false
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+.ant-spin-cner {
+  .bbar {
+    width: 100%;
+    border-top: 1px solid #e9e9e9;
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    div {
+      button {
+        margin-left: 15px;
+      }
+    }
+  }
+}
+.list_box {
+  overflow: auto;
+  height: 407px;
+}
+.list {
+  margin: 8px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  .list_icon {
+    opacity: 0;
+  }
+}
+.list:hover {
+  color: @primary-color;
+  .list_icon {
+    opacity: 1;
+  }
+}
+.active {
+  color: @primary-color;
+}
+</style>

@@ -1,0 +1,385 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button @click="reset">{{ $t('重置') }}</a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('客服名称')">
+              <a-tree-select
+                v-model="serviceList"
+                :filterTreeNode="filterTreeOption"
+                :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                allowClear
+                treeCheckable
+                multiple
+                :replaceFields="{
+                  children: 'data',
+                  value: 'id',
+                  key: 'username',
+                  title: 'realName'
+                }"
+                style="width: 100%"
+                :tree-data="serviceTree"
+                @change="handleServiceChange"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('客服状态')">
+              <a-tree-select
+                v-if="busyEnable"
+                v-model="queryParam.status"
+                :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                :tree-data="serviceStatusList"
+                allow-clear
+                multiple
+              />
+              <a-select v-else v-model="queryParam.status" mode="multiple" :allowClear="true">
+                <a-select-option v-for="statusItem in serviceStatusList" :key="statusItem.value">
+                  {{ statusItem.label }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('当日班次')">
+              <a-select
+                v-model="queryParam.classes"
+                mode="multiple"
+                allowClear
+                showSearch
+                option-filter-prop="children"
+                style="width: 100%"
+              >
+                <a-select-option v-for="item in classessList" :key="item.name" :value="item.name">
+                  {{ item.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-row type="flex" justify="space-between" align="middle" style="margin-bottom: 8px">
+      <a-col></a-col>
+      <a-col>
+        <a-popover placement="left">
+          <template slot="content">
+            <div v-dompurify-html="content.replace(/。/g, `。 <br />`)" style="width: 300px"></div>
+          </template>
+          <a-icon type="question-circle" style="font-size: 16px" />
+        </a-popover>
+      </a-col>
+    </a-row>
+    <s-table
+      ref="table"
+      :showPagination="false"
+      :scroll="{ y: true }"
+      size="small"
+      class="table-fill"
+      rowKey="userName"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="{ field: 'userName', order: 'descend' }"
+    >
+      <template slot="realName" slot-scope="text, record">
+        <div>{{ `${record.userName}(${text})` }}</div>
+      </template>
+      <template slot="status" slot-scope="text">
+        <div>
+          <a-icon v-if="text == '0'" style="color: #52c41a" type="check-circle" />
+          <a-icon
+            v-else-if="text && text != '0' && text != '1' && text != '3'"
+            style="color: #ffc53d"
+            type="pause-circle"
+          />
+          <a-icon v-else-if="text == '1'" style="color: #f5222d" type="close-circle" />
+          <a-icon v-else-if="text == '3'" style="color: #bfbfbf" type="logout" />
+          {{ busyList.find((item) => item.value === text) ? busyList.find((item) => item.value === text).label : '--' }}
+        </div>
+      </template>
+    </s-table>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('crm'),
+  data () {
+    return {
+      filterTreeOption (input, treeNode) {
+        return treeNode.data.props.title.includes(input)
+      },
+      sessionTime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+      advanced: false,
+      queryParam: {
+        startTime: this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        endTime: this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      },
+      columns: [{
+        title: this.$t('客服名称'),
+        dataIndex: 'realName',
+        width: 160,
+        customRender: (text, record) => {
+          return `${record.userName}(${text})`
+        }
+      }, {
+        title: this.$t('客服状态'),
+        dataIndex: 'status',
+        scopedSlots: { customRender: 'status' },
+        width: 128
+      }, {
+        title: this.$t('当日班次'),
+        dataIndex: 'classes',
+        width: 128
+      }, {
+        title: this.$t('状态持续时长'),
+        dataIndex: 'statusDuration',
+        width: 128,
+        sorter: true
+      }, {
+        title: this.$t('累计示忙时长'),
+        dataIndex: 'totalBusyTime',
+        sorter: true,
+        width: 128
+      }, {
+        title: this.$t('待办工单数'),
+        dataIndex: 'backlogWorkOrder',
+        sorter: true,
+        width: 128
+      }, {
+        title: this.$t('累计就绪时长'),
+        dataIndex: 'totalReadyTime',
+        width: 128
+      }, {
+        title: this.$t('首次就绪时间'),
+        dataIndex: 'firstReadyTime',
+        width: 128
+      }, {
+        title: this.$t('完结工单数'),
+        dataIndex: 'endWorkOrder',
+        width: 128,
+        sorter: true
+      },
+      {
+        title: this.$t('平均首响时长'),
+        dataIndex: 'avgFirstReplyTime',
+        width: 136,
+        sorter: true,
+        customRender: (text) => {
+          const result = parseInt(text)
+          if (result > 0) {
+            return this.format(result)
+          } else {
+            return '00:00:00'
+          }
+        }
+      }, {
+        title: this.$t('平均完单时长'),
+        dataIndex: 'avgEndWorkOrderTime',
+        width: 136,
+        sorter: true,
+        customRender: (text) => {
+          const result = parseInt(text)
+          if (result > 0) {
+            return this.format(result)
+          } else {
+            return '00:00:00'
+          }
+        }
+      }, {
+        title: this.$t('满意度'),
+        dataIndex: 'satisfaction',
+        width: 128,
+        sorter: true
+      }],
+      serviceStatusList: [{
+        label: this.$t('就绪'),
+        value: '0'
+      }, {
+        label: this.$t('离开'),
+        value: '1'
+      }, {
+        label: this.$t('示忙'),
+        value: '2'
+      }, {
+        label: this.$t('登出'),
+        value: '3'
+      }],
+      classessList: [{
+        name: this.$t('A班')
+      }, {
+        name: this.$t('B班')
+      }, {
+        name: this.$t('B1班')
+      }, {
+        name: this.$t('C班')
+      }, {
+        name: this.$t('D班')
+      }, {
+        name: this.$t('E班')
+      }, {
+        name: this.$t('F班')
+      }, {
+        name: this.$t('G班')
+      }, {
+        name: this.$t('OFF')
+      }],
+      content: `${this.$t('客服状态：当前客服工单状态')}<br />
+                ${this.$t('当日班次：当前客服当日班次')}<br />
+                ${this.$t('状态持续时长：客服当前状态持续时间')}<br />
+                ${this.$t('累计示忙时长：当前客服今日示忙累计时长')}<br />
+                ${this.$t('待办工单数：当前客服我的待办工单总数')}<br />
+                ${this.$t('累计就绪时长：当前客服今日就绪累计时长')}<br />
+                ${this.$t('首次就绪时间：就绪时间点，格式：08:05:20')}<br />
+                ${this.$t('完结工单数：当前客服今日已完结工单总数，只计算工单子状态为“已解决，工单结束”，或“关闭，工单结束”，或“客户超期未回复，工单结束”工单')}<br />
+                ${this.$t('平均首响时长：当前客服参与首响的所有工单首响时长之和/参与首响的所有工单数量')}<br />
+                ${this.$t('平均完单时长：当前客服所有已完结工单的处理时长总和/当前客服已完结工单总数')}<br />
+                ${this.$t('满意度：当前客服今日满意度百分数')}`,
+      serviceTree: [],
+      serviceList: [],
+      getServiceList: [],
+      param: {},
+      busyList: [],
+      busyEnable: null,
+      Interval: null
+    }
+  },
+  activated () {
+    this.runtime()
+  },
+  mounted () {
+    this.getStatus()
+    this.getService()
+  },
+  // 销毁定时器
+  deactivated () {
+    clearInterval(this.Interval)
+  },
+  methods: {
+    format (seconds) {
+      const hour = Math.floor(seconds / 3600) >= 10 ? Math.floor(seconds / 3600) : '0' + Math.floor(seconds / 3600)
+      seconds -= 3600 * hour
+      const minutes = Math.floor(seconds / 60) >= 10 ? Math.floor(seconds / 60) : '0' + Math.floor(seconds / 60)
+      seconds -= 60 * minutes
+      const sec = seconds >= 10 ? seconds : '0' + seconds
+      return hour + ':' + minutes + ':' + sec
+    },
+    runtime () {
+      this.Interval = setInterval(() => {
+        this.$refs.table.refresh()
+      }, 150000)
+    },
+    getStatus () {
+      this.axios({
+        url: '/crm/report/getServiceStatus'
+      }).then(res => {
+        if (res.code === 0) {
+          this.busyEnable = res.result.enable
+          this.busyList = [...this.serviceStatusList, ...res.result.data]
+          if (res.result.enable) {
+            this.serviceStatusList.forEach(item => {
+              if (item.value === '2') {
+                item.selectable = false
+                item.children = res.result.data
+              }
+            })
+          }
+        }
+      })
+    },
+    getService () {
+      this.axios({
+        url: '/crm/report/getService'
+      }).then(res => {
+        if (res.code === 0) {
+          const getTreeData = (array) => {
+            array.forEach(item => {
+              if (item.data && item.data.length) {
+                getTreeData(item.data)
+              } else {
+                item.realName = `${item.username}(${item.realName})`
+              }
+            })
+          }
+          getTreeData(res.result.data)
+          this.serviceTree = res.result.data
+        }
+      })
+    },
+    reset () {
+      this.queryParam = {}
+      this.getServiceList = []
+      this.serviceList = []
+      this.$refs.table.refresh()
+    },
+    handleServiceChange (value, label, extra) {
+      const arr = []
+      if (extra.allCheckedNodes && extra.allCheckedNodes.length > 0) {
+        extra.allCheckedNodes.forEach(item => {
+          if (item.children) {
+            this.forItem(item.children, arr)
+          } else {
+            arr.push(item.node.key)
+          }
+        })
+      }
+      this.getServiceList = arr
+    },
+    forItem (val, arr) {
+      val.forEach(item => {
+        if (item.children) {
+          this.forItem(item.children, arr)
+        } else {
+          val.forEach(itemVal => {
+            if (arr.indexOf(itemVal.node.key) === -1 && !itemVal.children) {
+              arr.push(itemVal.node.key)
+            }
+          })
+        }
+      })
+    },
+    loadDataTable (parameter) {
+      const queryParam = this.queryParam
+      this.queryParam.serviceId = this.getServiceList
+      const param = {
+        sortOrder: parameter.sortOrder,
+        sortField: parameter.sortField
+      }
+      return this.axios({
+        url: '/crm/report/getServiceActivities',
+        data: Object.assign(param, queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    disabledDate (current, date) {
+      return current < this.moment().subtract(2, 'days').subtract(1, 'years')
+    },
+    getInputTime (date, dateString) {
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportCrmReportTask',
+        parameter: {
+          condition: {
+            req: {
+              serviceId: this.getServiceList,
+              endTime: this.queryParam.endTime,
+              startTime: this.queryParam.startTime,
+              ...this.param
+            },
+            type: 'workload'
+          }
+        }
+      })
+    }
+  }
+}
+</script>

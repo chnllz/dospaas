@@ -1,0 +1,33 @@
+<template>
+  <div style="height: 100%">
+    <a-tabs class="tabs-flex">
+      <a-tab-pane key="plane">
+        <span slot="tab">
+          <a-icon type="bars" />
+          {{ $t('平面字典') }}
+        </span>
+        <DictPlane ref="DictPlane" />
+      </a-tab-pane>
+      <a-tab-pane key="tree">
+        <span slot="tab">
+          <a-icon type="apartment" />
+          {{ $t('树形字典') }}
+        </span>
+        <DictTree ref="DictTree" />
+      </a-tab-pane>
+    </a-tabs>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    DictTree: () => import('./DictTree'),
+    DictPlane: () => import('./DictPlane')
+  },
+  data () {
+    return {
+    }
+  }
+}
+</script>

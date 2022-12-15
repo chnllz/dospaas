@@ -1,0 +1,203 @@
+<template>
+  <a-layout-sider
+    v-model="collapsed"
+    :class="['sider', isDesktop() ? null : 'shadow', theme, fixSiderbar ? 'ant-fixed-sidemenu' : null]"
+    width="208px"
+    :collapsible="collapsible"
+    :trigger="null"
+  >
+    <div :class="theme" style="height: 100%">
+      <div class="scrollChange" style="height: 100%">
+        <div
+          style="padding: 8px; position: sticky; top: 0px; z-index: 1"
+          class="topSearch"
+          :style="{
+            backgroundColor: theme === 'dark' ? '#001529' : '#fff'
+          }"
+        >
+          <a-auto-complete
+            v-show="!collapsed"
+            v-model="menuValue"
+            style="width: 100%"
+            :class="theme === 'dark' ? 'darkInput' : ''"
+            :placeholder="$t('请输入菜单名称进行搜索')"
+            @search="handleSearch"
+            @select="menuJump"
+          >
+            <template slot="dataSource">
+              <a-select-option v-for="menuItem in menuOptions" :key="menuItem.path">
+                <span v-if="menuItem.title.indexOf(searchValue) > -1">
+                  {{ menuItem.title.substr(0, menuItem.title.indexOf(searchValue)) }}
+                  <span style="color: #f50">{{ searchValue }}</span>
+                  {{ menuItem.title.substr(menuItem.title.indexOf(searchValue) + searchValue.length) }}
+                </span>
+                <span v-else>{{ menuItem.title }}</span>
+              </a-select-option>
+            </template>
+            <a-input>
+              <a-icon slot="suffix" type="search" class="certain-category-icon" />
+            </a-input>
+          </a-auto-complete>
+          <div v-show="collapsed" style="width: 100%; text-align: center; margin-top: 10px">
+            <a-popover placement="right">
+              <a-auto-complete
+                slot="content"
+                v-model="menuValue"
+                style="width: 100%"
+                placeholder="请输入菜单名称进行搜索"
+                @search="handleSearch"
+                @select="menuJump"
+              >
+                <template slot="dataSource">
+                  <a-select-option v-for="menuItem in menuOptions" :key="menuItem.path">
+                    <span v-if="menuItem.title.indexOf(searchValue) > -1">
+                      {{ menuItem.title.substr(0, menuItem.title.indexOf(searchValue)) }}
+                      <span style="color: #f50">{{ searchValue }}</span>
+                      {{ menuItem.title.substr(menuItem.title.indexOf(searchValue) + searchValue.length) }}
+                    </span>
+                    <span v-else>{{ menuItem.title }}</span>
+                  </a-select-option>
+                </template>
+                <a-input>
+                  <a-icon slot="suffix" type="search" class="certain-category-icon" />
+                </a-input>
+              </a-auto-complete>
+              <a-icon
+                type="search"
+                style="font-size: 15px; border: none; backgroundcolor: transparent"
+                :style="{ color: theme === 'dark' ? 'hsla(0,0%,100%,.65)' : '' }"
+              />
+            </a-popover>
+          </div>
+        </div>
+        <s-menu
+          style="padding-bottom: 48px"
+          :collapsed="collapsed"
+          :menu="menus"
+          :theme="theme"
+          :mode="mode"
+          @select="onSelect"
+        />
+        <div
+          class="trigger"
+          :style="{
+            borderTop: theme === 'dark' ? '1px solid rgba(0,0,0,.25)' : '1px solid #f0f0f0',
+            color: theme === 'dark' ? 'hsla(0,0%,100%,.65)' : '',
+            backgroundColor: theme === 'dark' ? '#001529' : '#fff',
+            position: 'absolute',
+            bottom: '56px'
+          }"
+          @click="toggle"
+        >
+          <a-icon :type="collapsed ? 'menu-unfold' : 'menu-fold'" />
+        </div>
+      </div>
+    </div>
+  </a-layout-sider>
+</template>
+<script>
+import SMenu from './index'
+import { mixin, mixinDevice } from '@/utils/mixin'
+import { mapGetters } from 'vuex'
+export default {
+  name: 'SideMenu',
+  components: { SMenu },
+  mixins: [mixin, mixinDevice],
+  props: {
+    mode: {
+      type: String,
+      required: false,
+      default: 'inline'
+    },
+    theme: {
+      type: String,
+      required: false,
+      default: 'dark'
+    },
+    collapsible: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    collapsed: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    menus: {
+      type: Array,
+      required: true
+    }
+  },
+  data () {
+    return {
+      menuValue: undefined,
+      menuArray: [],
+      menuOptions: [],
+      searchValue: ''
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  created () {
+    this.getMenuArray()
+  },
+  methods: {
+    onSelect (obj) {
+      this.$emit('menuSelect', obj)
+    },
+    toggle () {
+      this.$emit('toggle')
+    },
+    handleSearch (value) {
+      this.searchValue = value
+      this.menuOptions = value ? this.menuArray.filter(item => !item.children && item.title.includes(value)) : []
+    },
+    menuJump (value) {
+      const menu = this.menuArray.find(item => item.path === value)
+      this.$router.push({ path: menu.path, query: menu.query })
+      this.menuValue = undefined
+      this.menuOptions = []
+    },
+    getMenuArray () {
+      const addRouters = this.$store.getters.addRouters.filter(item => item.meta)[0].children
+      const getChildren = (arr, parent) => {
+        arr.forEach(item => {
+          item.title = (parent ? (parent.title + '/') : '') + item.meta.title
+          if (item.children) {
+            getChildren(item.children, item)
+          }
+          this.menuArray.push(item)
+        })
+      }
+      getChildren(addRouters)
+      return addRouters.filter(item => !item.hidden)
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/.darkInput {
+  .ant-input {
+    background: #1c2f41;
+    color: #ffffff;
+    border: none;
+  }
+  .ant-input-affix-wrapper .ant-input-suffix {
+    color: #ffffff;
+  }
+}
+.scrollChange {
+  overflow: hidden;
+  .trigger {
+    width: 100%;
+  }
+}
+.scrollChange:hover {
+  overflow: hidden auto;
+  .trigger {
+    width: calc(100% - 6px);
+  }
+}
+</style>

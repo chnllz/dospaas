@@ -1,0 +1,899 @@
+<template>
+  <a-config-provider :locale="locale">
+    <div class="form-designer-container-9136076486841527">
+      <k-header v-if="showHead" :title="title" />
+      <!-- 操作区域 start -->
+      <operatingArea
+        v-if="toolbarsTop"
+        :showToolbarsText="showToolbarsText"
+        :toolbars="toolbars"
+        :recordList="recordList"
+        :redoList="redoList"
+        @handlePreview="handlePreview"
+        @handleOpenImportJsonModal="handleOpenImportJsonModal"
+        @handleOpenCodeModal="handleOpenCodeModal"
+        @handleOpenJsonModal="handleOpenJsonModal"
+        @handleReset="handleReset"
+        @handleUndo="handleUndo"
+        @handleRedo="handleRedo"
+      >
+        <template slot="left-action">
+          <slot name="left-action"></slot>
+        </template>
+
+        <template slot="right-action">
+          <slot name="right-action"></slot>
+        </template>
+      </operatingArea>
+      <!-- 操作区域 end -->
+      <div
+        class="content"
+        :class="{
+          'show-head': showHead,
+          'toolbars-top': toolbarsTop,
+          'show-head-and-toolbars-top': toolbarsTop && showHead
+        }"
+      >
+        <!-- 左侧控件区域 start -->
+        <aside class="left">
+          <a-tabs class="tabs-flex">
+            <a-tab-pane key="1" tab="组件">
+              <div style="flex-grow: 1; overflow-y: auto; height: 100%">
+                <h3>
+                  <tag-icon />
+                  {{ $t('布局控件') }}
+                </h3>
+                <collapseItem
+                  :list="layoutArray"
+                  @generateKey="generateKey"
+                  @handleListPush="handleListPush"
+                  @start="handleStart"
+                />
+                <h3>
+                  <tag-icon />
+                  {{ $t('系统组件') }}
+                </h3>
+                <collapseItem
+                  :list="basicsArray"
+                  @generateKey="generateKey"
+                  @handleListPush="handleListPush"
+                  @start="handleStart"
+                />
+              </div>
+            </a-tab-pane>
+            <a-tab-pane key="2" tab="字段">
+              <fields-table
+                :list="myArray"
+                @generateKey="generateKey"
+                @handleListPush="handleListPush"
+                @start="handleStart"
+              />
+            </a-tab-pane>
+          </a-tabs>
+        </aside>
+        <!-- 左侧控件区域 end -->
+
+        <!-- 中间面板区域 start -->
+        <section :style="{ height: tableType ? 'calc(100% - 262px)' : 'calc(100% - 202px)' }">
+          <!-- 操作区域 start -->
+          <operatingArea
+            v-if="!toolbarsTop"
+            :showToolbarsText="showToolbarsText"
+            :toolbars="toolbars"
+            :tableType="tableType"
+            :recordList="recordList"
+            :redoList="redoList"
+            @handlePreview="handlePreview"
+            @changeAllStatus="changeAllStatus"
+            @saveAs="saveAsvisible = true"
+            @querierFormRule="querierFormRule"
+            @helpText="getHelpText"
+            @formSetting="getFormSetting"
+            @handleOpenImportJsonModal="handleOpenImportJsonModal"
+            @handleOpenCodeModal="handleOpenCodeModal"
+            @handleOpenJsonModal="handleOpenJsonModal"
+            @handleReset="handleReset"
+            @handleUndo="handleUndo"
+            @handleRedo="handleRedo"
+          >
+            <template slot="left-action">
+              <slot name="left-action"></slot>
+            </template>
+            <template slot="right-action">
+              <slot name="right-action"></slot>
+            </template>
+          </operatingArea>
+          <!-- 操作区域 end -->
+          <k-form-component-panel
+            ref="KFCP"
+            :class="{ 'no-toolbars-top': !toolbarsTop }"
+            :data="data"
+            :selectItem="selectItem"
+            :params="params"
+            :noModel="noModel"
+            :startType="startType"
+            @handleSetSelectItem="handleSetSelectItem"
+          />
+          <!-- 操作区域 start -->
+          <k-json-modal ref="jsonModal" />
+          <k-code-modal ref="codeModal" />
+          <importJsonModal ref="importJsonModal" />
+          <previewModal ref="previewModal" />
+          <querier-form-rule ref="querierFormRule" @ok="getRule" @func="getCode" />
+          <a-modal
+            :title="$t('另存为组件命名')"
+            :visible="saveAsvisible"
+            @ok="saveAs"
+            @cancel="saveAsvisible = !saveAsvisible"
+          >
+            <a-form :form="form">
+              <a-form-item :label="$t('组件名称')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-input
+                  v-decorator="[
+                    'info[name]',
+                    {
+                      rules: [
+                        { required: true, message: $t('请输入组件名称') },
+                        { min: 2, message: $t('请输入至少两个字符') },
+                        { max: 6, message: $t('最多请输入六个字符') }
+                      ],
+                      initialValue: ''
+                    }
+                  ]"
+                  @change="handleChangeName"
+                />
+              </a-form-item>
+              <a-form-item :label="$t('系统名称')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-input
+                  v-decorator="[
+                    'info[alias]',
+                    { rules: [{ required: true, message: $t('请输入组件名称') }], initialValue: '' }
+                  ]"
+                  :disabled="true"
+                />
+              </a-form-item>
+            </a-form>
+          </a-modal>
+        </section>
+        <!-- 中间面板区域 end -->
+
+        <!-- 右侧控件属性区域 start -->
+        <aside class="right" :style="{ height: tableType ? 'calc(100% - 262px)' : 'calc(100% - 202px)' }">
+          <formItemProperties
+            :class="{ 'show-properties': showPropertie }"
+            class="form-item-properties"
+            :selectItem="selectItem"
+            :params="params"
+            :basicsArray="basicsArray"
+            :myArray="allMyArray"
+            :nowArray="myArray"
+            :tableType="tableType"
+          />
+        </aside>
+        <!-- 右侧控件属性区域 end -->
+      </div>
+      <!-- <k-footer /> -->
+      <a-modal
+        :title="$t('帮助说明设置')"
+        :visible="visible"
+        :width="900"
+        :destroyOnClose="true"
+        @cancel="visible = !visible"
+      >
+        <a-spin :spinning="loading">
+          <a-form :form="helpForm" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+            <a-form-item :label="$t('帮助说明')">
+              <a-switch
+                v-decorator="['status', { initialValue: setting.helpText, valuePropName: 'checked' }]"
+                @change="
+                  (e) => {
+                    setting.helpText = e
+                  }
+                "
+              />
+            </a-form-item>
+            <template v-if="setting.helpText">
+              <a-form-item>
+                <span slot="label">
+                  {{ $t('帮助展开形式') }}
+                  <a-tooltip placement="top">
+                    <template slot="title">
+                      <div>点击展开：帮助说明以弹层形式展开，富文本内容展示。</div>
+                      <div>鼠标停留时气泡框展开：帮助说明以气泡框形式展开，强制文本格式，并自动剔除图片。</div>
+                    </template>
+                    <a-icon type="question-circle" />
+                  </a-tooltip>
+                </span>
+                <a-radio-group
+                  v-decorator="['displayMode', { initialValue: helpText.displayMode || 'drawer' }]"
+                  name="radioGroup"
+                >
+                  <a-radio value="drawer">{{ $t('左侧抽屉打开') }}</a-radio>
+                  <a-radio value="popover">{{ $t('气泡框打开') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item label="帮助内容">
+                <tiny-mce v-decorator="['content', { initialValue: helpText.content }]" />
+              </a-form-item>
+            </template>
+          </a-form>
+        </a-spin>
+        <div slot="footer">
+          <a-spin :spinning="loading">
+            <span slot="indicator" />
+            <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+            <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+          </a-spin>
+        </div>
+      </a-modal>
+      <a-modal
+        :title="$t('表单属性')"
+        :visible="settingVisible"
+        :width="700"
+        :destroyOnClose="true"
+        @cancel="settingVisible = !settingVisible"
+      >
+        <a-form :form="settingForm" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+          <a-form-item v-if="!data.config.tableType" :label="$t('表单名称')">
+            <a-input
+              v-decorator="[
+                'info[name]',
+                { initialValue: formdata.name || '', rules: [{ required: true, message: $t('请输入表单名称') }] }
+              ]"
+            >
+              <set-lang slot="addonAfter" />
+            </a-input>
+          </a-form-item>
+          <a-form-item :label="$t('预览模态框宽度')">
+            <a-input-number v-model="previewOptions.width" style="width: 100%" />
+          </a-form-item>
+          <a-form-item v-if="!data.config.tableType" :label="$t('表单备注')">
+            <a-textarea
+              v-decorator="['setting[description]', { initialValue: setting.description || '' }]"
+              :autoSize="{ minRows: 3, maxRows: 5 }"
+            />
+          </a-form-item>
+          <a-form-item v-if="userInfo.superAdmin" :label="$t('访问级别')">
+            <a-radio-group v-decorator="['info[accessLevel]', { initialValue: formdata.accessLevel || 0 }]">
+              <a-radio :value="0" style="width: 100%">{{ $t('可见可编可删') }}</a-radio>
+              <a-radio :value="1" style="width: 100%">{{ $t('可见可编不可删') }}</a-radio>
+              <a-radio :value="2" style="width: 100%">{{ $t('可见不可编不可删') }}</a-radio>
+              <a-radio :value="3" style="width: 100%">{{ $t('不可见不可编不可删') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item :label="$t('提示')">{{ $t('实际预览效果请点击预览查看') }}</a-form-item>
+        </a-form>
+        <div slot="footer">
+          <span slot="indicator" />
+          <a-button type="primary" @click="handleSettingSubmit">{{ $t('保存') }}</a-button>
+          <a-button @click="settingVisible = !settingVisible">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-modal>
+    </div>
+  </a-config-provider>
+</template>
+<script>
+/*
+ * author kcz
+ * date 2019-11-20
+ * description 表单设计器
+ */
+// import draggable from "vuedraggable";
+import zhCN from 'ant-design-vue/lib/locale-provider/zh_CN'
+import { mapGetters } from 'vuex'
+import {
+  basicsList,
+  // highList,
+  layoutList,
+  customComponents
+} from './config/formItemsConfig'
+import { Collapse } from 'ant-design-vue'
+import { Revoke } from '../core/revoke'
+import storage from '@/utils/storage'
+import Vue from 'vue'
+Vue.use(Collapse)
+export default {
+  name: 'KFormDesign',
+  i18n: window.lang('admin'),
+  components: {
+    kHeader: () => import('./module/header'),
+    // kFooter,
+    operatingArea: () => import('./module/operatingArea'),
+    collapseItem: () => import('./module/collapseItem'),
+    FieldsTable: () => import('./module/FieldsTable'),
+    kJsonModal: () => import('./module/jsonModal'),
+    kCodeModal: () => import('./module/codeModal'),
+    importJsonModal: () => import('./module/importJsonModal'),
+    previewModal: () => import('../KFormPreview/index.vue'),
+    kFormComponentPanel: () => import('./module/formComponentPanel'),
+    formItemProperties: () => import('./module/formItemProperties'),
+    QuerierFormRule: () => import('@/views/admin/Table/QuerierFormRule'),
+    TinyMce: () => import('@/components/Editor/TinyMce'),
+    SetLang: () => import('@/components/SetLang')
+    // draggable
+  },
+  props: {
+    title: {
+      type: String,
+      default () {
+        return this.$t('表单设计器')
+      }
+    },
+    showHead: {
+      type: Boolean,
+      default: false
+    },
+    toolbarsTop: {
+      type: Boolean,
+      default: false
+    },
+    toolbars: {
+      type: Array,
+      default: () => [
+        // 'save',
+        'preview',
+        'importJson',
+        'exportJson',
+        // 'exportCode',
+        'reset',
+        'undo',
+        'redo'
+        // 'close'
+      ]
+    },
+    showToolbarsText: {
+      type: Boolean,
+      default: false
+    },
+    fields: {
+      type: Array,
+      default: () => [
+        // 'input',
+        // 'textarea',
+        // 'number',
+        // 'select',
+        // 'checkbox',
+        // 'radio',
+        // 'date',
+        // 'time',
+        // 'rate',
+        // 'slider',
+        // 'uploadFile',
+        // 'uploadImg',
+        // 'cascader',
+        // 'treeSelect',
+        // 'batch',
+        // 'editor',
+        // 'switch',
+        'formmark',
+        'subform',
+        'button',
+        'alert',
+        'text',
+        'placeholder',
+        'html',
+        'divider',
+        'dividerTag',
+        'card',
+        'tabs',
+        'grid',
+        'work',
+        'workRemark',
+        'portrait',
+        'component',
+        'lifeCycle',
+        'serialnumber',
+        'flowlog',
+        'urgelog',
+        'table'
+      ]
+    },
+    fieldColumns: {
+      type: Array,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    myTemplate: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
+    formdata: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    setting: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    tplInitJs: {
+      type: String,
+      default: ''
+    },
+    verifJs: {
+      type: String,
+      default: ''
+    },
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    tableType: {
+      type: String,
+      default () {
+        return ''
+      }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      settingVisible: false,
+      saveAsvisible: false,
+      locale: zhCN,
+      customComponents,
+      updateTime: 0,
+      updateRecordTime: 0,
+      showPropertie: true,
+      revoke: null,
+      recordList: [],
+      redoList: [],
+      startType: '',
+      form: this.$form.createForm(this),
+      helpForm: this.$form.createForm(this),
+      helpText: {},
+      settingForm: this.$form.createForm(this),
+      noModel: [
+        'button',
+        'divider',
+        'dividerTag',
+        'card',
+        'grid',
+        'table',
+        'alert',
+        'text',
+        'placeholder',
+        'html',
+        'formmark',
+        'work',
+        'workRemark',
+        'component'
+      ],
+      myArray: [],
+      allMyArray: [],
+      data: {
+        list: [],
+        config: {
+          layout: 'horizontal',
+          labelCol: { xs: 4, sm: 4, md: 4, lg: 4, xl: 4, xxl: 4 },
+          wrapperCol: { xs: 18, sm: 18, md: 18, lg: 18, xl: 18, xxl: 18 },
+          hideRequiredMark: false,
+          customStyle: ''
+        }
+      },
+      previewOptions: {
+        width: this.tableType ? 400 : 1200
+      },
+      selectItem: {
+        key: ''
+      }
+    }
+  },
+  provide () {
+    return {
+      getSelectItem: () => this.selectItem
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo']),
+    basicsArray () {
+      // 计算需要显示的基础字段
+      return basicsList.filter(item => this.fields.includes(item.type) || this.fields.includes(item.getType))
+    },
+    layoutArray () {
+      // 计算需要显示的布局字段
+      return layoutList.filter(item => this.tableType ? this.fields.includes(item.type) : this.fields.includes(item.type))
+    },
+    collapseDefaultActiveKey () {
+      // 计算当前展开的控件列表
+      if (storage.get('collapseDefaultActiveKey')) {
+        return storage.get('collapseDefaultActiveKey')
+      } else {
+        return ['1']
+      }
+    }
+  },
+  watch: {
+    tplInitJs (newValue) {
+      this.initJs = newValue
+    },
+    myTemplate (newValue) {
+      if (!this.tableType) {
+        this.myTemplate.forEach((temItem, temIndex) => {
+          temItem.key = temItem.key ?? (temItem.alias || temItem.type) + '_' + new Date().getTime() + temIndex
+          this.fieldColumns.forEach(fieldItem => {
+            if (temItem.value === fieldItem.alias) {
+              temItem.name = fieldItem.name
+              temItem.formType = fieldItem.formType
+              temItem.fieldId = fieldItem.id
+            }
+          })
+        })
+        this.data.list = newValue
+        this.fieldColumns.forEach(item => {
+          const obj = {
+            type: 'field',
+            name: item.name,
+            labelShow: item.labelShow,
+            fieldId: item.id,
+            value: item.alias,
+            formType: item.formType,
+            changeTitle: item.changeTitle,
+            placeholder: '0',
+            fieldRule: item.setting && item.setting.rule ? item.setting.rule : 'allow',
+            attribute: '',
+            componentName: '',
+            validationType: null
+          }
+          const string = JSON.stringify(this.myTemplate)
+          if (string.indexOf(item.alias) === -1) {
+            this.myArray.push(obj)
+          }
+          this.allMyArray.push(obj)
+        })
+        this.initJs = this.tplInitJs
+        this.verifStr = this.verifJs
+      } else {
+        this.data.list = newValue
+      }
+    },
+    data: {
+      handler (newValue) {
+        this.$nextTick(() => {
+          this.revoke.push(newValue)
+        })
+        this.myArray = JSON.parse(JSON.stringify(this.allMyArray))
+        if (!this.tableType) {
+          const getList = (array) => {
+            array.forEach(item => {
+              if (item.columns) {
+                getList(item.columns)
+              } else if (item.trs) {
+                getList(item.trs)
+              } else if (item.tds) {
+                getList(item.tds)
+              } else if (item.list) {
+                getList(item.list)
+              } else {
+                this.myArray = this.myArray.filter(arrItem => arrItem.value !== item.value)
+              }
+            })
+          }
+          getList(newValue.list)
+        } else {
+          const getList = (array) => {
+            array.forEach(item => {
+              if (item.columns) {
+                getList(item.columns)
+              } else if (item.tds) {
+                getList(item.tds)
+              } else if (item.trs) {
+                getList(item.trs)
+              } else if (item.list) {
+                getList(item.list)
+              } else {
+                this.myArray = this.myArray.filter(arrItem => arrItem.alias !== item.alias)
+              }
+            })
+          }
+          getList(newValue.list)
+        }
+      },
+      immediate: true,
+      deep: true
+    },
+    fieldColumns (newValue) {
+      if (this.tableType) {
+        this.myArray = newValue
+        this.allMyArray = JSON.parse(JSON.stringify(newValue))
+      }
+    }
+  },
+  created () {
+    this.revoke = new Revoke()
+    this.recordList = this.revoke.recordList
+    this.redoList = this.revoke.redoList
+    this.data.config.tableType = this.tableType
+    if (this.tableType) {
+      this.myArray = this.fieldColumns
+      this.allMyArray = JSON.parse(JSON.stringify(this.fieldColumns))
+    }
+  },
+  methods: {
+    generateKey (list, index) {
+      // 生成key值
+      const key = (list[index].formType || list[index].type) + '_' + new Date().getTime()
+      this.$set(list, index, {
+        ...list[index],
+        key,
+        model: key
+      })
+      if (this.noModel.includes(list[index].type)) {
+        // 删除不需要的model属性
+        delete list[index].model
+      }
+    },
+    handleListPush (item) {
+      // 双击控件按钮push到list
+      // 生成key值
+      if (!this.selectItem.key) {
+        // 在没有选择表单时，将数据push到this.data.list
+        const key = item.key ?? (item.formType || item.type) + '_' + new Date().getTime()
+        item = {
+          ...item,
+          key,
+          model: key
+        }
+        if (this.noModel.includes(item.formType || item.type)) {
+          // 删除不需要的model属性
+          delete item.model
+        }
+        // const itemString = JSON.stringify(item)
+        const record = JSON.parse(JSON.stringify(item))
+        // 删除icon及compoent属性
+        delete record.icon
+        delete record.component
+        this.data.list.push(record)
+        this.handleSetSelectItem(record)
+        return false
+      }
+      this.$refs.KFCP.handleCopy(false, item)
+    },
+    handleOpenJsonModal () {
+      // 打开json预览模态框
+      this.$refs.jsonModal.jsonData = this.data
+      this.$refs.jsonModal.visible = true
+    },
+    handleOpenCodeModal () {
+      // 打开代码预览模态框
+      this.$refs.codeModal.jsonData = this.data
+      this.$refs.codeModal.visible = true
+    },
+    handleOpenImportJsonModal () {
+      // 打开json预览模态框
+      this.$refs.importJsonModal.jsonData = this.data
+      this.$refs.importJsonModal.handleSetSelectItem = this.handleSetSelectItem
+      this.$refs.importJsonModal.visible = true
+    },
+    handlePreview () {
+      // 打开预览模态框
+      this.$refs.previewModal.jsonData = this.data
+      this.$refs.previewModal.previewWidth = this.previewOptions.width
+      this.$refs.previewModal.visible = true
+    },
+    querierFormRule () {
+      this.$refs.querierFormRule.show({
+        title: this.$t('表单规则'),
+        page: 'viewForm',
+        valueinit: this.initJs,
+        value: this.verifStr
+      })
+    },
+    // 打开帮助说明编辑页面
+    getHelpText () {
+      this.visible = true
+      this.loading = true
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: this.formdata.uid
+        }
+      }).then(res => {
+        this.loading = false
+        if (!res.code) {
+          this.helpText = res.result || {}
+        } else {
+          this.$message.warning(res.message)
+          this.visible = false
+        }
+      })
+    },
+    // 帮助说明内容提交
+    handleSubmit () {
+      this.helpForm.validateFields((errors, values) => {
+        if (!errors) {
+          this.loaidng = true
+          this.axios({
+            url: '/admin/document/edit',
+            data: Object.assign({
+              number: this.data.uid,
+              action: 'submit'
+            }, values)
+          }).then(res => {
+            this.loaidng = true
+            if (!res.code) {
+              this.visible = false
+            } else {
+              this.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    },
+    getFormSetting () {
+      this.settingVisible = true
+    },
+    handleSettingSubmit () {
+      this.settingForm.validateFields((errors, values) => {
+        if (!errors) {
+          Object.assign(this.setting, values.setting)
+          Object.assign(this.formdata, values.info)
+          this.settingVisible = false
+        }
+      })
+    },
+    // 表单规则内容
+    getRule (value) {
+      this.fieldRule = value
+    },
+    // 获取加载前后事件
+    getCode (value, type) {
+      if (type === 'init') {
+        this.initJs = value
+      } else if (type === 'verif') {
+        this.verifStr = value
+      }
+    },
+    changeAllStatus (e) {
+      this.allStatus(this.data.list, e.key)
+    },
+    saveAs () {
+      this.form.validateFields((err, val) => {
+        if (!err) {
+          console.log(this.form.getFieldsValue())
+        }
+      })
+    },
+    // 根据显示名称赋值系统名称
+    handleChangeName (e) {
+      this.data.name = e.target.value
+      if (this.aliasDisabled) {
+        return false
+      }
+      const pinyin = require('js-pinyin')
+      const reg = new RegExp(/^(?![0-9]|_)[a-z0-9_]+$/)
+      const reg2 = new RegExp(/^[a-z0-9_]+$/)
+      var val = pinyin.getCamelChars(e.target.value)
+      val = val.toLowerCase()
+      val = val.split('')
+      this.getVal(val, reg)
+      val = val.filter(item => {
+        return reg2.test(item)
+      })
+      const { setFieldsValue } = this.form
+      setFieldsValue({ 'info[alias]': val.join('') })
+    },
+    // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    allStatus (array, type) {
+      array.forEach((item, index) => {
+        if (item.columns) {
+          this.allStatus(item.columns, type)
+        } else if (item.trs) {
+          this.allStatus(item.trs, type)
+        } else if (item.tds) {
+          this.allStatus(item.tds, type)
+        } else if (item.list) {
+          this.allStatus(item.list, type)
+        } else {
+          if (type === '1' && item.type === 'field') {
+            this.$set(item, 'fieldRule', 'allow')
+          } else if (type === '0' && item.type === 'field') {
+            this.$set(item, 'fieldRule', 'readonly')
+          }
+        }
+      })
+    },
+    handleReset () {
+      // 清空
+      this.$confirm({
+        title: this.$t('警告'),
+        content: this.$t('是否确认清空内容?'),
+        okText: this.$t('是'),
+        okType: 'danger',
+        cancelText: this.$t('否'),
+        onOk: () => {
+          this.data.list = []
+          this.handleSetSelectItem({ key: '' })
+          this.$message.success(this.$t('已清空'))
+        }
+      })
+    },
+    handleSetSelectItem (record) {
+      // 操作间隔不能低于100毫秒
+      const newTime = new Date().getTime()
+      if (newTime - this.updateTime < 100) {
+        return false
+      }
+      this.updateTime = newTime
+      // 设置selectItem的值
+      this.selectItem = record
+      // 判断是否选中控件，如果选中则弹出属性面板，否则关闭属性面板
+      if (record.key) {
+        this.startType = record.formType || record.type
+      }
+      this.$nextTick(() => {
+        this.$set(this.data.config, 'show', !this.data.config['show'])
+      })
+    },
+    handleSetData (data) {
+      // 用于父组件赋值
+      try {
+        if (typeof data !== 'object') {
+          return false
+        } else {
+          this.data = data
+          // 导入json数据后，需要清除已选择key
+          this.handleSetSelectItem({ key: '' })
+        }
+        return true
+      } catch (error) {
+        return false
+      }
+    },
+    collapseChange (val) {
+      // 点击collapse时，保存当前collapse状态
+      storage.set('collapseDefaultActiveKey', val)
+    },
+    handleStart (type, index) {
+      this.startType = type
+    },
+    /**
+     * @description: 撤销
+     * @param {*}
+     * @return {*}
+     */
+    handleUndo () {
+      const record = this.revoke.undo()
+      if (!record) {
+        return false
+      }
+      this.data = record
+
+      this.handleSetSelectItem({ key: '' })
+    },
+
+    /**
+     * @description: 重做
+     * @param {*}
+     * @return {*}
+     */
+    handleRedo () {
+      const record = this.revoke.redo()
+      if (!record) {
+        return false
+      }
+      this.data = record
+    }
+  }
+}
+</script>

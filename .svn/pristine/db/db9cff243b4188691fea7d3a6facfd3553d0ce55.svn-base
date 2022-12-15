@@ -1,0 +1,311 @@
+<template>
+  <div>
+    <a-row :gutter="8">
+      <a-col :span="12">
+        <a-table
+          ref="categoryTable"
+          size="small"
+          :columns="Columns"
+          :pagination="false"
+          :dataSource="data"
+          rowKey="id"
+          :defaultExpandedRowKeys="['0']"
+          :expandIconColumnIndex="2"
+          :loading="loading"
+          :customRow="customRow"
+        >
+          <span slot="actionCategory" slot-scope="text, record">
+            <a @click="handleAdd(record)">{{ $t('添加子分类') }}</a>
+            <a-divider type="vertical" />
+            <a :disabled="record.id == 0" @click="handleEdit(record)">{{ $t('编辑') }}</a>
+            <a-divider type="vertical" />
+            <a :disabled="record.id == 0" @click="handleDel(record)">{{ $t('删除') }}</a>
+            <a-divider type="vertical" />
+            <a :disabled="record.id == 0" @click="handleInfo(record)">{{ $t('详情') }}</a>
+          </span>
+        </a-table>
+        <setting-robot-classify-form ref="SettingRobotClassifyForm" @ok="categoryRefresh" />
+      </a-col>
+      <a-col :span="12">
+        <a-card size="small" :bordered="true" style="margin-bottom: 8px">
+          <a-form layout="inline" style="display: flex">
+            <a-form-item :label="$t('标准问法')">
+              <a-input v-model="queryParam.title"></a-input>
+            </a-form-item>
+            <a-space>
+              <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParam.title = ''
+                    $refs.table.refresh(true)
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+              <a-button
+                type="primary"
+                icon="plus"
+                @click="
+                  visibleAdd = !visibleAdd
+                  info = {}
+                  actionWay = 'add'
+                "
+              >
+                {{ $t('添加') }}
+              </a-button>
+            </a-space>
+          </a-form>
+        </a-card>
+        <s-table
+          ref="table"
+          size="small"
+          rowKey="id"
+          :columns="columnsList"
+          :data="loadDataTable"
+          :sorter="{ field: 'id', order: 'descend' }"
+        >
+          <div slot="action" slot-scope="text, record">
+            <a @click="editInfo(record)">{{ $t('编辑') }}</a>
+            <a-divider type="vertical" />
+            <a @click="deleteInfo(record)">{{ $t('删除') }}</a>
+          </div>
+        </s-table>
+      </a-col>
+    </a-row>
+    <a-modal
+      :title="$t('添加知识')"
+      :width="600"
+      :visible="visibleAdd"
+      :destroyOnClose="true"
+      @cancel="visibleAdd = !visibleAdd"
+    >
+      <a-form :form="form" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+        <a-form-item :label="$t('标准问法')">
+          <a-input
+            v-decorator="[
+              'title',
+              { initialValue: info ? info.title : '', rules: [{ required: true, message: $t('请输入标准问法') }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('相似问法')">
+          <a-input
+            v-decorator="[
+              'similar',
+              { initialValue: info ? info.similar : '', rules: [{ required: true, message: $t('请输入相似问法') }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('标准答案')">
+          <a-textarea
+            v-decorator="[
+              'content',
+              { initialValue: info ? info.content : '', rules: [{ required: true, message: $t('请输入标准答案') }] }
+            ]"
+            :autoSize="{ minRows: 3 }"
+          />
+        </a-form-item>
+      </a-form>
+      <div slot="footer">
+        <a-button type="primary" @click="save">{{ $t('保存') }}</a-button>
+        <a-button @click="visibleAdd = !visibleAdd">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-modal>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    SettingRobotClassifyForm: () => import('./SettingRobotClassifyForm')
+  },
+  props: {
+    robotId: {
+      type: Number,
+      default: 0
+    }
+  },
+  data () {
+    return {
+      actionWay: '',
+      visibleAdd: false,
+      collapsed: false,
+      // 搜索参数
+      queryParam: {},
+      columnsList: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 120,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('标准问法'),
+        dataIndex: 'title'
+      }, {
+        title: this.$t('标准答案'),
+        dataIndex: 'content'
+      }, {
+        title: this.$t('相似问法'),
+        dataIndex: 'similar'
+      }, {
+        title: this.$t('更新时间'),
+        dataIndex: 'updateTime',
+        width: 200
+      }],
+      loading: false,
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      form: this.$form.createForm(this),
+      Columns: [{
+        dataIndex: 'action',
+        key: 'action',
+        title: this.$t('操作'),
+        align: 'center',
+        width: 250,
+        scopedSlots: {
+          customRender: 'actionCategory'
+        }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 80,
+        key: 'id'
+      }, {
+        title: this.$t('分类名称'),
+        dataIndex: 'name',
+        key: 'name'
+      }],
+      data: [],
+      info: {}
+    }
+  },
+  created () {
+    this.tableRefresh()
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/chat/knowledgeContent/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    editInfo (record) {
+      this.info = record
+      this.actionWay = 'edit'
+      this.visibleAdd = !this.visibleAdd
+    },
+    deleteInfo (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/chat/knowledgeContent/del',
+            data: { id: record.id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+              that.$refs.table.refresh(true)
+            } else {
+              that.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    },
+    save () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          if (this.actionWay === 'add') {
+            this.axios({
+              url: '/chat/knowledgeContent/add',
+              data: Object.assign(values, { rid: this.queryParam.rid })
+            }).then(res => {
+              this.$message.success(res.message)
+              this.$refs.table.refresh(true)
+            })
+          } else if (this.actionWay === 'edit') {
+            this.axios({
+              url: '/chat/knowledgeContent/edit',
+              data: Object.assign(values, { id: this.info.id, action: 'else' })
+            }).then(res => {
+              this.$refs.table.refresh(true)
+              this.$message.success(res.message)
+            })
+          }
+          this.visibleAdd = false
+        }
+      })
+    },
+    handleInfo (record) {
+      this.queryParam.rid = record.id
+      this.$refs.table.refresh(true)
+    },
+    // 表格行 触发
+    customRow (record, index) {
+      return {
+        on: {
+          click: (event) => {
+            event.currentTarget.parentNode.querySelectorAll('tr').forEach(item => {
+              item.classList.remove('selected')
+            })
+            event.currentTarget.classList.add('selected')
+          }
+        }
+      }
+    },
+    tableRefresh () {
+      this.loading = true
+      this.axios({
+        url: '/chat/knowledgeCategory/init',
+        data: { robotId: this.robotId }
+      }).then(res => {
+        this.data = res.result
+        this.loading = false
+      })
+    },
+    categoryRefresh () {
+      this.tableRefresh()
+    },
+    handleAdd (record) {
+      this.$refs.SettingRobotClassifyForm.show({
+        title: `${this.$t('添加')}：${record.name}`,
+        url: '/chat/knowledgeCategory/add',
+        record: Object.assign(record, { robotId: this.robotId }),
+        edit: false
+      })
+    },
+    handleEdit (record) {
+      this.$refs.SettingRobotClassifyForm.show({
+        title: `${this.$t('编辑')}：${record.name}`,
+        url: '/chat/knowledgeCategory/edit',
+        record: Object.assign(record, { robotId: this.robotId }),
+        edit: true
+      })
+    },
+    handleDel (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/chat/knowledgeCategory/delete',
+            data: { id: record.id }
+          }).then(res => {
+            if (res.code === 0) {
+              that.$message.success(res.message)
+              that.tableRefresh()
+            } else {
+              that.$message.warning(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

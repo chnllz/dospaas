@@ -1,0 +1,287 @@
+<template>
+  <a-drawer :title="config.title" :width="1600" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <div>
+      <a-card size="small" class="table-search" :bordered="true">
+        <a-form :layout="advanced ? 'vertical' : 'inline'" :class="advanced ? 'advanced' : 'normal'">
+          <div class="head">
+            <a-space style="margin-left: 8px">
+              <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">
+                {{ $t('搜索') }}
+              </a-button>
+              <a-button
+                icon="sync"
+                @click="
+                  () => {
+                    queryParam = {}
+                    $refs.table.refresh(true)
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+          </div>
+          <a-row :gutter="16">
+            <a-col v-if="advanced" span="24">
+              <div class="divider"></div>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('问卷状态')">
+                <a-select v-model="queryParam.nairestatus" :allowClear="true" :showSearch="true">
+                  <a-select-option v-for="(value, keys) in nairestatus" :key="keys" :value="keys">
+                    {{ value }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('问卷名称')">
+                <a-select v-model="queryParam.nairename" :allowClear="true" :showSearch="true">
+                  <a-select-option v-for="(value, keys) in nairename" :key="keys + 1" :value="value">
+                    {{ value }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col v-bind="colLayout">
+              <a-form-item :label="$t('任务名称')">
+                <a-input v-model.trim="queryParam.taskname" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-card>
+      <a-card size="small" :bordered="false">
+        <div class="table-operator">
+          <a-button icon="import" @click="handleimport">{{ $t('导入数据') }}</a-button>
+          <a-button icon="retweet" type="primary" :disabled="selectedRowKeys.length == 0" @click="allassignPage">
+            {{ $t('批量分配') }}
+          </a-button>
+          <a-button
+            v-action:add
+            icon="delete"
+            type="danger"
+            :disabled="selectedRowKeys.length == 0"
+            @click="handleDelete"
+          >
+            {{ $t('批量删除') }}
+          </a-button>
+        </div>
+        <s-table
+          ref="table"
+          size="small"
+          rowKey="id"
+          :columns="columns"
+          :rowSelection="rowSelection"
+          :data="loadDataTable"
+          :sorter="{ field: 'id', order: 'descend' }"
+        >
+          <div slot="action" slot-scope="text, record">
+            <a @click="assignPage(record)">{{ $t('分配(转移)') }}</a>
+            <a-divider type="vertical" />
+            <a @click="handleDelete(record)">{{ $t('删除') }}</a>
+          </div>
+        </s-table>
+      </a-card>
+    </div>
+    <task-assign ref="TaskAssign" @ok="handleOk" />
+    <task-details-import ref="TaskDetailsImport" @ok="handleOk" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('visit'),
+  components: {
+    TaskAssign: () => import('./TaskAssign'),
+    TaskDetailsImport: () => import('./TaskDetailsImport')
+  },
+  data () {
+    return {
+      advanced: false,
+      visible: false,
+      loading: false,
+      config: {},
+      queryParam: {},
+      data: {},
+      form: this.$form.createForm(this),
+      nairestatus: [this.$t('未分配'), this.$t('已分配未回访'), this.$t('已回访')],
+      nairename: [],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 140,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 40
+      }, {
+        title: this.$t('任务名称'),
+        dataIndex: 'taskname',
+        width: 200
+      }, {
+        title: this.$t('问卷名称'),
+        dataIndex: 'nairename',
+        width: 200
+      }, {
+        title: this.$t('问卷状态'),
+        dataIndex: 'nairestatus'
+      }, {
+        title: this.$t('回访人'),
+        dataIndex: 'revisiter'
+      }, {
+        title: this.$t('回访时间'),
+        dataIndex: 'revisitdays',
+        width: 140
+      }, {
+        title: this.$t('分配人'),
+        dataIndex: 'distributor'
+      }, {
+        title: this.$t('分配时间'),
+        dataIndex: 'allocatetime',
+        width: 140
+      }, {
+        title: this.$t('客户名称'),
+        dataIndex: 'customer'
+      }, {
+        title: this.$t('客户电话1'),
+        dataIndex: 'phone1'
+      }, {
+        title: this.$t('客户电话2'),
+        dataIndex: 'phone2'
+      }]
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  methods: {
+    // 查看明细
+    // 数据渲染
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/visit/details/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        for (const i in res.result.data) {
+          if (res.result.data[i].nairestatus === '0') {
+            res.result.data[i].nairestatus = this.$t('未分配')
+          } else if (res.result.data[i].nairestatus === '1') {
+            res.result.data[i].nairestatus = this.$t('已分配未回访')
+          } else {
+            res.result.data[i].nairestatus = this.$t('已回访')
+          }
+        }
+        return res.result
+      })
+    },
+    // 接收传参
+    show (config) {
+      this.visible = true
+      this.loading = false
+      this.config = config
+    },
+    // 刷新
+    handleOk () {
+      this.$refs.table.refresh(true)
+    },
+    // 搜索
+    detailsSearch () {
+      const table = this.$refs.table
+      table.refresh(true)
+    },
+    // 打开转移
+    assignPage (record) {
+      this.$refs.TaskAssign.show({
+        action: 'assign',
+        title: this.$t('转移'),
+        id: record && record.id,
+        selectValue: [],
+        url: '/visit/task/taskdetails'
+      })
+    },
+    // 批量转移
+    allassignPage (record) {
+      this.$refs.TaskAssign.show({
+        page: 'statistic',
+        mode: 'multiple',
+        action: 'assign',
+        title: this.$t('分配'),
+        id: record && record.id || this.selectedRowKeys,
+        selectValue: [],
+        url: '/visit/task/taskdetails'
+      })
+    },
+    // 数据提交
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          const headImage = this.imageFileList.length ? this.imageFileList[0].response.result.filePath : ''
+          values.info.setting = { headImage: headImage }
+          values.info.priv = this.priv
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { id: this.data.id })
+          }).then((res) => {
+            this.loading = false
+            this.$emit('ok', values)
+            if (res.code) {
+              this.$message.warning(res.message)
+            } else {
+              this.visible = false
+              this.$message.success(res.message)
+            }
+          })
+        }
+      })
+    },
+    // 打开导入数据
+    handleimport () {
+      this.$refs.TaskDetailsImport.show({
+        action: 'import',
+        title: this.$t('导入数据'),
+        selectValue: []
+      })
+    },
+    // 删除
+    handleDelete (record) {
+      const table = this.$refs.table
+      const id = record && record.id || this.selectedRowKeys
+      const self = this
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          self.axios({
+            url: '/visit/details/delete',
+            data: { id: id }
+          }).then(res => {
+            self.$message.success(self.$t('删除成功'))
+            table.refresh(true)
+          })
+        }
+      })
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    refresh () {
+      this.$refs.table.refresh(true)
+    }
+  }
+}
+</script>

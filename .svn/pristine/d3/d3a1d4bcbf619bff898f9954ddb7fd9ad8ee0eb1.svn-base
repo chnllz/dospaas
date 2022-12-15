@@ -1,0 +1,55 @@
+<template>
+  <div class="page">
+    <a-form-design
+      ref="kFormDesign"
+      :fieldColumns="[]"
+      :myTemplate="cardTemplate"
+      :formdata="{}"
+      :setting="{}"
+      :dataWindowButtons="dataWindowButtons"
+      :fields="componentsList"
+    ></a-form-design>
+  </div>
+</template>
+
+<script>
+import Vue from 'vue'
+import AFormDesign from '@/views/admin/AppFormDesign/packages/index'
+import { mapMutations } from 'vuex'
+Vue.use(AFormDesign)
+export default {
+  data () {
+    return {
+      cardTemplate: [],
+      dataWindowButtons: [{
+        name: '创建流程',
+        usage: 'flow_create',
+        position: 'bar'
+      }],
+      componentsList: [
+        'grid',
+        'card',
+        'tabs',
+        'collapse',
+        'divider',
+        'square',
+        'swiper',
+        'gap',
+        'button',
+        'text',
+        'alert',
+        'placeholder',
+        'html',
+        'line'
+      ]
+    }
+  },
+  destroyed () {
+    this.SET_PAGESTORE([])
+    this.SET_PAGEINFO({})
+  },
+  methods: {
+    ...mapMutations('appStore', ['SET_PAGESTORE', 'SET_PAGEINFO'])
+  }
+}
+</script>

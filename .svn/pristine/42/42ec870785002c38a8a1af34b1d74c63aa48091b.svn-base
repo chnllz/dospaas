@@ -1,0 +1,211 @@
+<template>
+  <div class="handle-page">
+    <a-row :gutter="10">
+      <a-col span="20">
+        <a-input :placeholder="$t('搜索')"></a-input>
+      </a-col>
+      <a-col span="4">
+        <a-button icon="plus" @click="handleAddPage"></a-button>
+      </a-col>
+    </a-row>
+    <div class="page-tree">
+      <a-tree draggable :tree-data="pageTree" show-icon @drop="onDrop" @select="selectNode">
+        <template slot="editAndDelete">
+          <a-icon type="delete" style="padding-right: 4px" @click="deletePage" />
+          <a-icon type="edit" />
+        </template>
+      </a-tree>
+    </div>
+    <a-modal :visible="visible" :title="$t('自定义页面')" @cancel="visible = false" @ok="handleOk">
+      <a-form :form="form">
+        <a-form-item :label="$t('名称')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 15 }">
+          <a-input
+            v-decorator="['name', { initialValue: name, rules: [{ required: true, message: $t('请输入名称') }] }]"
+          ></a-input>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+  </div>
+</template>
+
+<script>
+export default {
+  data () {
+    return {
+      type: '',
+      visible: false,
+      title: '',
+      pageTree: [],
+      selectPageInfo: {},
+      name: '',
+      form: this.$form.createForm(this)
+    }
+  },
+  created () {
+    this.getTree()
+  },
+  methods: {
+    handleAddPage () {
+      this.visible = true
+    },
+    handleOk () {
+      this.visible = false
+      this.axios({
+        url: '/admin/modeling/addAppBasePage',
+        data: {
+          parentTemplateId: null,
+          name: this.form.getFieldsValue()['name'],
+          setting: null,
+          accessLevel: 0,
+          remarks: null
+        }
+      }).then(res => {
+        if (!res.code) {
+          this.$message.success(res.message)
+          this.getTree()
+        }
+      })
+    },
+    onDrop (info) {
+      console.log(info)
+      const dropKey = info.node.eventKey
+      const dragKey = info.dragNode.eventKey
+      const dropPos = info.node.pos.split('-')
+      const dropPosition = info.dropPosition - Number(dropPos[dropPos.length - 1])
+      // console.log('info.node.eventKey', info.node.eventKey)
+      // console.log('info.dragNode.eventKey', info.dragNode.eventKey)
+      // console.log('info.node.eventKey', info.node.eventKey)
+      const loop = (data, key, callback) => {
+        data.forEach((item, index, arr) => {
+          if (item.key === key) {
+            return callback(item, index, arr)
+          }
+          if (item.children) {
+            return loop(item.children, key, callback)
+          }
+        })
+      }
+      const data = this.pageTree
+
+      // Find dragObject
+      let dragObj
+      loop(data, dragKey, (item, index, arr) => {
+        arr.splice(index, 1)
+        dragObj = item
+      })
+      if (!info.dropToGap) {
+        // Drop on the content
+        loop(data, dropKey, item => {
+          item.children = item.children || []
+          // where to insert 示例添加到尾部，可以是随意位置
+          item.children.push(dragObj)
+        })
+      } else if (
+        (info.node.children || []).length > 0 && // Has children
+        info.node.expanded && // Is expanded
+        dropPosition === 1 // On the bottom gap
+      ) {
+        loop(data, dropKey, item => {
+          item.children = item.children || []
+          // where to insert 示例添加到尾部，可以是随意位置
+          item.children.unshift(dragObj)
+        })
+      } else {
+        let ar
+        let i
+        loop(data, dropKey, (item, index, arr) => {
+          ar = arr
+          i = index
+        })
+        if (dropPosition === -1) {
+          ar.splice(i, 0, dragObj)
+        } else {
+          ar.splice(i + 1, 0, dragObj)
+        }
+      }
+      this.pageTree = data
+    },
+    getTree () {
+      this.axios({
+        url: '/admin/modeling/initAppBasePageTrees'
+      }).then(res => {
+        this.pageTree = res.result.map(item => {
+          item.title = item.name
+          item.key = item.templateId
+          if (item.templateId === this.selectPageInfo.templateId) {
+            item.slots = {
+              icon: 'editAndDelete'
+            }
+          } else {
+            item.slots = {
+              icon: ''
+            }
+          }
+          return item
+        })
+      })
+    },
+    selectNode (selectedKeys, e) {
+      this.axios({
+        url: '/admin/modeling/getAppBasePage',
+        params: {
+          templateId: selectedKeys[0]
+        }
+      }).then(res => {
+        this.selectPageInfo = res.result
+        const template = res.result && res.result.setting && res.result.setting.template ? res.result.setting.template : {
+          list: [],
+          config: {
+            layout: 'horizontal',
+            labelCol: { xs: 4, sm: 4, md: 4, lg: 4, xl: 4, xxl: 4 },
+            wrapperCol: { xs: 18, sm: 18, md: 18, lg: 18, xl: 18, xxl: 18 },
+            hideRequiredMark: false,
+            customStyle: ''
+          }
+        }
+        this.pageTree = this.pageTree.map(item => {
+          item.title = item.name
+          item.key = item.templateId
+          if (item.templateId === this.selectPageInfo.templateId) {
+            item.slots = {
+              icon: 'editAndDelete'
+            }
+          } else {
+            item.slots = {
+              icon: ''
+            }
+          }
+          return item
+        })
+        this.$emit('templateChange', template.list)
+      })
+    },
+    deletePage () {
+      this.axios({
+        url: '/admin/modeling/deleteAppBasePage',
+        params: {
+          templateId: this.selectPageInfo.templateId
+        }
+      }).then(res => {
+        if (!res.code) {
+          this.$message.success(res.message)
+          this.getTree()
+        }
+      })
+    }
+  }
+}
+</script>
+
+<style lang="less" scoped>
+.handle-page {
+  position: relative;
+}
+.handle-page /deep/ .ant-tree-node-content-wrapper {
+  width: 100px;
+  .ant-tree-iconEle {
+    position: absolute;
+    right: 20px;
+  }
+}
+</style>

@@ -1,0 +1,34 @@
+<template>
+  <a-card size="small">
+    <a-tabs>
+      <a-tab-pane key="1">
+        <span slot="tab">
+          <a-icon type="wechat" />
+          {{ $t('授权列表') }}
+        </span>
+        <List ref="List" />
+      </a-tab-pane>
+      <a-tab-pane key="2">
+        <span slot="tab">
+          <a-icon type="setting" />
+          {{ $t('账户设置') }}
+        </span>
+        <Account ref="Account" />
+      </a-tab-pane>
+    </a-tabs>
+  </a-card>
+</template>
+<script>
+export default {
+  i18n: window.lang('weixin'),
+  components: {
+    List: () => import('./List'),
+    Account: () => import('./Account')
+  },
+  data: function () {
+    return {
+
+    }
+  }
+}
+</script>

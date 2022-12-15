@@ -1,0 +1,215 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="$t('用户')" :width="900" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item
+          v-if="config.transition"
+          :label="$t('转办可选用户数')"
+          :labelCol="{ span: 4 }"
+          :wrapperCol="{ span: 20 }"
+        >
+          <a-radio-group v-model="config.modeCheck">
+            <a-radio value="default">{{ $t('单选') }}</a-radio>
+            <a-radio value="multiple">{{ $t('多选') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-card
+          v-if="userListData.length > 0"
+          size="small"
+          style="border: 1px dashed #e8e8e8"
+          @mouseenter="delShow = true"
+          @mouseleave="delShow = false"
+        >
+          <a-tooltip :title="$t('清空')">
+            <a-icon
+              v-if="delShow"
+              type="delete"
+              style="position: absolute; top: 3px; right: 3px; color: #f5222d"
+              @click="userListData = []"
+            />
+          </a-tooltip>
+          <a-row :gutter="[0, 5]" type="flex">
+            <a-col v-for="tag in userListData" :key="tag.username">
+              <a-tag closable @close="deleteTag(tag)">{{ tag.username }}</a-tag>
+            </a-col>
+          </a-row>
+        </a-card>
+        <a-card v-else size="small" style="text-align: center; border: 1px dashed #e8e8e8; color: #7f7f7f">
+          {{ $t('暂无数据') }}
+        </a-card>
+        <a-row type="flex" :gutter="10" style="margin: 10px 0">
+          <a-col flex="180px">
+            <a-form-item>
+              <a-select v-model="userParamType" @change="queryParam = {}">
+                <a-select-option value="username">{{ $t('账号') }}</a-select-option>
+                <a-select-option value="department">{{ $t('部门') }}</a-select-option>
+                <a-select-option value="role">{{ $t('角色') }}</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col flex="auto">
+            <a-form-item v-if="userParamType === 'username'">
+              <a-input-search
+                :placeholder="$t('请输入账号搜索')"
+                @search="
+                  (e) => {
+                    queryParam.username = e
+                    $refs.table.refresh(true)
+                  }
+                "
+              />
+            </a-form-item>
+            <a-form-item v-else-if="userParamType === 'department'">
+              <a-input-search
+                :placeholder="$t('请输入部门名称搜索')"
+                @search="
+                  (e) => {
+                    queryParam.departmentName = e
+                    $refs.table.refresh(true)
+                  }
+                "
+              />
+            </a-form-item>
+            <a-form-item v-else>
+              <a-input-search
+                :placeholder="$t('请输入角色名称搜索')"
+                @search="
+                  (e) => {
+                    queryParam.roleName = e
+                    $refs.table.refresh(true)
+                  }
+                "
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <s-table
+          ref="table"
+          size="small"
+          rowKey="username"
+          :columns="columns"
+          :data="loadDataTable"
+          :sorter="{ field: 'id', order: 'descend' }"
+        >
+          <span slot="action" slot-scope="index, record">
+            <a href="javascript:;" @click="dataSelect(record)">{{ $t('选择') }}</a>
+          </span>
+        </s-table>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('确定') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import Vue from 'vue'
+import { TreeSelect } from 'ant-design-vue'
+Vue.use(TreeSelect)
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      delShow: false,
+      form: this.$form.createForm(this),
+      data: {},
+      userListData: [],
+      queryParam: {}, // 搜索参数
+      columns: [{
+        title: this.$t('账号'),
+        dataIndex: 'username',
+        sorter: true
+      }, {
+        title: this.$t('真实姓名'),
+        dataIndex: 'realName',
+        sorter: true
+      }, {
+        title: this.$t('所属部门'),
+        dataIndex: 'departmentName',
+        sorter: true
+      }, {
+        title: this.$t('所属角色'),
+        dataIndex: 'roleName',
+        sorter: true
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsDepartment: [{
+        title: this.$t('部门'),
+        dataIndex: 'text'
+      }],
+      userParamType: 'username'
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.fieldId = config.fieldId
+      if (config.mode === 'multiple') {
+        config.selectValue = config.selectValue ? config.selectValue : []
+        this.userListData = config.selectValue ? config.selectValue.map(item => {
+          const obj = {}
+          obj.username = item
+          obj.text = item
+          return obj
+        }) : []
+      } else {
+        this.userListData = []
+        if (config.selectValue) {
+          const obj = {
+            username: config.selectValue,
+            text: config.selectValue
+          }
+          this.userListData.push(obj)
+        }
+      }
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/search/userSearch',
+        data: Object.assign(parameter, this.queryParam, { fieldId: this.fieldId })
+      }).then(res => {
+        return res.result
+      })
+    },
+    dataSelect (record) {
+      if (this.userListData.length === 0 && this.config.mode === 'default') {
+        this.userListData.push(record)
+      } else if (this.config.mode === 'default') {
+        this.userListData.splice(0, 1, record)
+      } else if (this.config.mode === 'multiple') {
+        if (this.userListData.every(item => item.username !== record.username)) {
+          this.userListData.splice(this.userListData.length, 0, record)
+        }
+      }
+    },
+    deleteTag (record) {
+      if (this.config.mode === 'default') {
+        this.userListData = []
+      } else if (this.config.mode === 'multiple') {
+        this.userListData = this.userListData.filter(item => item.username !== record.username)
+      }
+    },
+    handleSubmit () {
+      const userListData = this.userListData.map(item => item.username)
+      let selectValue
+      if (this.config.mode !== 'default') {
+        selectValue = userListData
+      } else {
+        selectValue = userListData[0] ? userListData[0] : ''
+      }
+      this.$emit('ok', selectValue, this.config.index, this.config.conIndex, this.config.modeCheck)
+      this.visible = false
+    }
+  }
+}
+</script>

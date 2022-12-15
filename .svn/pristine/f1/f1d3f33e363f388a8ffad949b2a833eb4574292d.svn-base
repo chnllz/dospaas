@@ -1,0 +1,353 @@
+<template>
+  <a-drawer
+    :title="config.action === 'add' ? $t('添加') : $t('编辑') + ':' + config.title"
+    :width="600"
+    :visible="visible"
+    @close="visible = !visible"
+  >
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-alert
+          v-if="config.action === 'add'"
+          showIcon
+          :message="$t('如果没有修改表格的默认排序方案（按{排序}升序），新建的数据会展现在最后一页')"
+          type="info"
+          style="margin-bottom: 8px"
+        />
+        <a-form-item v-if="config.type === 'son'" :label="$t('上级字典')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-cascader
+            v-decorator="['parentDictDataNumber', { initialValue: data.parentDictDataNumber || undefined }]"
+            :show-search="true"
+            option-filter-prop="children"
+            :placeholder="$t('作为一级字典')"
+            :options="dictTreeData"
+            changeOnSelect
+            @change="
+              (e) => {
+                config.parentDictDataNumber = e.length ? e[e.length - 1] : null
+              }
+            "
+          />
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('显示名称') }}
+            <a-tooltip :title="$t('不允许重复。')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-textarea
+            v-if="config.action === 'add'"
+            v-decorator="[
+              'dictDataName',
+              {
+                initialValue: data.dictDataName,
+                rules: [{ required: true, message: $t('请输入字典名称') }, { validator: checkName }]
+              }
+            ]"
+            :autoSize="{ minRows: 6 }"
+            :placeholder="$t('一行一个，可以进行批量添加')"
+            @change="changeName"
+          />
+          <a-input
+            v-else
+            v-decorator="[
+              'dictDataName',
+              {
+                initialValue: data.dictDataName,
+                rules: [{ required: true, message: $t('请输入字典名称') }, { validator: checkName }]
+              }
+            ]"
+            @change="changeName"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('系统名称') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>
+                  {{
+                    $t(
+                      '系统名称创建时由{显示名称}拼音全拼组成，使用小驼峰命名法。如：{显示名称}="我爱祖国"，自动生成的{系统名称}为"woAiZuGuo"。同一模块下，不允许重复。'
+                    )
+                  }}
+                </span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input
+            v-if="config.action === 'edit'"
+            v-decorator="[
+              'dictDataNumber',
+              {
+                initialValue: data.dictDataNumber,
+                rules: [
+                  { required: true, message: $t('请输入字典系统名称') },
+                  {
+                    pattern: new RegExp(/^(([a-z]+[A-Z]{0,1}[a-z]*)+\n*)+$/),
+                    message: $t('仅支持输入大小写字母，且首字母小写，驼峰形式，禁止出现连续大写字母')
+                  }
+                ]
+              }
+            ]"
+            :disabled="editable"
+          >
+            <template v-if="config.action === 'edit'">
+              <a-icon v-if="editable" slot="addonAfter" type="edit" style="cursor: pointer" @click="handleEdit" />
+              <a-icon v-else slot="addonAfter" type="edit" style="cursor: pointer" @click="editable = true" />
+            </template>
+          </a-input>
+          <a-textarea
+            v-else
+            v-decorator="[
+              'dictDataNumber',
+              {
+                initialValue: data.dictDataNumber,
+                rules: [
+                  { required: true, message: $t('请输入字典系统名称') },
+                  {
+                    pattern: new RegExp(/^(([a-z]+[A-Z]{0,1}[a-z]*)+\n*)+$/),
+                    message: $t('仅支持输入大小写字母，且首字母小写，驼峰形式，禁止出现连续大写字母')
+                  }
+                ]
+              }
+            ]"
+            :autoSize="{ minRows: 6 }"
+            :placeholder="$t('一行一个，可以进行批量添加')"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[status]', { initialValue: data.status }]">
+            <a-radio :value="1">{{ $t('启用') }}</a-radio>
+            <a-radio :value="0">{{ $t('禁用') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item hidden :label="$t('字典类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[dictMode]', { initialValue: data.dictMode }]">
+            <a-radio :value="0">{{ $t('平面字典') }}</a-radio>
+            <a-radio :value="1">{{ $t('树形字典') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="userInfo.superAdmin" :label="$t('访问级别')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[accessLevel]', { initialValue: data.accessLevel || 0 }]">
+            <a-radio :value="0" style="width: 100%">{{ $t('可见可编可删') }}</a-radio>
+            <a-radio :value="1" style="width: 100%">{{ $t('可见可编不可删') }}</a-radio>
+            <a-radio :value="2" style="width: 100%">{{ $t('可见不可编不可删') }}</a-radio>
+            <a-radio :value="3" style="width: 100%">{{ $t('不可见不可编不可删') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea v-decorator="['info[remarks]', { initialValue: data.remarks }]" :autoSize="{ minRows: 6 }" />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    SetLang: () => import('@/components/SetLang')
+
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 1000)
+    return {
+      config: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      dictTreeData: [],
+      fieldList: {}, // 保存数据
+      fieldArr: [], // 根据数据表获取相应字段数组
+      tableList: [],
+      tableName: [],
+      data: {},
+      editable: false
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    // 打开抽屉组件
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.axios({
+        url: this.config.url,
+        data: {
+          info: {
+            id: config.record ? config.record.id : 0
+          },
+          action: 'get',
+          dictCategoryNumber: config.dictCategoryNumber,
+          parentDictDataNumber: config.parentDictDataNumber
+        }
+      }).then((res) => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = res.result.data
+        this.data.parentDictDataNumber = res.result.fullDictDataNumberList
+        this.dictTreeData = res.result.dictTreeData
+        const getDictTreeData = (array) => {
+          array.forEach(item => {
+            if (item.children && item.children.length) {
+              getDictTreeData(item.children)
+            } else {
+              delete item.children
+            }
+          })
+        }
+        getDictTreeData(this.dictTreeData)
+        if (config.action === 'edit') {
+          this.editable = true
+        } else {
+          this.editable = false
+          this.data.dictMode = config.record.dictMode
+        }
+      })
+    },
+    // 显示名称验证是否重复
+    checkName (rule, value, callback) {
+      if (value) {
+        this.axios({
+          url: '/admin/dict/checkUnique',
+          data: {
+            dictDataName: value,
+            checkType: 'data',
+            action: this.config.action,
+            id: this.config.record && this.config.action === 'edit' ? this.config.record.id : undefined,
+            dictCategoryNumber: this.config.dictCategoryNumber,
+            parentDictDataNumber: this.config.parentDictDataNumber
+          }
+        }).then(res => {
+          if (res.code) {
+            callback(res.message)
+          } else {
+            callback()
+          }
+        })
+      } else {
+        callback()
+      }
+    },
+    // 自动生成系统名称
+    changeName (e) {
+      if (!this.editable || this.config.action === 'add') {
+        const val = e.target.value
+        let valArr = val.split('\n')
+        const pinyin = require('js-pinyin')
+        valArr = valArr.map(item => {
+          const reg = new RegExp(/^(?![0-9])[a-zA-Z0-9]+$/)
+          const reg2 = new RegExp(/^[a-zA-Z0-9]+$/)
+          var val = ''
+          if (item.length <= 1) {
+            val = pinyin.getFullChars(item).toLowerCase()
+          } else {
+            const str1 = pinyin.getFullChars(item.substring(0, 1)).toLowerCase()
+            const latterStr = item.substring(1, item.length)
+            const str2Arr = latterStr.split('').map(item => {
+              const itemPinyin = pinyin.getFullChars(item).toLowerCase()
+              return itemPinyin[0].toUpperCase() + itemPinyin.substring(1, itemPinyin.length)
+            })
+            const str2 = str2Arr.join('')
+            val = str1 + str2
+          }
+          val = val.split('')
+          this.getVal(val, reg)
+          if (val[0]) {
+            val[0] = val[0].toLowerCase()
+          }
+          val = val.filter(item => {
+            return reg2.test(item)
+          })
+          return val.join('')
+        })
+        const { setFieldsValue, validateFields } = this.form
+        setFieldsValue({ 'dictDataNumber': valArr.join('\n') })
+        this.$nextTick(() => {
+          validateFields(['dictDataNumber'], { force: true })
+        })
+      }
+    },
+    // // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    handleEdit () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要修改系统名称吗？'),
+        content: this.$t('修改系统名称会造成系统未知错误，强烈建议不要修改'),
+        onOk () {
+          that.editable = false
+        }
+      })
+    },
+    // 获取数据表
+    getData (val) {
+      this.tableName = val
+      this.axios({
+        url: '/admin/userTable/getField',
+        data: { tableName: val[1] }
+      }).then(res => {
+        this.fieldArr = res.result
+      })
+    },
+    // 表单提交
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          values.info.id = this.config.record.id
+          if (this.config.action === 'edit') {
+            values.info.dictCategoryNumber = this.config.record.dictCategoryNumber
+            values.info.dictDataName = values.dictDataName
+            values.info.dictDataNumber = values.dictDataNumber
+            values.info.parentDictDataNumber = values.parentDictDataNumber && values.parentDictDataNumber.length ? values.parentDictDataNumber[values.parentDictDataNumber.length - 1] : undefined
+            values.parentDictDataNumber = undefined
+            values.dictDataName = values.dictDataNumber = undefined
+          } else {
+            values.dictCategoryNumber = this.config.record.dictCategoryNumber
+            values.parentDictDataNumber = values.parentDictDataNumber && values.parentDictDataNumber.length ? values.parentDictDataNumber[values.parentDictDataNumber.length - 1] : undefined
+          }
+          this.loading = true
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { action: 'submit' })
+          }).then((res) => {
+            this.loading = false
+            if (res.code === 0) {
+              this.visible = false
+              this.$emit('ok', values)
+              this.form.resetFields()
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

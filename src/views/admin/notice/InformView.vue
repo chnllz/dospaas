@@ -1,0 +1,134 @@
+<template>
+  <a-drawer height="100%" placement="top" :closable="false" :destroyOnClose="true" :visible="visible" @close="cancel">
+    <a-spin :spinning="false">
+      <a-row type="flex" justify="center" style="padding-top: 32px">
+        <a-col flex="864px">
+          <a-row type="flex" justify="center">
+            <a-col flex="752px">
+              <h1>{{ mdl.title }}</h1>
+              <a-row style="margin: 16px 0 8px; font-size: 14px" class="timeStyle" :gutter="16" type="flex">
+                <a-col>{{ mdl.author }}</a-col>
+                <a-col flex="auto">
+                  {{ mdl.sendTime }}
+                </a-col>
+                <a-col v-if="config.type !== 'received'" :span="10" style="text-align: right">
+                  <span>
+                    <a @click="handleRead('read')">
+                      {{ $t('已读') }} {{ mdl.receiverRead ? mdl.receiverRead.split(',').length : 0 }}
+                    </a>
+                    <a-divider type="vertical" />
+                    <a @click="handleRead('unread')">{{ $t('未读') }} {{ mdl.unread ? mdl.unread.length : 0 }}</a>
+                  </span>
+                </a-col>
+              </a-row>
+              <div v-dompurify-html="mdl.content"></div>
+            </a-col>
+          </a-row>
+        </a-col>
+      </a-row>
+      <div class="bbar">
+        <a-button @click="cancel">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <read-details ref="readDetails" />
+  </a-drawer>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    ReadDetails: () => import('./InformReadDetails')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      mdl: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      this.mdl = this.config.record
+      if (config.type === 'received' && !this.mdl.receiverRead.includes(this.userInfo.username)) {
+        this.axios({
+          url: '/base/Inform/read',
+          data: { id: config.record.id }
+        })
+      }
+    },
+    handleRead (type) {
+      this.$refs.readDetails.show({
+        record: this.mdl,
+        type: type
+      })
+    },
+    cancel () {
+      this.$emit('ok')
+      this.visible = !this.visible
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+/deep/ img {
+  max-width: 700px;
+  height: auto;
+}
+.timeStyle {
+  color: @text-color-secondary;
+}
+/deep/.ant-drawer-body {
+  padding: 0;
+  height: 100%;
+  > :first-child:not(.ant-spin-nested-loading) {
+    padding: 16px;
+  }
+  > .ant-spin-nested-loading {
+    height: 100%;
+    > .ant-spin-container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      > :first-child {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 16px;
+      }
+    }
+  }
+  .bbar {
+    border-top: 1px solid #e9e9e9;
+    padding: 10px 16px 10px 700px;
+    text-align: center;
+    button {
+      margin-left: 8px;
+    }
+  }
+  //搜索区域样式
+  .table-search {
+    margin-bottom: 8px;
+    .divider {
+      margin: 4px -6px 8px;
+    }
+    .normal {
+      .ant-row {
+        height: 36px;
+      }
+    }
+    .advanced {
+      .title {
+        line-height: 36px;
+      }
+    }
+  }
+}
+</style>

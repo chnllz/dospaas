@@ -1,0 +1,323 @@
+<template>
+  <a-modal :title="config.title" :width="600" :visible="visible" :destroyOnClose="true" @cancel="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('头像')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-upload
+            v-decorator="[
+              'info[avatar]',
+              {
+                initialValue: data.avatar,
+                valuePropName: 'fileList',
+                getValueFromEvent: normFile,
+                rules: [{ required: true, message: $t('请上传头像') }]
+              }
+            ]"
+            style="width: 58px; height: 58px; margin-bottom: 2px"
+            :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+            :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+            name="upload"
+            accept="image/*"
+            listType="picture-card"
+            :before-upload="beforeUploadImage"
+            @preview="handleImagePreview"
+          >
+            <div
+              v-if="
+                (!form.getFieldValue('info[avatar]') && data.avatar && data.avatar.length == 0) ||
+                (form.getFieldValue('info[avatar]') && form.getFieldValue('info[avatar]').length == 0)
+              "
+            >
+              <a-icon type="plus" />
+              <div>{{ $t('上传') }}</div>
+            </div>
+          </a-upload>
+          <a-modal :visible="previewVisible" :footer="null" @cancel="handleCancel">
+            <img
+              alt="example"
+              style="width: 100%"
+              :src="`${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${imagePreviewUrl}`"
+            />
+          </a-modal>
+        </a-form-item>
+        <a-form-item :label="$t('账号')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'info[serviceId]',
+              { initialValue: data.serviceId, rules: [{ required: true, message: $t('请选择用户') }] }
+            ]"
+            showSearch
+            allowClear
+            :disabled="config.action === 'edit'"
+            :filter-option="false"
+            :placeholder="$t('请输入账号或真实姓名搜索')"
+            :not-found-content="fetching ? undefined : null"
+            @search="getUserList"
+            @popupScroll="popupScroll"
+            @change="
+              (e) => {
+                if (!e) {
+                  userOption = []
+                }
+              }
+            "
+          >
+            <a-select-option
+              v-for="value in userOption"
+              :key="value.userName"
+              @click="
+                (e) => {
+                  const obj = {}
+                  obj['info[serviceId]'] = value.userName
+                  form.setFieldsValue(obj)
+                }
+              "
+            >
+              {{ value.userName + '(' + value.realName + ')' }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :label="$t('客服昵称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'info[nickName]',
+              { initialValue: data.nickName, rules: [{ required: true, message: $t('请输入客服昵称') }] }
+            ]"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('所属技能组')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'info[groupId]',
+              { initialValue: data.groupIds, rules: [{ required: true, message: $t('请选择所属技能组') }] }
+            ]"
+            allowClear
+            show-search
+            mode="multiple"
+            :filter-option="filterOption"
+          >
+            <a-select-option v-for="item in data.groupList" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('可接待访客上限') }}
+            <a-tooltip :title="$t('设置客服能接待访客的上限，范围为0~100')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input-number
+            v-decorator="[
+              'info[connectLimit]',
+              { initialValue: data.connectLimit, rules: [{ required: true, message: $t('请输入接入上限') }] }
+            ]"
+            :min="0"
+            :max="100"
+          />
+        </a-form-item>
+      </a-form>
+    </a-spin>
+    <div slot="footer">
+      <a-button type="primary" :loading="loading" @click="handleSubmit">{{ $t('保存') }}</a-button>
+      <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-modal>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+export default {
+  i18n: window.lang('chat'),
+  data () {
+    this.getUserList = debounce(this.getUserList, 500)
+    return {
+      fetching: false,
+      searchData: '',
+      lastFetchId: 0,
+      scrollStats: true,
+      page: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      },
+      config: {},
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      visible: false,
+      loading: false,
+      data: {},
+      form: this.$form.createForm(this),
+      userOption: [],
+      fileList: [],
+      // 预览图片的路径
+      imagePreviewUrl: '',
+      // 控制发送图片预览
+      previewVisible: false
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.loading = true
+      this.fileList = []
+      this.data = {}
+      this.axios({
+        url: '/chat/setting/base',
+        data: { action: 'get' }
+      }).then(res => {
+        const setting = res.result.info
+        this.axios({
+          url: this.config.url,
+          data: Object.assign({ action: 'get', id: config.record ? config.record.id : 0 })
+        }).then((res) => {
+          const imgUrl = res.result.info.avatar ?? (setting.systemAvatar || 'static/image/man.png')
+          const avatar = [{
+            uid: new Date().valueOf(),
+            status: 'done',
+            lastModified: this.moment().valueOf(),
+            type: 'image/png',
+            response: {
+              code: 0,
+              message: this.$t('操作成功'),
+              result: {
+                fileName: 'image.png',
+                fileSize: 6471,
+                filePath: imgUrl,
+                fileType: 'png'
+              }
+            },
+            name: 'image.png',
+            url: `${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${imgUrl}`
+          }]
+          res.result.info.avatar = avatar
+          this.data = res.result.info
+          this.loading = false
+        })
+      })
+    },
+    normFile (e) {
+      if (Array.isArray(e)) {
+        return e
+      }
+      if (e.fileList.length > 0 && e.fileList.every(item => item.response)) {
+        e.fileList = e.fileList.filter(item => item.response && item.response.code === 0)
+      }
+      return e && e.fileList
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.response.result.filePath
+      this.previewVisible = true
+    },
+    handleImageChange (info) {
+      this.fileList = info.fileList
+    },
+    // 取消预览图片
+    handleCancel () {
+      this.previewVisible = false
+    },
+    // 上传图片限制
+    beforeUploadImage (file, fileList, item) {
+      return new Promise((resolve, reject) => {
+        const isImage = file.type
+        if (!isImage.includes('image')) {
+          this.$message.error(this.$t('上传的是非图片格式'))
+          this.uploadFormatImage = true
+          return reject(file)
+        }
+        return resolve(file)
+      })
+    },
+    // 图片附件赋值
+    fileChange (info) {
+      info.fileList = info.fileList.map(item => {
+        const obj = {
+          name: item.name,
+          response: item.response,
+          status: item.status,
+          uid: item.uid,
+          url: item.response && item.response.result ? (process.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + item.response.result.filePath) : ''
+        }
+        return obj
+      })
+    },
+    handleClose () {
+      this.visible = !this.visible
+      this.fileList = []
+    },
+    filterOption (input, option) {
+      return (
+        option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      )
+    },
+    getUserList (userList) {
+      this.searchData = userList
+      this.page.pageNo = 1
+      this.scrollStats = true
+      if (userList) {
+        this.lastFetchId += 1
+        const fetchId = this.lastFetchId
+        this.fetching = true
+        this.axios({
+          url: '/chat/user/option',
+          data: Object.assign(this.page, { name: userList })
+        }).then(res => {
+          if (fetchId !== this.lastFetchId) {
+            return
+          }
+          this.userOption = res.result.data
+          this.fetching = false
+        })
+      } else {
+        this.userOption = []
+      }
+    },
+    popupScroll (userScroll) {
+      const scrollTop = userScroll.target.scrollTop
+      const scrollHeight = userScroll.target.scrollHeight
+      const clientHeight = userScroll.target.clientHeight
+      const scrollBottom = scrollHeight - clientHeight - scrollTop
+      if (scrollBottom < 1 && this.scrollStats && this.searchData) {
+        this.page.pageNo++
+        this.getUserListScroll()
+      }
+    },
+    getUserListScroll () {
+      this.axios({
+        url: '/chat/user/option',
+        data: Object.assign(this.page, { name: this.searchData })
+      }).then(res => {
+        if (!res.result.data.length) {
+          this.scrollStats = false
+        }
+        this.userOption = [...this.userOption, ...res.result.data]
+      })
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          values.info.avatar = values.info.avatar[0].response.result.filePath
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { id: this.data.id, action: 'submit' })
+          }).then((res) => {
+            this.loading = false
+            if (res.code === 0) {
+              this.visible = false
+              this.$emit('ok')
+              this.form.resetFields()
+              this.fileList = []
+              this.$message.success(res.message)
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

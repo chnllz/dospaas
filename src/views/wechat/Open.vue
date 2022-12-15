@@ -1,0 +1,109 @@
+<template>
+  <a-card size="small">
+    <a-card size="small" type="inner" :title="$t('基本信息')" style="margin-bottom: 20px">
+      <a-row v-if="status" :col="1">
+        <a-col :term="$t('授权方昵称')">{{ detail.nick_name }}</a-col>
+        <a-col :term="$t('授权方头像')"><img :src="detail.head_img" width="84" height="84" /></a-col>
+        <a-col :term="$t('授权方公众号类型')">{{ detail.service_type_info }}</a-col>
+        <a-col :term="$t('授权方认证类型')">{{ detail.verify_type_info }}</a-col>
+        <a-col :term="$t('公众号的主体名称')">{{ detail.principal_name }}</a-col>
+        <a-col :term="$t('二维码')">
+          <a-button type="primary" size="small" @click="showCode">{{ $t('点击查看') }}</a-button>
+        </a-col>
+        <a-modal :visible="imagePreviewVisible" :footer="null" @cancel="imagePreviewVisible = !imagePreviewVisible">
+          <img style="width: 100%" :src="detail.qrcode_url" />
+        </a-modal>
+        <a-col :term="$t('解除授权')">
+          <a-button type="primary" size="small" @click="showInfo">{{ $t('点击解除') }}</a-button>
+        </a-col>
+        <a-modal v-model="visible" :title="$t('使用帮助')" @ok="handleOk">
+          <a-list size="small" bordered :dataSource="info">
+            <a-list-item slot="renderItem" slot-scope="item">{{ item }}</a-list-item>
+            <div slot="header" class="header">{{ $t('如何解除微信公众号服务授权') }}</div>
+          </a-list>
+        </a-modal>
+      </a-row>
+      <div v-else>
+        <img :src="image" />
+        <span style="display: inline-block">
+          <h4>{{ $t('你还未绑定') }}{{ name }}</h4>
+          <a-button type="primary" @click="authorize">{{ $t('立即授权') }}</a-button>
+        </span>
+      </div>
+    </a-card>
+    <a-card size="small" type="inner" :title="$t('权限列表')">
+      <a-list v-if="status" size="small" bordered :dataSource="list">
+        <a-list-item slot="renderItem" slot-scope="item">{{ item }}</a-list-item>
+      </a-list>
+      <h4 v-else>{{ $t('你还未绑定{0}，请先进行授权', { 0: name }) }}</h4>
+    </a-card>
+  </a-card>
+</template>
+<script>
+// import DetailList from '@/components/DescriptionList'
+import { mapGetters } from 'vuex'
+// const DetailListItem = DetailList.Item
+const info = [
+  this.$t('1.登录您的微信公众号后台，在左侧菜单栏处找到“设置--公众号设置”'),
+  this.$t('2.进入“公众号设置--授权管理”，点击“查看平台详情”'),
+  this.$t('3.点击“取消授权”按钮即可'),
+  this.$t('小程序解除绑定步骤类似')
+]
+export default {
+  i18n: window.lang('wechat'),
+  name: 'Official',
+  components: {
+    // DetailList,
+    // DetailListItem
+  },
+  data () {
+    return {
+      name: '',
+      detail: {},
+      list: [],
+      url: '',
+      image: '',
+      status: false,
+      visible: false,
+      imagePreviewVisible: false,
+      info
+    }
+  },
+  computed: {
+    ...mapGetters(['setting'])
+  },
+  mounted () {
+    this.getList()
+  },
+  methods: {
+    getList () {
+      this.axios({
+        url: '/wechat/open/init',
+        data: { type: this.$route.query.type }
+      }).then(res => {
+        if (res.status === true) {
+          this.detail = res.result.detail
+          this.list = res.result.list
+          this.status = true
+        } else {
+          this.url = res.result.url
+          this.image = this.setting.rootUrl + res.result.image
+        }
+        this.name = res.result.name
+      })
+    },
+    authorize () {
+      window.location.href = this.url
+    },
+    showInfo () {
+      this.visible = true
+    },
+    handleOk (e) {
+      this.visible = false
+    },
+    showCode () {
+      this.imagePreviewVisible = true
+    }
+  }
+}
+</script>

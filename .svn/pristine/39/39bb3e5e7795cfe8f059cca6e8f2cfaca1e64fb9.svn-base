@@ -1,0 +1,719 @@
+<template>
+  <a-form :form="form">
+    <a-form-item :label="$t('允许输入长度')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-row :gutter="8">
+        <a-col :span="11">
+          <a-form-item>
+            <a-input-number
+              v-decorator="['setting[attribute][minLength]', { initialValue: data.attribute.minLength || '' }]"
+              style="width: 100%"
+              :min="minLength"
+              @change="handleMin"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="2" style="text-align: center">
+          {{ $t('至') }}
+        </a-col>
+        <a-col :span="11">
+          <a-form-item>
+            <a-input-number
+              v-decorator="['setting[attribute][maxLength]', { initialValue: data.attribute.maxLength || '' }]"
+              style="width: 100%"
+              :min="maxLength"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+    </a-form-item>
+    <a-form-item :label="$t('正则校验')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-input v-decorator="['setting[attribute][regex]', { initialValue: data.attribute.regex || '' }]">
+        <a-select
+          slot="addonAfter"
+          v-decorator="[
+            'setting[attribute][textRegexTypeInputEl]',
+            { initialValue: data.attribute.textRegexTypeInputEl || '' }
+          ]"
+          style="width: 120px"
+          @change="getReg"
+        >
+          <a-select-option v-for="regex in regexs" :key="regex.value" :value="regex.value">
+            {{ regex.text }}
+          </a-select-option>
+        </a-select>
+      </a-input>
+    </a-form-item>
+    <a-form-item :label="$t('输入提示')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-input v-decorator="['setting[attribute][emptyText]', { initialValue: data.attribute.emptyText || '' }]" />
+    </a-form-item>
+    <a-form-item :label="$t('关联模式')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-radio-group
+        v-decorator="[
+          'setting[form][mode]',
+          { initialValue: data.form.mode || 'combobox', rules: [{ required: true, message: $t('请选择关联模式') }] }
+        ]"
+        @change="getMode"
+      >
+        <a-radio value="combobox">{{ $t('下拉框模式') }}</a-radio>
+        <a-radio value="dialog">{{ $t('对话框模式') }}</a-radio>
+        <a-radio value="dialog_com">{{ $t('下拉框&对话框模式') }}</a-radio>
+      </a-radio-group>
+    </a-form-item>
+    <a-form-item :label="$t('关联的源数据表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-cascader
+        v-decorator="[
+          'setting[form][linkList]',
+          { initialValue: data.form.linkList || [], rules: [{ required: true, message: $t('请选择关联的源数据表') }] }
+        ]"
+        :placeholder="$t('请选择源数据表')"
+        :show-search="true"
+        option-filter-prop="children"
+        :options="tableField"
+        @change="handleTable"
+      />
+    </a-form-item>
+    <a-form-item :label="$t('关联的源数据表字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-select
+        v-decorator="[
+          'setting[form][linkField]',
+          {
+            initialValue: data.form.linkField || undefined,
+            rules: [{ required: true, message: $t('请选择源数据表字段') }]
+          }
+        ]"
+        :placeholder="$t('请选择源数据表字段')"
+        show-search
+        option-filter-prop="children"
+        @change="handleLinkField"
+      >
+        <a-select-option v-for="item in textFields" :key="item.fieldId" :value="item.alias">
+          {{ item.name }}
+        </a-select-option>
+      </a-select>
+    </a-form-item>
+    <a-form-item
+      v-if="linkMode !== 'dialog'"
+      :label="$t('下拉可搜索的字段')"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+      validateStatus="success"
+    >
+      <a-select
+        v-decorator="[
+          'setting[form][searchField_1]',
+          {
+            initialValue: data.form.searchField_1 || undefined,
+            rules: [{ required: false, message: $t('请选择当前表字段') }]
+          }
+        ]"
+        :placeholder="$t('请选择源数据表字段')"
+        allowClear
+        show-search
+        option-filter-prop="children"
+      >
+        <a-select-option v-for="item in textFields" :key="item.fieldId" :value="item.alias">
+          {{ item.name }}
+        </a-select-option>
+      </a-select>
+      <a-select
+        v-decorator="[
+          'setting[form][searchField_2]',
+          {
+            initialValue: data.form.searchField_2 || undefined,
+            rules: [{ required: false, message: $t('请选择当前表字段') }]
+          }
+        ]"
+        :placeholder="$t('请选择源数据表字段')"
+        allowClear
+        show-search
+        option-filter-prop="children"
+      >
+        <a-select-option v-for="item in textFields" :key="item.fieldId" :value="item.alias">
+          {{ item.name }}
+        </a-select-option>
+      </a-select>
+      <a-select
+        v-decorator="[
+          'setting[form][searchField_3]',
+          {
+            initialValue: data.form.searchField_3 || undefined,
+            rules: [{ required: false, message: $t('请选择当前表字段') }]
+          }
+        ]"
+        :placeholder="$t('请选择源数据表字段')"
+        allowClear
+        show-search
+        option-filter-prop="children"
+      >
+        <a-select-option v-for="item in textFields" :key="item.fieldId" :value="item.alias">
+          {{ item.name }}
+        </a-select-option>
+      </a-select>
+    </a-form-item>
+    <a-form-item
+      v-show="linkMode !== 'combobox'"
+      :label="$t('对话框数据窗口')"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+    >
+      <a-select
+        v-decorator="[
+          'setting[form][dataView]',
+          {
+            initialValue: data.form.dataView || undefined,
+            rules: [{ required: linkMode !== 'combobox' ? true : false, message: '请选择对话框数据窗口' }]
+          }
+        ]"
+        :allowClear="true"
+        show-search
+        option-filter-prop="children"
+        :placeholder="$t('请选择对话框数据窗口')"
+      >
+        <a-select-option v-for="item in tpl" :key="item.uid" :value="item.uid">
+          {{ item.name }}
+        </a-select-option>
+      </a-select>
+    </a-form-item>
+    <a-form-item :label="$t('可关联数据过滤条件')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-button @click="filterAdd">{{ $t('添加') }}</a-button>
+      <a-table
+        ref="table"
+        rowKey="id"
+        :columns="filtercolumns"
+        :dataSource="filterconditions"
+        size="small"
+        :pagination="false"
+      >
+        <span slot="sourceField" slot-scope="text, record">
+          <a-select
+            size="small"
+            show-search
+            option-filter-prop="children"
+            allowClear
+            :defaultValue="text ? text : undefined"
+            @change="
+              (val) => {
+                getFilterField(val, record)
+              }
+            "
+          >
+            <a-select-option v-for="item in record.linkFields" :key="item.fieldId" :value="item.alias">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </span>
+        <span slot="op" slot-scope="text, record">
+          <a-select
+            size="small"
+            show-search
+            option-filter-prop="children"
+            allowClear
+            defaultValue="="
+            @change="
+              (val) => {
+                record.op = val
+              }
+            "
+          >
+            <a-select-option value="=">{{ $t('等于') }}</a-select-option>
+            <a-select-option value="!=">{{ $t('不等于') }}</a-select-option>
+            <a-select-option v-if="showType" value=">">{{ $t('大于') }}</a-select-option>
+            <a-select-option v-if="showType" value=">=">{{ $t('大于等于') }}</a-select-option>
+            <a-select-option v-if="showType" value="<">{{ $t('小于') }}</a-select-option>
+            <a-select-option v-if="showType" value="<=">{{ $t('小于等于') }}</a-select-option>
+          </a-select>
+        </span>
+        <span slot="field" slot-scope="text, record">
+          <a-select
+            size="small"
+            show-search
+            option-filter-prop="children"
+            allowClear
+            :defaultValue="text ? text : undefined"
+            @change="
+              (val) => {
+                getBenField(val, record)
+              }
+            "
+          >
+            <a-select-option v-for="item in record.currentFields" :key="item.fieldId" :value="item.alias">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </span>
+        <span slot="action" slot-scope="text, record">
+          <a @click="handleDelFilter(record)">{{ $t('删除') }}</a>
+        </span>
+      </a-table>
+    </a-form-item>
+    <a-form-item :label="$t('关联映射设置')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-button @click="handleAdd">{{ $t('添加') }}</a-button>
+      <a-table ref="table" rowKey="id" :columns="columns" :dataSource="conditions" size="small" :pagination="false">
+        <span slot="sourceField" slot-scope="text, record">
+          <a-select
+            size="small"
+            show-search
+            option-filter-prop="children"
+            allowClear
+            :defaultValue="text"
+            @change="
+              (val) => {
+                getSourceField(val, record)
+              }
+            "
+          >
+            <a-select-option v-for="item in record.linkFields" :key="item.fieldId" :value="item.alias">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </span>
+        <span slot="field" slot-scope="text, record">
+          <a-select
+            size="small"
+            show-search
+            option-filter-prop="children"
+            allowClear
+            :defaultValue="text"
+            @change="
+              (val) => {
+                getField(val, record)
+              }
+            "
+          >
+            <a-select-option v-for="item in record.currentFields" :key="item.fieldId" :value="item.alias">
+              {{ item.name }}
+            </a-select-option>
+          </a-select>
+        </span>
+        <span slot="action" slot-scope="text, record">
+          <a @click="handleDel(record)">{{ $t('删除') }}</a>
+          <a-divider type="vertical" />
+          <a v-if="record.formType === 'subform'" @click="handleSubform(record)">{{ $t('设置子表字段') }}</a>
+        </span>
+      </a-table>
+    </a-form-item>
+    <LinkDataSubform ref="linkDataSubform" @ok="getMapping" />
+  </a-form>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    LinkDataSubform: () => import('./LinkDataSubform')
+  },
+  props: {
+    setting: {
+      type: Object,
+      default: () => { }
+    },
+    tableField: {
+      type: Array,
+      default: () => { }
+    },
+    config: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      form: this.$form.createForm(this),
+      data: {},
+      showType: false,
+      regexs: [
+        { value: '', text: this.$t('自定义') },
+        { value: '/^([+-]?)\\d*\\.?\\d+$/', text: this.$t('数字') },
+        { value: '/^-?[1-9]\\d*$/', text: this.$t('整数') },
+        { value: '/^[A-Za-z]+$/', text: this.$t('字母') },
+        { value: '/^\\w+$/', text: this.$t('字母+数字') },
+        { value: '/^\\w+((-\\w+)|(\\.\\w+))*\\@[A-Za-z0-9]+((\\.|-)[A-Za-z0-9]+)*\\.[A-Za-z0-9]+$/', text: 'E-mail' },
+        { value: '/^[1-9]*[1-9][0-9]*$/', text: 'QQ' },
+        { value: '/^http:///', text: this.$t('超级链接') },
+        { value: '/^(1)[0-9]{10}$/', text: this.$t('手机号码') },
+        { value: '/^[0-9-]{6,13}$/', text: this.$t('电话号码') },
+        { value: '/^[0-9]{6}$/', text: this.$t('邮政编码') }
+      ],
+      minLength: 0,
+      maxLength: 0,
+      linkMode: 'combobox', // 关联模式
+      linkFields: [], // 关联数据表字段
+      filterFields: [], // 关联数据表字段过滤
+      filterFieldsObj: {}, // 选中数据表字段过滤
+      textFields: [], // 单行文本字段
+      linkfieldId: '',
+      linkFieldsObj: {}, // 选中数据表字段
+      currentFields: [], // 当前表字段
+      filtercurrent: [], // 当前表字段过滤
+      currentFieldsObj: {}, // 当前表字段
+      filtercurrentObj: {}, // 选中当前表字段过滤
+      associated: [{
+        linkFields: '', // 关联数据表字段(源数据表字段)
+        op: '', // 比较方式
+        currentFields: '' // 当前表字段
+      }, {
+        linkFields: '', // 关联数据表字段(源数据表字段)
+        op: '', // 比较方式
+        currentFields: '' // 当前表字段
+      }],
+      tpl: [], // 关联数据视图
+      attributeFlag: false, // 是否有设置
+      conditions: [],
+      filterconditions: [],
+      columns: [{
+        title: this.$t('源数据表字段'),
+        dataIndex: 'sourceField',
+        scopedSlots: { customRender: 'sourceField' },
+        width: 240
+      }, {
+        title: this.$t('本表字段'),
+        dataIndex: 'field',
+        scopedSlots: { customRender: 'field' },
+        width: 240
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        scopedSlots: { customRender: 'action' }
+      }],
+      filtercolumns: [{
+        title: this.$t('源数据表字段的值'),
+        dataIndex: 'sourceField',
+        scopedSlots: { customRender: 'sourceField' },
+        width: 200
+      }, {
+        title: this.$t('比较方式'),
+        dataIndex: 'op',
+        scopedSlots: { customRender: 'op' },
+        width: 100
+      }, {
+        title: this.$t('本表字段的值'),
+        dataIndex: 'field',
+        scopedSlots: { customRender: 'field' },
+        width: 200
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        scopedSlots: { customRender: 'action' }
+      }]
+    }
+  },
+  watch: {
+    setting: {
+      handler (newVal) {
+        this.data.attribute = newVal.attribute && !(newVal.attribute instanceof Array) ? newVal.attribute : {}
+        this.data.form = newVal.form && !(newVal.form instanceof Array) !== 0 ? newVal.form : {}
+        //  初始化本表字段数组
+        const parameter = {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'descend'
+        }
+        const currentP = new Promise((resolve, reject) => {
+          this.axios({
+            url: '/admin/field/init',
+            data: Object.assign(parameter, { tableId: this.config.tableId })
+          }).then(res => {
+            if (res.code === 0) {
+              this.currentFields = res.result.data
+              this.filtercurrent = this.currentFields.filter(item => (item.formType === 'text' || item.formType === 'number' || item.formType === 'datetime' || item.formType === 'associated' || item.formType === 'combobox' || item.formType === 'radio' || item.formType === 'autocomplete' || item.formType === 'serialnumber'))
+              this.currentFields.forEach(item => {
+                this.currentFieldsObj[item.alias] = item
+              })
+              this.filtercurrent.forEach(item => {
+                this.filtercurrentObj[item.alias] = item
+              })
+              resolve()
+            } else {
+              this.$message.error(res.message)
+              reject(res.message)
+            }
+          })
+        })
+        // 初始化当前关联数据源
+        if (this.config.action !== 'add' && this.config.record.formType === 'associated') {
+          this.conditions = this.data.form.conditions || []
+          this.filterconditions = this.data.form.associated || []
+          const val = this.data.form.linkList
+          const tableField = val[val.length - 1]
+          const param = {
+            pageNo: 1,
+            pageSize: 1000,
+            sortField: 'id',
+            sortOrder: 'descend'
+          }
+          const p = new Promise((resolve, reject) => {
+            this.axios({
+              url: '/admin/field/init',
+              data: Object.assign(param, { tableId: tableField })
+            }).then(res => {
+              if (res.code === 0) {
+                this.linkFields = res.result.data
+                this.textFields = this.linkFields.filter(item => item.formType === 'text' || item.formType === 'associated' || item.formType === 'serialnumber')
+                this.filterFields = this.linkFields.filter(item => (item.formType === 'text' || item.formType === 'number' || item.formType === 'datetime' || item.formType === 'associated' || item.formType === 'combobox' || item.formType === 'radio' || item.formType === 'autocomplete' || item.formType === 'cascader' || item.formType === 'serialnumber'))
+                res.result.data.forEach(item => {
+                  this.linkFieldsObj[item.alias] = item
+                })
+                res.result.data.forEach(item => {
+                  this.filterFieldsObj[item.alias] = item
+                })
+                resolve()
+              } else {
+                this.$message.error(res.message)
+              }
+            })
+          })
+          p.then(res => {
+            this.conditions = this.conditions.map(item => {
+              // item.linkFields = item.sourceField ? this.linkFields.filter(item1 => item1.formType === this.linkFieldsObj[item.sourceField].formType) : this.linkFields
+              item.linkFields = this.linkFields
+              return item
+            })
+            this.filterconditions = this.filterconditions.map(item => {
+              // item.linkFields = item.sourceField ? this.filterFields.filter(item1 => item1.formType === this.filterFieldsObj[item.sourceField].formType) : this.filterFields
+              item.linkFields = this.filterFields
+              return item
+            })
+          })
+          currentP.then(res => {
+            this.conditions = this.conditions.map(item => {
+              // item.currentFields = item.field ? this.currentFields.filter(item1 => item1.formType === this.currentFieldsObj[item.field].formType) : this.currentFields
+              item.currentFields = this.currentFields
+              return item
+            })
+            this.filterconditions = this.filterconditions.map(item => {
+              // item.currentFields = item.field ? this.filtercurrent.filter(item1 => item1.formType === this.filtercurrentObj[item.field].formType) : this.filtercurrent
+              item.currentFields = this.filtercurrent
+              return item
+            })
+          })
+          this.axios({
+            url: '/admin/template/getFieldsAndTemplates',
+            data: { tableId: tableField, variable: ['tableDataWindow'] }
+          }).then(res => {
+            if (res.code === 0) {
+              this.tpl = res.result.templates
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+          this.linkMode = this.data.form.mode
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    // 允许输入长度最大值
+    handleMin (val) {
+      this.maxLength = val
+    },
+    getReg (val) {
+      const { setFieldsValue } = this.form
+      setFieldsValue({ 'setting[attribute][regex]': val })
+    },
+    // 选择源数据表
+    handleTable (val) {
+      const { setFieldsValue } = this.form
+      // 初始化字段，窗口等信息
+      setFieldsValue({ 'setting[form][linkField]': undefined })
+      setFieldsValue({ 'setting[form][dataView]': undefined })
+      setFieldsValue({ 'setting[form][searchField_1]': undefined })
+      setFieldsValue({ 'setting[form][searchField_2]': undefined })
+      setFieldsValue({ 'setting[form][searchField_3]': undefined })
+      this.conditions = []
+      this.filterconditions = []
+      const tableField = val[val.length - 1]
+      this.axios({
+        url: '/admin/template/getFieldsAndTemplates',
+        data: { tableId: tableField, variable: ['tableDataWindow'] }
+      }).then(res => {
+        if (res.code === 0) {
+          this.tpl = res.result.templates
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+      const param = {
+        pageNo: 1,
+        pageSize: 1000,
+        sortField: 'id',
+        sortOrder: 'descend'
+      }
+      this.axios({
+        url: '/admin/field/init',
+        data: Object.assign(param, { tableId: tableField })
+      }).then(res => {
+        if (res.code === 0) {
+          this.linkFields = res.result.data
+          this.filterFields = this.linkFields.filter(item => (item.formType === 'text' || item.formType === 'number' || item.formType === 'datetime' || item.formType === 'associated' || item.formType === 'combobox' || item.formType === 'radio' || item.formType === 'autocomplete' || item.formType === 'cascader' || item.formType === 'serialnumber'))
+          res.result.data.forEach(item => {
+            this.filterFieldsObj[item.alias] = item
+          })
+          this.textFields = this.linkFields.filter(item => item.formType === 'text' || item.formType === 'associated' || item.formType === 'serialnumber')
+          res.result.data.forEach(item => {
+            this.linkFieldsObj[item.alias] = item
+          })
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+    },
+    // 获取源数据表关联字段id
+    handleLinkField (val) {
+      this.linkfieldId = this.linkFieldsObj[val].fieldId
+    },
+    getSourceField (val, record) {
+      record.sourceField = val
+      // if (!val) {
+      record.linkFields = this.linkFields
+      record.currentFields = this.currentFields
+      // } else {
+      //   record.linkFields = this.linkFields
+      //   record.currentFields = this.currentFields
+      // }
+      this.conditions = JSON.parse(JSON.stringify(this.conditions))
+    },
+    getFilterField (val, record) {
+      this.showType = true
+      for (const i in record.linkFields) {
+        if (val === record.linkFields[i].alias && record.linkFields[i].formType !== 'number' && record.linkFields[i].formType !== 'datetime') {
+          this.showType = false
+        }
+      }
+      record.sourceField = val
+      // if (!val) {
+      record.linkFields = this.filterFields
+      record.currentFields = this.filtercurrent
+      // } else {
+      //   const formType = this.filterFieldsObj[val].formType
+      //   record.linkFields = this.filterFields.filter(item => item.formType === formType)
+      //   record.currentFields = this.filtercurrent.filter(item => item.formType === formType)
+      // }
+      this.filterconditions = JSON.parse(JSON.stringify(this.filterconditions))
+    },
+    getBenField (val, record) {
+      this.showType = true
+      record.field = val
+      // if (!val) {
+      record.linkFields = this.filterFields
+      record.currentFields = this.filtercurrent
+      // } else {
+      // const formType = this.filtercurrentObj[val].formType
+      // record.linkFields = this.linkFields.filter(item => item.formType === formType)
+      // record.currentFields = this.filtercurrent.filter(item => item.formType === formType)
+      if (this.currentFieldsObj[val].formType === 'subform') {
+        record.formType = this.filtercurrentObj[val].formType
+      } else {
+        delete record.formType
+      }
+      // }
+      for (const i in record.currentFields) {
+        if (val === record.currentFields[i].alias && record.currentFields[i].formType !== 'number' && record.currentFields[i].formType !== 'datetime') {
+          this.showType = false
+        }
+      }
+      this.filterconditions = JSON.parse(JSON.stringify(this.filterconditions))
+    },
+    getField (val, record) {
+      record.field = val
+      // if (!val) {
+      record.linkFields = this.linkFields
+      record.currentFields = this.currentFields
+      // } else {
+      //   const formType = this.currentFieldsObj[val].formType
+      //   record.linkFields = this.linkFields.filter(item => item.formType === formType)
+      //   record.currentFields = this.currentFields.filter(item => item.formType === formType)
+      if (this.currentFieldsObj[val].formType === 'subform') {
+        record.formType = this.currentFieldsObj[val].formType
+      } else {
+        delete record.formType
+      }
+      // }
+      this.conditions = JSON.parse(JSON.stringify(this.conditions))
+    },
+    // 添加映射条件
+    handleAdd () {
+      this.conditions.push({
+        id: new Date().valueOf(),
+        sourceField: '',
+        field: '',
+        linkFields: this.linkFields,
+        currentFields: this.currentFields
+      })
+    },
+    // 添加可关联数据过滤条件
+    filterAdd () {
+      this.filterconditions.push({
+        id: new Date().valueOf(),
+        sourceField: '',
+        field: '',
+        op: '=',
+        linkFields: this.filterFields,
+        currentFields: this.filtercurrent
+      })
+    },
+    // 删除映射条件
+    handleDel (record) {
+      const conditions = this.conditions.filter(item => item.id !== record.id)
+      this.conditions = JSON.parse(JSON.stringify(conditions))
+    },
+    handleDelFilter (record) {
+      const filterconditions = this.filterconditions.filter(item => item.id !== record.id)
+      this.filterconditions = JSON.parse(JSON.stringify(filterconditions))
+    },
+    // 获取关联模式
+    getMode (e) {
+      this.linkMode = e.target.value
+    },
+    // 打开子表映射设置
+    handleSubform (record) {
+      if (this.linkFields.length === 0) {
+        const { validateFields } = this.form
+        validateFields(['setting[attribute][linkList]'], (errors, values) => { })
+      } else {
+        this.$refs.linkDataSubform.show({
+          title: this.$t('子表字段关系映射设置'),
+          dataView: this.currentFieldsObj[record.field].setting.form ? this.currentFieldsObj[record.field].setting.form.dataSheet[1] : '',
+          sourceDataView: this.linkFieldsObj[record.sourceField].setting.form ? this.linkFieldsObj[record.sourceField].setting.form.dataSheet[1] : '',
+          record: record
+        })
+      }
+    },
+    // 获取子表映射设置
+    getMapping (record) {
+      this.conditions.forEach(item => {
+        if (item.id === record.id) {
+          item = record
+        }
+      })
+    },
+    handleSubmit () {
+      let val = {}
+      const { validateFields } = this.form
+      validateFields((errors, values) => {
+        if (!errors) {
+          let conditions = JSON.parse(JSON.stringify(this.conditions))
+          let filterconditions = JSON.parse(JSON.stringify(this.filterconditions))
+          filterconditions = filterconditions.map(item => {
+            delete item.linkFields
+            delete item.currentFields
+            return item
+          })
+          conditions = conditions.map(item => {
+            delete item.linkFields
+            delete item.currentFields
+            return item
+          })
+          values.setting.form.associated = filterconditions
+          values.setting.form.conditions = conditions
+          values.setting.form.linkfieldId = this.linkfieldId
+          val = values
+        }
+      })
+      return val
+    }
+  }
+}
+</script>

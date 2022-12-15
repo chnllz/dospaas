@@ -1,0 +1,1568 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('任务名称')">
+              <a-input v-model.trim="queryParam.taskname" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('模板名称')">
+              <a-input v-model.trim="queryParam.template_name" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:add icon="plus" type="primary" @click="addPage">{{ $t('添加') }}</a-button>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <!-- 页面数据渲染 -->
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      class="table-fill"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="editPage(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a-dropdown>
+          <a>
+            {{ $t('更多') }}
+            <a-icon type="down" />
+          </a>
+          <a-menu slot="overlay">
+            <a-menu-item>
+              <a @click="showModal(record)">{{ $t('查看进度') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="detailsPage(record)">{{ $t('查看明细') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="distributionPage(record)">{{ $t('提取&分配') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="taskDelete(record)">{{ $t('删除信息') }}</a>
+            </a-menu-item>
+          </a-menu>
+        </a-dropdown>
+      </div>
+    </s-table>
+    <!-- 查看进度 -->
+    <a-drawer
+      :title="$t(config.title)"
+      :width="1200"
+      :visible="visibleread"
+      :destroyOnClose="true"
+      @close="visibleread = !visibleread"
+    >
+      <s-table
+        ref="tableread"
+        class="table-fill"
+        size="small"
+        rowKey="quality_agent"
+        :columns="columns2"
+        :data="progress"
+      ></s-table>
+      <a-space class="bbar">
+        <a-button @click="visibleread = false">{{ $t('关闭') }}</a-button>
+      </a-space>
+    </a-drawer>
+    <!-- 查看明细 -->
+    <a-drawer
+      v-show="config.data.task_type == '录音质检'"
+      :title="$t(config.title)"
+      :width="1440"
+      :visible="details"
+      @close="details = !details"
+    >
+      <div class="drawer-table">
+        <a-card class="table-search" :bordered="true" :title="$t(detailsadvanced) ? $t('过滤') : ''" size="small">
+          <a v-if="detailsadvanced" slot="extra" href="#">
+            <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">
+              {{ $t('搜索') }}
+            </a-button>
+            <a-button
+              icon="sync"
+              @click="
+                () => {
+                  paramDetails = {}
+                  $refs.tabledetails.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a @click="changedetailsAdvanced(true)">
+              {{ detailsadvanced ? $t('收起') : $t('展开') }}
+              <a-icon :type="detailsadvanced ? 'up' : 'down'" />
+            </a>
+          </a>
+          <a-form :layout="detailsadvanced ? 'vertical' : 'inline'" :class="detailsadvanced ? 'advanced' : 'normal'">
+            <div v-if="!detailsadvanced" class="head">
+              <div class="title">{{ $t('过滤') }}</div>
+              <a-space style="margin-left: 8px">
+                <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">
+                  {{ $t('搜索') }}
+                </a-button>
+                <a-button
+                  icon="sync"
+                  @click="
+                    () => {
+                      paramDetails = {}
+                      $refs.tabledetails.refresh(true)
+                    }
+                  "
+                >
+                  {{ $t('重置') }}
+                </a-button>
+                <a @click="changedetailsAdvanced(true)">
+                  {{ detailsadvanced ? $t('收起') : $t('展开') }}
+                  <a-icon :type="detailsadvanced ? 'up' : 'down'" />
+                </a>
+              </a-space>
+            </div>
+            <a-row :gutter="16">
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('质检状态')">
+                  <a-select v-model.trim="paramDetails.status" :allowClear="true" show-search>
+                    <a-select-option value="0">{{ $t('未质检') }}</a-select-option>
+                    <a-select-option value="1">{{ $t('已质检') }}</a-select-option>
+                    <a-select-option value="2">{{ $t('无效数据') }}</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('质检员')">
+                  <a-select v-model.trim="paramDetails.quality_agent" :allowClear="true" show-search>
+                    <a-select-option v-for="(item, key) in quality_agent" :key="key" :value="item.value">
+                      {{ item.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('客服姓名')">
+                  <a-select v-model.trim="paramDetails.agent" :allowClear="true" show-search>
+                    <a-select-option v-for="(item, key) in agent" :key="key" :value="item.value">
+                      {{ item.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('主叫号码')">
+                  <a-input v-model.trim="paramDetails.src_phone" />
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('被叫号码')">
+                  <a-input v-model.trim="paramDetails.dst_phone" />
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('呼叫时间')">
+                  <a-range-picker v-model="searchDate" showTime style="width: 100%" @change="getSearchdate" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form>
+        </a-card>
+        <a-card size="small" class="drawer-table">
+          <div class="table-operator">
+            <a-button icon="retweet" type="primary" :disabled="selectedRowKeys.length == 0" @click="Redistribution()">
+              {{ $t('重新分配') }}
+            </a-button>
+            <a-button icon="delete" type="danger" :disabled="selectedRowKeys.length == 0" @click="detailsDelete()">
+              {{ $t('批量删除') }}
+            </a-button>
+            <a-button icon="download" @click="Taskexport()">{{ $t('导出') }}</a-button>
+          </div>
+          <s-table
+            ref="tabledetails"
+            class="table-fill"
+            size="small"
+            rowKey="id"
+            :columns="columns3"
+            :data="detailsDataShow"
+            :rowSelection="rowSelection"
+            :sorter="{ field: 'id', order: 'descend' }"
+          >
+            <div slot="action" slot-scope="text, record1">
+              <a @click="detailsDelete(record1)">{{ $t('删除') }}</a>
+            </div>
+          </s-table>
+          <a-drawer
+            :title="$t('重新分配')"
+            :width="400"
+            :visible="visibleRedistribution"
+            @close="visibleRedistribution = !visibleRedistribution"
+          >
+            <a-form :form="form" layout="vertical">
+              <a-form-item label="转移数据数量">
+                <a-input :read-only="true" class="input" :value="selectedRowKeys.length" />
+              </a-form-item>
+              <a-form-item label="转移至坐席">
+                <a-select>
+                  <a-select-option v-for="(item, key) in quality_agent" :key="key" :value="item.value">
+                    {{ item.display }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <div class="bbar">
+                <a-button type="primary" @click="Redistributioncheck">保存</a-button>
+                <a-button @click="visibleRedistribution = !visibleRedistribution">取消</a-button>
+                <a-button @click="visible = false">{{ $t('关闭') }}</a-button>
+              </div>
+            </a-form>
+          </a-drawer>
+        </a-card>
+      </div>
+      <a-space class="bbar">
+        <a-button @click="details = false">{{ $t('关闭') }}</a-button>
+      </a-space>
+    </a-drawer>
+    <a-drawer
+      v-show="config.data.task_type == '在线客服质检'"
+      :title="$t(config.title)"
+      :width="1440"
+      :visible="details"
+      @close="details = !details"
+    >
+      <div>
+        <a-card class="table-search" :bordered="true" :title="detailsadvanced ? $t('过滤') : ''" size="small">
+          <a v-if="detailsadvanced" slot="extra" href="#">
+            <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">搜索</a-button>
+            <a-button
+              icon="sync"
+              @click="
+                () => {
+                  paramDetails = {}
+                  $refs.tabledetails.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a @click="changedetailsAdvanced(true)">
+              {{ detailsadvanced ? '收起' : '展开' }}
+              <a-icon :type="detailsadvanced ? 'up' : 'down'" />
+            </a>
+          </a>
+          <a-form :layout="detailsadvanced ? 'vertical' : 'inline'" :class="detailsadvanced ? 'advanced' : 'normal'">
+            <div v-if="!detailsadvanced" class="head">
+              <div class="title">{{ $t('过滤') }}</div>
+              <a-space style="margin-left: 8px">
+                <a-button icon="search" type="primary" @click="detailsSearch" @keyup.enter="detailsSearch">
+                  {{ $t('搜索') }}
+                </a-button>
+                <a-button
+                  icon="sync"
+                  @click="
+                    () => {
+                      paramDetails = {}
+                      $refs.tabledetails.refresh(true)
+                    }
+                  "
+                >
+                  重置
+                </a-button>
+                <a @click="changedetailsAdvanced(true)">
+                  {{ detailsadvanced ? '收起' : '展开' }}
+                  <a-icon :type="detailsadvanced ? 'up' : 'down'" />
+                </a>
+              </a-space>
+            </div>
+            <a-row :gutter="16">
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('质检状态')">
+                  <a-select v-model.trim="paramDetails.status" :allowClear="true" show-search>
+                    <a-select-option value="0">{{ $t('未质检') }}</a-select-option>
+                    <a-select-option value="1">{{ $t('已质检') }}</a-select-option>
+                    <a-select-option value="2">{{ $t('无效数据') }}</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('质检员')">
+                  <a-select v-model.trim="paramDetails.quality_agent" :allowClear="true" show-search>
+                    <a-select-option v-for="(item, key) in quality_agent" :key="key" :value="item.value">
+                      {{ item.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('客服姓名')">
+                  <a-select v-model.trim="paramDetails.agent" :allowClear="true" show-search>
+                    <a-select-option v-for="(item, key) in agent" :key="key" :value="item.value">
+                      {{ item.display }}
+                    </a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+              <a-col v-show="config.data.task_type == '录音质检'" v-bind="colLayout">
+                <a-form-item :label="$t('主叫号码')">
+                  <a-input v-model.trim="paramDetails.src_phone" />
+                </a-form-item>
+              </a-col>
+              <a-col v-show="config.data.task_type !== '录音质检'" v-bind="colLayout">
+                <a-form-item :label="$t('访客姓名')">
+                  <a-input v-model.trim="paramDetails.visitor_name" />
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('被叫号码')">
+                  <a-input v-model.trim="paramDetails.dst_phone" />
+                </a-form-item>
+              </a-col>
+              <a-col v-bind="colLayout">
+                <a-form-item :label="$t('呼叫时间')">
+                  <a-range-picker v-model="searchDate" showTime style="width: 100%" @change="getSearchdate" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+          </a-form>
+        </a-card>
+        <a-card size="small">
+          <div class="table-operator">
+            <a-button icon="retweet" type="primary" :disabled="selectedRowKeys.length == 0" @click="Redistribution()">
+              {{ $t('重新分配') }}
+            </a-button>
+            <a-button icon="delete" type="danger" :disabled="selectedRowKeys.length == 0" @click="detailsDelete()">
+              {{ $t('批量删除') }}
+            </a-button>
+            <a-button icon="download" @click="Taskexport()">{{ $t('导出') }}</a-button>
+          </div>
+          <s-table
+            ref="tabledetails1"
+            size="small"
+            rowKey="id"
+            :columns="columns4"
+            :data="detailsDataShow"
+            :rowSelection="rowSelection"
+            :sorter="{ field: 'id', order: 'descend' }"
+          >
+            <div slot="action" slot-scope="text, record1">
+              <a @click="detailsDelete(record1)">{{ $t('删除') }}</a>
+            </div>
+          </s-table>
+          <a-drawer
+            :title="$t('重新分配')"
+            :width="400"
+            :visible="visibleRedistribution"
+            @close="visibleRedistribution = !visibleRedistribution"
+          >
+            <a-form :form="form" layout="vertical">
+              <a-form-item :label="$t('转移数据数量')">
+                <a-input :read-only="true" class="input" :value="selectedRowKeys.length" />
+              </a-form-item>
+              <a-form-item :label="$t('转移至坐席')">
+                <a-select>
+                  <a-select-option v-for="(item, key) in quality_agent" :key="key" :value="item.value">
+                    {{ $t(item.display) }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <div class="bbar">
+                <a-button type="primary" @click="Redistributioncheck">{{ $t('保存') }}</a-button>
+                <a-button @click="visibleRedistribution = !visibleRedistribution">{{ $t('取消') }}</a-button>
+              </div>
+            </a-form>
+          </a-drawer>
+        </a-card>
+      </div>
+    </a-drawer>
+    <!-- 编辑添加分配 -->
+    <a-drawer
+      :title="$t(config.title)"
+      :width="1200"
+      :destroyOnClose="true"
+      :visible="visible"
+      @close="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <a-form :colon="false" :form="form" labelAlign="right" v-bind="formLayout" layout="horizontal">
+          <a-space>
+            <tag-icon class="tagIcon" />
+            <h3 class="title">{{ $t('基础设置') }}</h3>
+          </a-space>
+          <a-card>
+            <a-row>
+              <a-col span="12">
+                <a-form-item :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" :label="$t('任务名称')">
+                  <a-input
+                    v-decorator="[
+                      'info[taskname]',
+                      {
+                        initialValue: config.data.taskname,
+                        rules: [{ required: !disstatu, message: '请输入任务名称' }]
+                      }
+                    ]"
+                    :read-only="disabled"
+                    :class="disabled ? 'input' : ''"
+                    @change="editcheck($event)"
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col span="12">
+                <a-form-item
+                  :labelCol="{ span: 6 }"
+                  :required="true"
+                  :wrapperCol="{ span: 18 }"
+                  :label="$t('任务类型')"
+                >
+                  <a-select
+                    v-decorator="['info[task_type]', { initialValue: config.data.task_type }]"
+                    @change="changeType"
+                  >
+                    <a-select-option value="录音质检">{{ $t('录音质检') }}</a-select-option>
+                    <a-select-option value="在线客服质检">{{ $t('在线客服质检') }}</a-select-option>
+                  </a-select>
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-form-item :labelCol="{ span: 3 }" :wrapperCol="{ span: 21 }" :label="$t('质检模板')">
+              <a-input
+                v-if="disstatu"
+                v-model="config.data.template_name"
+                :read-only="disabled"
+                :class="disabled ? 'input' : ''"
+              />
+              <a-select
+                v-else
+                v-decorator="[
+                  'info[templateid]',
+                  {
+                    initialValue: config.data.template_name,
+                    rules: [{ required: true, message: '请选择质检模板' }]
+                  }
+                ]"
+                :allowClear="true"
+              >
+                <a-select-option v-for="(item, key) in temp_name" :key="key" :value="item.value">
+                  {{ item.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item
+              v-show="disstatu === false"
+              :labelCol="{ span: 3 }"
+              :wrapperCol="{ span: 21 }"
+              :label="$t('备注')"
+            >
+              <a-textarea
+                v-decorator="['info[remark]', { initialValue: config.data.remark }]"
+                :auto-size="{ minRows: 1, maxRows: 5 }"
+              />
+            </a-form-item>
+          </a-card>
+          <a-alert v-if="tip" type="error" :message="tip" />
+          <a-space>
+            <tag-icon class="tagIcon" />
+            <h3 class="title">{{ $t('数据提取') }}</h3>
+          </a-space>
+          <a-card>
+            <a-form-item v-show="disstatu" :label="$t('呼叫时间')">
+              <a-range-picker
+                v-decorator="[
+                  'info[callDate]',
+                  { initialValue: callDate, rules: [{ required: disstatu, message: '请输入呼叫时间区间' }] }
+                ]"
+                showTime
+                @change="getcallDate"
+              />
+            </a-form-item>
+            <a-form-item
+              :labelCol="{ span: 3 }"
+              :wrapperCol="{ span: 21 }"
+              :label="config.data.task_type == '录音质检' ? $t('通话时长(单位为秒)') : $t('会话时长(单位为秒)')"
+            >
+              <a-input-group compact>
+                <a-input-number
+                  v-decorator="[
+                    'info[min_billsec]',
+                    { initialValue: config.data.min_billsec, rules: [{ required: true, message: '请输入通话时长' }] }
+                  ]"
+                  style="width: 100px; text-align: center"
+                  :min="1"
+                />
+                ~
+                <a-input-number v-model="config.data.max_billsec" style="width: 100px; text-align: center" :min="1" />
+              </a-input-group>
+            </a-form-item>
+            <a-form-item
+              v-show="config.data.task_type !== '录音质检'"
+              :labelCol="{ span: 3 }"
+              :wrapperCol="{ span: 21 }"
+              :label="$t('来源渠道')"
+            >
+              <a-input
+                v-if="disstatu"
+                v-model="config.data.template_name"
+                :read-only="disabled"
+                :class="disabled ? 'input' : ''"
+              />
+              <a-select
+                v-else
+                v-decorator="[
+                  'info[templateid]',
+                  {
+                    initialValue: config.data.template_name,
+                    rules: [{ required: true, message: '请选择来源渠道' }]
+                  }
+                ]"
+                :allowClear="true"
+              >
+                <a-select-option v-for="(item, key) in temp_name" :key="key" :value="item.value">
+                  {{ item.display }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-row>
+              <a-col span="12">
+                <a-form-item
+                  :label="config.data.task_type == '录音质检' ? $t('呼出类型') : $t('服务小结')"
+                  :labelCol="{ span: 6 }"
+                  :required="true"
+                  :wrapperCol="{ span: 18 }"
+                >
+                  <a-radio-group
+                    v-show="config.data.task_type == '录音质检'"
+                    v-decorator="['info[calltype]', { initialValue: config.data.calltype }]"
+                    name="Call"
+                  >
+                    <a-radio value="2">{{ $t('呼入&呼出') }}</a-radio>
+                    <a-radio value="1" class="margin">{{ $t('呼出') }}</a-radio>
+                    <a-radio value="0" class="margin">{{ $t('呼入') }}</a-radio>
+                  </a-radio-group>
+                  <a-radio-group
+                    v-show="config.data.task_type !== '录音质检'"
+                    v-decorator="['info[summary]', { initialValue: config.data.summary }]"
+                    name="Call"
+                  >
+                    <!-- <a-radio value="2">呼入&呼出</a-radio> -->
+                    <a-radio value="1" class="margin">{{ $t('是') }}</a-radio>
+                    <a-radio value="0" class="margin">{{ $t('否') }}</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+              <a-col span="12">
+                <a-form-item
+                  :label="$t('满意度评价')"
+                  :required="true"
+                  :labelCol="{ span: 6 }"
+                  :wrapperCol="{ span: 18 }"
+                >
+                  <a-radio-group
+                    v-decorator="['info[unsatisfied_only]', { initialValue: config.data.unsatisfied_only }]"
+                    name="satisfied"
+                  >
+                    <a-radio value="0">{{ $t('不限评价结果') }}</a-radio>
+                    <a-radio value="1" style="margin-left: 62px">{{ $t('仅不满意') }}</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-row v-show="config.data.task_type !== '录音质检'">
+              <a-col span="12">
+                <a-form-item
+                  :label="$t('触发违禁词')"
+                  :required="true"
+                  :labelCol="{ span: 6 }"
+                  :wrapperCol="{ span: 18 }"
+                >
+                  <a-radio-group v-decorator="['info[ban]', { initialValue: config.data.ban }]" name="Call">
+                    <!-- <a-radio value="2">呼入&呼出</a-radio> -->
+                    <a-radio value="1" class="margin">{{ $t('是') }}</a-radio>
+                    <a-radio value="0" class="margin">{{ $t('否') }}</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+              <a-col span="12">
+                <a-form-item
+                  :label="$t('触发敏感词')"
+                  :required="true"
+                  :labelCol="{ span: 6 }"
+                  :wrapperCol="{ span: 18 }"
+                >
+                  <a-radio-group
+                    v-decorator="['info[sensitive]', { initialValue: config.data.sensitive }]"
+                    name="satisfied"
+                  >
+                    <a-radio value="1">{{ $t('是') }}</a-radio>
+                    <a-radio value="0" style="margin-left: 62px">{{ $t('否') }}</a-radio>
+                  </a-radio-group>
+                </a-form-item>
+              </a-col>
+            </a-row>
+            <a-form-item
+              :required="true"
+              :label="$t('每人提取数量')"
+              :labelCol="{ span: 3 }"
+              :wrapperCol="{ span: 21 }"
+            >
+              <a-radio-group v-decorator="['info[extra_all]', { initialValue: config.data.extra_all }]" name="number">
+                <a-radio value="0" @click="allocateClose">{{ $t('所有') }}</a-radio>
+                <a-radio value="1" style="margin-left: 118px" @click="allocate">{{ $t('指定数量') }}</a-radio>
+                <a-input-number
+                  v-show="allocatestate"
+                  v-decorator="['info[count]', { initialValue: config.data.count }]"
+                  :min="1"
+                  :max="100"
+                />
+              </a-radio-group>
+            </a-form-item>
+            <a-row type="flex" align="middle">
+              <a-col :span="20">
+                <a-form-item :label="$t('来自于')" :labelCol="{ span: 3 }" :wrapperCol="{ span: 17 }">
+                  <a-textarea
+                    v-decorator="[
+                      'info[extenlist]',
+                      { initialValue: config.data.extenlist, rules: [{ required: true, message: '请选择用户' }] }
+                    ]"
+                    :auto-size="{ minRows: 3, maxRows: 5 }"
+                    :read-only="true"
+                    class="input"
+                  />
+                </a-form-item>
+              </a-col>
+              <a-col :span="1">
+                <a-button @click="handleSelect">{{ $t('选择用户') }}</a-button>
+              </a-col>
+              <a-col :span="3"></a-col>
+            </a-row>
+          </a-card>
+          <a-space>
+            <tag-icon class="tagIcon" />
+            <h3 class="title">{{ $t('数据分配') }}</h3>
+          </a-space>
+          <a-card>
+            <a-form-item
+              :labelCol="{ span: 3 }"
+              :required="true"
+              :wrapperCol="{ span: 21 }"
+              :label="$t('组内分配机制')"
+            >
+              <a-radio-group
+                v-decorator="[
+                  'info[distribution_mode]',
+                  { required: true, initialValue: config.data.distribution_mode }
+                ]"
+                name="distribution"
+              >
+                <a-radio value="0">{{ $t('平均分配') }}</a-radio>
+                <a-radio value="1" style="margin-left: 90px">{{ $t('全部分配') }}</a-radio>
+              </a-radio-group>
+            </a-form-item>
+            <div v-for="(item, index) in groupAllocation" :key="index">
+              <a-row type="flex" align="middle">
+                <a-col :span="12">
+                  <a-form-item
+                    :label="$t('分配给')"
+                    :labelCol="{ span: 6 }"
+                    :wrapperCol="{ span: 18 }"
+                    :required="true"
+                    :validateStatus="item.agentstatus"
+                    :help="item.agenthelp"
+                  >
+                    <a-textarea
+                      :ref="nowtime + '_' + (random + index)"
+                      v-model="item.agent"
+                      :auto-size="{ minRows: 3, maxRows: 5 }"
+                      :read-only="true"
+                      class="input"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-button class="rattio" @click="handleSelectQc(item.agent, index)">{{ $t('选择用户') }}</a-button>
+                <a-col :span="5">
+                  <!-- <p style="float: left; margin-top: 10px; margin-right: 10px" class="rattio">组间分配占比</p> -->
+                  <a-form-item
+                    style="margin-top: 5px"
+                    :labelCol="{ span: 12 }"
+                    :wrapper-col="{ span: 12 }"
+                    :label="$t('组间分配占比')"
+                    :required="true"
+                  >
+                    <a-input-number
+                      :ref="nowtime + '_' + (random + index)"
+                      v-model="item.rate"
+                      :required="true"
+                      :min="1"
+                      :max="100"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="1">
+                  <a-tooltip>
+                    <template slot="title">
+                      <p v-dompurify-html="content">{{ $t(content) }}</p>
+                    </template>
+                    <a-icon
+                      type="exclamation-circle"
+                      :style="{ fontSize: '20px', color: 'blue' }"
+                      style="color: blue"
+                    />
+                  </a-tooltip>
+                </a-col>
+                <a-col :span="1">
+                  <a-icon
+                    :style="{ fontSize: '20px', color: '#52c41a' }"
+                    type="plus-circle"
+                    @click="addallocation(index)"
+                  />
+                </a-col>
+                <a-col :span="1">
+                  <a-icon
+                    :style="{ fontSize: '20px', color: 'red' }"
+                    type="minus-circle"
+                    @click="deleteallocation(index)"
+                  />
+                </a-col>
+              </a-row>
+            </div>
+          </a-card>
+        </a-form>
+        <div class="bbar">
+          <a-button type="primary" @click="handleSubmit">
+            {{ config.action === 'edit' ? $t('修改') : $t('保存') }}
+          </a-button>
+          <a-button @click="cancal_off">{{ config.action === 'edit' ? $t('重置') : $t('取消') }}</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+    <select-user-form ref="selectUserFormSeat" @ok="getUser" />
+    <select-user-form ref="selectUserFormQc" @ok="getQc" />
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+export default {
+  components: {
+    SelectUserForm: () => import('@/views/admin/UserTable/SelectUserForm'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      advanced: false,
+      formLayout: {
+        labelCol: { span: 2 },
+        wrapperCol: { span: 18 }
+      },
+      detailsadvanced: false,
+      visibleRedistribution: false,
+      visible: false,
+      loading: false,
+      disstatu: false,
+      disabled: false,
+      details: false,
+      tip: '',
+      allocatestate: false,
+      length: '',
+      nowtime: '',
+      random: 0,
+      content: '1.当有多组质检员时，组间分配占比指的是该组质检员在多组质检员中所占的比例。如：共增加3组质检员，组件分配占比分别为1、2、3，则第一组质检员分得的比例为1/(1+2+3)，第二组质检员分得比例为2/(1+2+3)。</br>' +
+        '2.平均分配时，该组质检员平均分得本组所分配到的指间任务，如：本组5个质检员，分得100条指间任务，则每个质检员分得20条质检任务。全部分配时，该组质检员都分得到本组所分配到的质检任务，如：本组5个质检员，分得100条质检任务，则每个质检员均会分得100条质检任务，最终质检结果取5个质检员质检结果的平均值。',
+      // 搜索参数
+      queryParam: {},
+      paramDetails: {
+        status: undefined,
+        quality_agent: undefined,
+        agent: undefined,
+        src_phone: '',
+        dst_phone: '',
+        begin_time: '',
+        endTime: ''
+      },
+      callDate: null,
+      searchDate: null,
+      form: this.$form.createForm(this),
+      config: {
+        data: {}
+      },
+      configfen: {},
+      quality_agent: [],
+      agent: [],
+      temp_name: [],
+      page: [],
+      taskid: '',
+      startTime: '',
+      endTime: '',
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      groupAllocation: [{
+        agent: '',
+        rate: 1
+      }],
+      taskname: '',
+      colLayout: {},
+      visibleread: false,
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('任务名称'),
+        dataIndex: 'taskname'
+      }, {
+        title: this.$t('任务类型'),
+        dataIndex: 'task_type'
+      }, {
+        title: this.$t('质检总数'),
+        dataIndex: 'sum_number'
+      }, {
+        title: this.$t('已质检数'),
+        dataIndex: 'finished_number'
+      }, {
+        title: this.$t('待质检数'),
+        dataIndex: 'unfinish_number'
+      }, {
+        title: this.$t('有效数据'),
+        dataIndex: 'valid_number'
+      }, {
+        title: this.$t('无效数据'),
+        dataIndex: 'invalid_number'
+      }, {
+        title: this.$t('完成率'),
+        dataIndex: 'finish_rate'
+      }, {
+        title: this.$t('质检员'),
+        dataIndex: 'quality_agent'
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser'
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime'
+      }],
+      columns2: [{
+        title: this.$t('质检员'),
+        dataIndex: 'quality_agent',
+        sorter: true
+      }, {
+        title: this.$t('质检总数'),
+        dataIndex: 'sum_number',
+        sorter: true
+      }, {
+        title: this.$t('已质检数'),
+        dataIndex: 'finished_number',
+        sorter: true
+      }, {
+        title: this.$t('待质检数'),
+        dataIndex: 'unfinish_number',
+        sorter: true
+      }, {
+        title: this.$t('有效数据'),
+        dataIndex: 'valid_number',
+        sorter: true
+      }, {
+        title: this.$t('无效数据'),
+        dataIndex: 'invalid_number',
+        sorter: true
+      }, {
+        title: this.$t('完成率'),
+        dataIndex: 'finish_rate'
+      }],
+      columns3: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('坐席姓名'),
+        dataIndex: 'agent'
+      }, {
+        title: this.$t('主叫号码'),
+        dataIndex: 'src'
+      }, {
+        title: this.$t('被叫号码'),
+        dataIndex: 'dst'
+      }, {
+        title: this.$t('呼叫时间'),
+        dataIndex: 'calldate',
+        width: 150
+      }, {
+        title: this.$t('通话时长'),
+        dataIndex: 'billsec'
+      }, {
+        title: this.$t('质检状态'),
+        dataIndex: 'status'
+      }, {
+        title: this.$t('质检员'),
+        dataIndex: 'quality_agent'
+      }, {
+        title: this.$t('分配人'),
+        dataIndex: 'distribute_agent'
+      }, {
+        title: this.$t('分配时间'),
+        dataIndex: 'distribute_time',
+        width: 140
+      }],
+      columns4: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('会话ID'),
+        dataIndex: 'id',
+        width: 70,
+        sorter: true
+      }, {
+        title: this.$t('会话开始时间'),
+        dataIndex: 'start_time',
+        width: 150
+      }, {
+        title: this.$t('访客id'),
+        dataIndex: 'visitor_id',
+        width: 60
+
+      }, {
+        title: this.$t('访客姓名'),
+        dataIndex: 'visitor_name'
+      }, {
+        title: this.$t('访客手机号'),
+        dataIndex: 'visitor_num',
+        width: 120
+      }, {
+        title: this.$t('客服名称'),
+        dataIndex: 'agent_name',
+        width: 150
+
+      }, {
+        title: this.$t('会话总时长'),
+        dataIndex: 'talking_last'
+
+      }, {
+        title: this.$t('消息总数'),
+        dataIndex: 'total_msg_num'
+      }, {
+        title: this.$t('访客消息数'),
+        dataIndex: 'visitor_msg_num'
+      }, {
+        title: this.$t('客服消息数'),
+        dataIndex: 'agent_msg_num'
+      }, {
+        title: this.$t('交互轮次'),
+        dataIndex: 'Interaction_times'
+      },
+      {
+        title: this.$t('结束原因'),
+        dataIndex: 'end_reason',
+        width: 100
+      }
+      ]
+    }
+  },
+  created () {
+    this.changedetailsAdvanced(false)
+  },
+  mounted () {
+    this.getTemplate()
+    this.getyesterday()
+    this.getUserName()
+  },
+  methods: {
+    // 添加数据分配 -> 分配给 组件添加
+    addallocation (index) {
+      this.groupAllocation.splice(index + 1, 0, {
+        agent: '',
+        rate: 1
+      })
+    },
+    changeType (e) {
+      this.config.data.task_type = e
+    },
+    // 添加数据分配 -> 分配给 组件删除
+    deleteallocation (index) {
+      if (this.groupAllocation.length === 1) {
+        return false
+      } else {
+        this.groupAllocation.splice(index, 1)
+      }
+    },
+    // 页面数据渲染
+    loadDataTable (parameter) {
+      this.page = parameter
+      return this.axios({
+        url: '/quality/task/mockInit',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        this.length = res.result.totalCount
+        this.nowtime = res.timestamp
+        parseInt(Math.random() * (100000 - 10000 + 1) + 10000, 10)
+        this.random = Math.floor(Math.random() * (100000 - 10000 + 1) + 10000)
+        for (const i in res.result.data) {
+          for (const j in res.result.data[i].agentlist) {
+            if (res.result.data[i].agentlist) {
+              res.result.data[i]['quality_agent'] = res.result.data[i].agentlist[j].agent
+            }
+          }
+        }
+        return res.result
+      })
+    },
+    // 获取用户信息
+    getUserName () {
+      return this.axios({
+        url: '/quality/data/getUsername'
+      }).then(res => {
+        this.quality_agent = res.result.data
+        this.agent = res.result.data
+        return res.result
+      })
+    },
+    // 任务表格数据搜索
+    taskSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 打开添加页面
+    addPage (parameter) {
+      this.visible = true
+      this.disstatu = false
+      this.disabled = false
+      this.allocatestate = false
+      this.groupAllocation = [{
+        agent: '',
+        rate: 1
+      }]
+      this.config = {
+        action: 'add',
+        title: '添加',
+        url: '/quality/task/init',
+        data: {
+          min_billsec: '1',
+          max_billsec: '300',
+          calltype: '2',
+          unsatisfied_only: '0',
+          extra_all: '0',
+          count: '1',
+          distribution_mode: '0',
+          extenlist: '',
+          agentlist: '',
+          task_type: '录音质检'
+        }
+      }
+    },
+    // 核对任务名称重复
+    checknamefun (rule, value, callback) {
+      if (this.config.action === 'distribution') {
+        return false
+      } else {
+        return this.axios({
+          url: '/quality/task/checkName',
+          data: { taskname: value }
+        }).then(res => {
+          this.tip = res.message
+        })
+      }
+    },
+    // 获取质检模板信息
+    getTemplate () {
+      return this.axios({
+        url: '/quality/task/mockGetTemplate'
+      }).then(res => {
+        this.temp_name = res.result.data
+      })
+    },
+    // 编辑时确认模板名称是否重复
+    editcheck (e) {
+      if (e.target.value === this.taskname) {
+        this.tip = ''
+      } else {
+        this.checknamefun('', e.target.value)
+      }
+    },
+    // 添加或修改任务时 关闭或重置
+    cancal_off () {
+      if (this.config.action === 'edit') {
+        this.config.data = {}
+        this.groupAllocation = [{
+          agent: '',
+          rate: 1
+        }]
+      } else {
+        this.visible = false
+      }
+    },
+    // 查看进度的对应数据
+    progress (parameter) {
+      parameter['taskid'] = this.config.taskid
+      return this.axios({
+        url: this.config.url,
+        data: Object.assign(parameter)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 查看进度对话框
+    showModal (record) {
+      this.visibleread = true
+      const id = record && record.id || this.selectedRowKeys
+      this.config = {
+        taskid: id,
+        action: 'show',
+        title: '查看进度',
+        url: '/quality/task/mockViewProgress',
+        data: {}
+      }
+    },
+    // 增加、编辑的数据提交
+    handleSubmit (value) {
+      value.preventDefault()
+      const table = this.$refs.table
+      const id = this.config.id
+      this.form.validateFields((err, values) => {
+        const info = values.info
+        delete values.info.callDate
+        info['max_billsec'] = this.config.data.max_billsec
+        values.info['agentlist'] = {}
+        let name = JSON.parse(JSON.stringify(this.nowtime + '_'))
+        for (const i in this.groupAllocation) {
+          const index = JSON.parse(JSON.stringify(this.random + Number(i)))
+          name = name + index
+          values.info['agentlist'][name] = {}
+          values.info['agentlist'][name]['agent'] = this.groupAllocation[i].agent
+          values.info['agentlist'][name]['rate'] = this.groupAllocation[i].rate
+          name = JSON.parse(JSON.stringify(this.nowtime + '_'))
+        }
+        // 表单验证是否为空
+        for (const i in this.groupAllocation) {
+          if (!this.groupAllocation[i].agent) {
+            this.$set(this.groupAllocation[i], 'agentstatus', 'error')
+            this.$set(this.groupAllocation[i], 'agenthelp', '请选择用户')
+          } else {
+            this.$set(this.groupAllocation[i], 'agentstatus', 'success')
+            this.$set(this.groupAllocation[i], 'agenthelp', '')
+          }
+        }
+        const test = JSON.stringify(this.groupAllocation)
+        const flag1 = test.indexOf('error') === -1
+        if (!flag1 || this.tip) {
+          return false
+        }
+        if (!err) {
+          // 修改数据提交
+          if (this.config.action === 'edit') {
+            for (const i in this.temp_name) {
+              if (values.info['templateid'] === this.temp_name[i].display) {
+                values.info['templateid'] = this.temp_name[i].value
+              }
+            }
+            values['id'] = id
+            this.axios({
+              url: '/quality/task/edit',
+              data: values
+            }).then(res => {
+              this.visible = false
+              this.loading = false
+              this.$message.success('修改成功')
+              table.refresh()
+            })
+            // 提取分配数据提交
+          } else if (this.config.action === 'distribution') {
+            const info = values.info
+            info['startTime'] = this.startTime
+            info['endTime'] = this.endTime
+            info['templateid'] = this.config.templateid
+            this.axios({
+              url: '/quality/task/extractDistribution',
+              data: values
+            }).then((res) => {
+              this.visible = false
+              this.loading = false
+              this.$message.info(res.message)
+              table.refresh()
+            })
+            // 添加数据提交
+          } else {
+            this.axios({
+              url: '/quality/task/add',
+              data: values
+            }).then((res) => {
+              this.visible = false
+              this.loading = false
+              this.$message.success('添加成功')
+              table.refresh()
+            })
+          }
+        }
+      })
+    },
+    // 数据提取->来自于 选择用户 返回数据
+    getUser (val) {
+      this.config.data.extenlist = val.toString()
+    },
+    // 数据分配->分配给 选择用户 返回数据
+    getQc (val) {
+      const index = this.config.index
+      this.groupAllocation[index].agent = val.toString()
+      this.$set(this.groupAllocation[index], 'agentstatus', 'success')
+      this.$set(this.groupAllocation[index], 'agenthelp', '')
+    },
+    // 修改的抽屉以及查找对应修改的数据
+    editPage (record) {
+      this.visible = true
+      this.disstatu = false
+      this.disabled = false
+      if (record.extra_all === '1') {
+        this.allocatestate = true
+      } else {
+        this.allocatestate = false
+      }
+      const id = record && record.id || this.selectedRowKeys
+      this.tip = ''
+      this.taskname = record.taskname
+      this.config = {
+        id: id,
+        action: 'edit',
+        title: '修改',
+        url: '/quality/task/edit',
+        data: {}
+      }
+      this.config.data = record
+      if (!record.agentlist) {
+        return false
+      } else {
+        this.groupAllocation = []
+        for (const j in record.agentlist) {
+          this.groupAllocation.push(record.agentlist[j])
+        }
+      }
+      for (const i in this.temp_name) {
+        if (record.templateid === this.temp_name[i].value) {
+          this.config.data.template_name = this.temp_name[i].display
+        }
+      }
+      this.loading = false
+    },
+    // 提取分配抽屉
+    distributionPage (record) {
+      this.visible = true
+      this.disstatu = true
+      this.disabled = true
+      const id = record && record.id || this.selectedRowKeys
+      if (record.extra_all === '1') {
+        this.allocatestate = true
+      } else {
+        this.allocatestate = false
+      }
+      const templateid = record.templateid
+      this.config = {
+        templateid: templateid,
+        id: id,
+        action: 'distribution',
+        title: '提取&分配',
+        url: '/quality/task/init',
+        data: {}
+      }
+      this.config.data = record
+      if (!record.agentlist) {
+        return false
+      } else {
+        this.groupAllocation = []
+        for (const j in record.agentlist) {
+          this.groupAllocation.push(record.agentlist[j])
+        }
+      }
+      for (const i in this.temp_name) {
+        if (record.templateid === this.temp_name[i].value) {
+          this.config.data.template_name = this.temp_name[i].display
+        }
+      }
+      this.loading = false
+    },
+    // 查看明细数据显示
+    detailsDataShow (parameter) {
+      this.paramDetails['taskid'] = this.taskid
+      return this.axios({
+        url: this.config.url,
+        data: Object.assign(parameter, this.paramDetails)
+      }).then(res => {
+        for (const i in res.result.data) {
+          if (res.result.data[i].result === '1') {
+            res.result.data[i].result = '合格'
+          } else {
+            res.result.data[i].result = '不合格'
+          }
+        }
+        return res.result
+      })
+    },
+    // 查看明细页面抽屉打开以及对应数据
+    detailsPage (record) {
+      this.details = true
+      const id = record && record.id || this.selectedRowKeys
+      this.taskid = id
+      this.paramDetails = {}
+      this.config = {
+        taskid: id,
+        action: 'details',
+        title: '查看明细',
+        url: '/quality/task/mockViewDetails',
+        data: { task_type: record.task_type }
+      }
+      this.$nextTick(() => {
+        const table = this.$refs.tabledetails
+        const table1 = this.$refs.tabledetails
+        if (table) table.refresh()
+        if (table1) table1.refresh()
+      })
+    },
+    // 获取搜索框搜索时间
+    getSearchdate (date, dateString) {
+      this.paramDetails.begin_time = dateString[0]
+      this.paramDetails.endTime = dateString[1]
+    },
+    // 查看详情搜索
+    detailsSearch () {
+      const table = this.$refs.tabledetails
+      table.refresh()
+    },
+    // 提取分配中重新分配抽屉
+    Redistribution (record) {
+      this.visibleRedistribution = true
+      const detailsid = record && record.id || this.selectedRowKeys
+      this.configfen = {
+        taskid: this.taskid,
+        detailsid: detailsid,
+        url: '/quality/task/viewDetails',
+        data: {}
+      }
+    },
+    // 重新分配提交
+    Redistributioncheck () {
+      const table = this.$refs.tabledetails
+      const self = this
+      this.$confirm({
+        title: '您确认要重新分配吗？',
+        onOk () {
+          self.axios({
+            url: '/quality/task/redistribution',
+            data: { id: self.configfen.detailsid }
+          }).then(res => {
+            self.$message.success('分配成功')
+            table.refresh()
+            self.visibleRedistribution = false
+          })
+        }
+      })
+    },
+    // 每人提取数量
+    allocate () {
+      this.allocatestate = true
+    },
+    // 每人提取数据框不显示
+    allocateClose () {
+      this.allocatestate = false
+    },
+    // 刷新
+    refresh () {
+      this.$refs.table.refresh()
+    },
+    refresh2 () {
+      this.$refs.tableread.refresh()
+    },
+    refresh3 () {
+      this.$refs.tabledetails.refresh()
+    },
+    // 任务删除
+    taskDelete (record) {
+      const table = this.$refs.table
+      const id = record && record.id || this.selectedRowKeys
+      const self = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          self.axios({
+            url: '/quality/task/delete',
+            data: { id: id }
+          }).then(res => {
+            self.$message.success(self.$t('删除成功'))
+            table.refresh()
+          })
+        }
+      })
+    },
+    // 查看明细删除
+    detailsDelete (record) {
+      const table = this.$refs.tabledetails
+      const id = record && record.id || this.selectedRowKeys
+      const self = this
+      this.$confirm({
+        title: record ? '您确认要删除该记录吗？' : '您确认要删除选中的记录吗？',
+        onOk () {
+          self.axios({
+            url: '/quality/task/viewDetailsDelete',
+            data: { id: id }
+          }).then(res => {
+            self.$message.success('删除成功')
+            table.refresh3()
+          })
+        }
+      })
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict'
+      })
+    },
+    // 查看明细数据导出
+    Taskexport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict'
+      })
+    },
+    // 获取提取分配中呼叫时间
+    getcallDate (date, dateString) {
+      this.startTime = dateString[0]
+      this.endTime = dateString[1]
+    },
+    // 当前月第一天至今
+    getyesterday () {
+      const sTime = '00:00:00'
+      const eTime = '23:59:59'
+      var yestime = new Date()
+      yestime.setTime(yestime.getTime() - 24 * 60 * 60 * 1000)
+      var yesterday = yestime.getFullYear() + '-' + (yestime.getMonth() + 1) + '-' + yestime.getDate()
+      this.startTime = yesterday + ' ' + sTime
+      this.endTime = yesterday + ' ' + eTime
+      this.callDate = [this.startTime ? this.moment(this.startTime, 'YYYY-MM-DD HH:mm:ss') : '', this.endTime ? this.moment(this.endTime, 'YYYY-MM-DD HH:mm:ss') : '']
+    },
+    // 数据提取->来自于 选择用户
+    handleSelect () {
+      this.$refs.selectUserFormSeat.show({
+        page: 'statistic',
+        mode: 'multiple',
+        selectValue: this.form.getFieldValue('info[extenlist]') ? this.form.getFieldValue('info[extenlist]').split(',') : []
+      })
+    },
+    // 数据分配->分配给 选择用户
+    handleSelectQc (data, index) {
+      this.config.index = index
+      this.$refs.selectUserFormQc.show({
+        page: 'statistic',
+        mode: 'multiple',
+        selectValue: data ? data.split(',') : []
+      })
+    },
+    changedetailsAdvanced (tag) {
+      if (tag) {
+        this.detailsadvanced = !this.detailsadvanced
+      }
+      if (this.detailsadvanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.input {
+  background-color: #f5f5f5;
+}
+.margin {
+  margin-left: 80px;
+}
+.rattio {
+  margin-left: 20px;
+}
+.title {
+  margin-top: 5px;
+}
+/deep/.ant-drawer-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  > :first-child:not(.ant-spin-nested-loading) {
+    padding: 16px;
+  }
+  > .ant-spin-nested-loading {
+    height: 100%;
+    > .ant-spin-container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      > :first-child {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 0px;
+      }
+    }
+  }
+  .ant-tabs-bar {
+    margin-top: 2px;
+  }
+  .drawer-table {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex: auto;
+  }
+
+  .bbar {
+    padding: 10px 16px;
+    text-align: right;
+    border-top: 1px solid #e9e9e9;
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+/deep/.ant-card-body {
+  height: 100%;
+}
+/deep/.table-fill {
+  height: calc(100% - 43px);
+}
+</style>

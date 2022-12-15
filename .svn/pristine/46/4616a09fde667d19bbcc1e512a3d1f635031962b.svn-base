@@ -1,0 +1,741 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('任务名称')">
+              <a-input v-model.trim="queryParam.taskName" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:add icon="plus" type="primary" @click="addTask">{{ $t('添加') }}</a-button>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      class="table-fill"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="editTask(record)">{{ $t('编辑') }}</a>
+        <a-divider type="vertical" />
+        <a-dropdown>
+          <a>
+            {{ $t('更多') }}
+            <a-icon type="down" />
+          </a>
+          <a-menu slot="overlay">
+            <a-menu-item>
+              <a @click="showProgress(record)">{{ $t('查看进度') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="showDetails(record)">{{ $t('查看明细') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="allotTask(record)">{{ $t('提取&分配') }}</a>
+            </a-menu-item>
+            <a-menu-item>
+              <a @click="deleteTask(record)">{{ $t('删除信息') }}</a>
+            </a-menu-item>
+          </a-menu>
+        </a-dropdown>
+      </div>
+    </s-table>
+    <select-user-form ref="selectUserFormSeat" @ok="getUser" />
+    <select-user-form ref="selectUserFormQc" @ok="getQc" />
+    <general-export ref="generalExport" />
+    <task-progress ref="taskProgress" />
+    <task-details ref="taskDetails" />
+  </div>
+</template>
+<script>
+export default {
+  components: {
+    SelectUserForm: () => import('@/views/admin/UserTable/SelectUserForm'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport'),
+    TaskProgress: () => import('./TaskProgress'),
+    TaskDetails: () => import('./TaskDetails')
+  },
+  data () {
+    return {
+      advanced: false,
+      formLayout: {
+        labelCol: { span: 2 },
+        wrapperCol: { span: 18 }
+      },
+      detailsadvanced: false,
+      visibleRedistribution: false,
+      visible: false,
+      loading: false,
+      disstatu: false,
+      disabled: false,
+      details: false,
+      tip: '',
+      allocatestate: false,
+      length: '',
+      nowtime: '',
+      random: 0,
+      content: '1.当有多组质检员时，组间分配占比指的是该组质检员在多组质检员中所占的比例。如：共增加3组质检员，组件分配占比分别为1、2、3，则第一组质检员分得的比例为1/(1+2+3)，第二组质检员分得比例为2/(1+2+3)。</br>' +
+        '2.平均分配时，该组质检员平均分得本组所分配到的指间任务，如：本组5个质检员，分得100条指间任务，则每个质检员分得20条质检任务。全部分配时，该组质检员都分得到本组所分配到的质检任务，如：本组5个质检员，分得100条质检任务，则每个质检员均会分得100条质检任务，最终质检结果取5个质检员质检结果的平均值。',
+      // 搜索参数
+      parameter: {},
+      queryParam: {},
+      paramDetails: {
+        status: undefined,
+        quality_agent: undefined,
+        agent: undefined,
+        src_phone: '',
+        dst_phone: '',
+        begin_time: '',
+        endTime: ''
+      },
+      callDate: null,
+      searchDate: null,
+      form: this.$form.createForm(this),
+      config: {
+        data: {}
+      },
+      configfen: {},
+      quality_agent: [],
+      agent: [],
+      temp_name: [],
+      page: [],
+      taskid: '',
+      startTime: '',
+      endTime: '',
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      groupAllocation: [{
+        agent: '',
+        rate: 1
+      }],
+      taskname: '',
+      colLayout: {},
+      visibleread: false,
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('任务名称'),
+        dataIndex: 'taskName'
+      }, {
+        title: this.$t('质检总数'),
+        dataIndex: 'qualityTotal'
+      }, {
+        title: this.$t('已质检数'),
+        dataIndex: 'qualityNumber'
+      }, {
+        title: this.$t('待质检数'),
+        dataIndex: 'forQualityNumber'
+      }, {
+        title: this.$t('有效数据'),
+        dataIndex: 'validNumber'
+      }, {
+        title: this.$t('无效数据'),
+        dataIndex: 'invalidNumber'
+      }, {
+        title: this.$t('完成率'),
+        dataIndex: 'accomplishPercent'
+      }, {
+        title: this.$t('质检员'),
+        dataIndex: 'qualityUsers'
+      }]
+    }
+  },
+  created () {
+    this.changedetailsAdvanced(false)
+  },
+  mounted () {
+    this.getTemplate()
+    this.getyesterday()
+    this.getUserName()
+  },
+  methods: {
+    // 页面数据渲染
+    loadDataTable (parameter) {
+      this.parameter = parameter
+      return this.axios({
+        url: '/quality/task/init',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        // this.length = res.result.totalCount
+        // this.nowtime = res.timestamp
+        // parseInt(Math.random() * (100000 - 10000 + 1) + 10000, 10)
+        // this.random = Math.floor(Math.random() * (100000 - 10000 + 1) + 10000)
+        // for (const i in res.result.data) {
+        //   for (const j in res.result.data[i].agentlist) {
+        //     if (res.result.data[i].agentlist) {
+        //       res.result.data[i]['quality_agent'] = res.result.data[i].agentlist[j].agent
+        //     }
+        //   }
+        // }
+        return res.result
+      })
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportTaskManager',
+        parameter: {
+          condition: Object.assign(this.parameter, this.queryParam)
+        }
+      })
+    },
+    // 查看进度
+    showProgress (record) {
+      const id = record && record.id
+      this.$refs.taskProgress.show({
+        id: id,
+        title: this.$t('查看进度'),
+        url: '/quality/task/progress'
+      })
+    },
+    // 查看明细
+    showDetails (record) {
+      const id = record && record.id
+      this.$refs.taskDetails.show({
+        id: id,
+        title: this.$t('查看明细'),
+        url: '/quality/task/details'
+      })
+      // this.details = true
+      // const id = record && record.id || this.selectedRowKeys
+      // this.taskid = id
+      // this.paramDetails = {}
+      // this.config = {
+      //   taskid: id,
+      //   action: 'details',
+      //   title: '查看明细',
+      //   url: '/quality/task/mockViewDetails',
+      //   data: { task_type: record.task_type }
+      // }
+      // this.$nextTick(() => {
+      //   const table = this.$refs.tabledetails
+      //   const table1 = this.$refs.tabledetails
+      //   if (table) table.refresh()
+      //   if (table1) table1.refresh()
+      // })
+    },
+    // 添加数据分配 -> 分配给 组件添加
+    addallocation (index) {
+      this.groupAllocation.splice(index + 1, 0, {
+        agent: '',
+        rate: 1
+      })
+    },
+    changeType (e) {
+      this.config.data.task_type = e
+    },
+    // 添加数据分配 -> 分配给 组件删除
+    deleteallocation (index) {
+      if (this.groupAllocation.length === 1) {
+        return false
+      } else {
+        this.groupAllocation.splice(index, 1)
+      }
+    },
+
+    // 获取用户信息
+    getUserName () {
+      return this.axios({
+        url: '/quality/data/getUsername'
+      }).then(res => {
+        this.quality_agent = res.result.data
+        this.agent = res.result.data
+        return res.result
+      })
+    },
+    // 任务表格数据搜索
+    taskSearch () {
+      const table = this.$refs.table
+      table.refresh()
+    },
+    // 打开添加页面
+    addTask (parameter) {
+      this.visible = true
+      this.disstatu = false
+      this.disabled = false
+      this.allocatestate = false
+      this.groupAllocation = [{
+        agent: '',
+        rate: 1
+      }]
+      this.config = {
+        action: 'add',
+        title: '添加',
+        url: '/quality/task/init',
+        data: {
+          min_billsec: '1',
+          max_billsec: '300',
+          calltype: '2',
+          unsatisfied_only: '0',
+          extra_all: '0',
+          count: '1',
+          distribution_mode: '0',
+          extenlist: '',
+          agentlist: '',
+          task_type: '录音质检'
+        }
+      }
+    },
+    // 核对任务名称重复
+    checknamefun (rule, value, callback) {
+      if (this.config.action === 'distribution') {
+        return false
+      } else {
+        return this.axios({
+          url: '/quality/task/checkName',
+          data: { taskname: value }
+        }).then(res => {
+          this.tip = res.message
+        })
+      }
+    },
+    // 获取质检模板信息
+    getTemplate () {
+      return this.axios({
+        url: '/quality/task/mockGetTemplate'
+      }).then(res => {
+        this.temp_name = res.result.data
+      })
+    },
+    // 编辑时确认模板名称是否重复
+    editcheck (e) {
+      if (e.target.value === this.taskname) {
+        this.tip = ''
+      } else {
+        this.checknamefun('', e.target.value)
+      }
+    },
+    // 添加或修改任务时 关闭或重置
+    cancal_off () {
+      if (this.config.action === 'edit') {
+        this.config.data = {}
+        this.groupAllocation = [{
+          agent: '',
+          rate: 1
+        }]
+      } else {
+        this.visible = false
+      }
+    },
+    // 查看进度的对应数据
+    progress (parameter) {
+      parameter['taskid'] = this.config.taskid
+      return this.axios({
+        url: this.config.url,
+        data: Object.assign(parameter)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 增加、编辑的数据提交
+    handleSubmit (value) {
+      value.preventDefault()
+      const table = this.$refs.table
+      const id = this.config.id
+      this.form.validateFields((err, values) => {
+        const info = values.info
+        delete values.info.callDate
+        info['max_billsec'] = this.config.data.max_billsec
+        values.info['agentlist'] = {}
+        let name = JSON.parse(JSON.stringify(this.nowtime + '_'))
+        for (const i in this.groupAllocation) {
+          const index = JSON.parse(JSON.stringify(this.random + Number(i)))
+          name = name + index
+          values.info['agentlist'][name] = {}
+          values.info['agentlist'][name]['agent'] = this.groupAllocation[i].agent
+          values.info['agentlist'][name]['rate'] = this.groupAllocation[i].rate
+          name = JSON.parse(JSON.stringify(this.nowtime + '_'))
+        }
+        // 表单验证是否为空
+        for (const i in this.groupAllocation) {
+          if (!this.groupAllocation[i].agent) {
+            this.$set(this.groupAllocation[i], 'agentstatus', 'error')
+            this.$set(this.groupAllocation[i], 'agenthelp', '请选择用户')
+          } else {
+            this.$set(this.groupAllocation[i], 'agentstatus', 'success')
+            this.$set(this.groupAllocation[i], 'agenthelp', '')
+          }
+        }
+        const test = JSON.stringify(this.groupAllocation)
+        const flag1 = test.indexOf('error') === -1
+        if (!flag1 || this.tip) {
+          return false
+        }
+        if (!err) {
+          // 修改数据提交
+          if (this.config.action === 'edit') {
+            for (const i in this.temp_name) {
+              if (values.info['templateid'] === this.temp_name[i].display) {
+                values.info['templateid'] = this.temp_name[i].value
+              }
+            }
+            values['id'] = id
+            this.axios({
+              url: '/quality/task/edit',
+              data: values
+            }).then(res => {
+              this.visible = false
+              this.loading = false
+              this.$message.success('修改成功')
+              table.refresh()
+            })
+            // 提取分配数据提交
+          } else if (this.config.action === 'distribution') {
+            const info = values.info
+            info['startTime'] = this.startTime
+            info['endTime'] = this.endTime
+            info['templateid'] = this.config.templateid
+            this.axios({
+              url: '/quality/task/extractDistribution',
+              data: values
+            }).then((res) => {
+              this.visible = false
+              this.loading = false
+              this.$message.info(res.message)
+              table.refresh()
+            })
+            // 添加数据提交
+          } else {
+            this.axios({
+              url: '/quality/task/add',
+              data: values
+            }).then((res) => {
+              this.visible = false
+              this.loading = false
+              this.$message.success('添加成功')
+              table.refresh()
+            })
+          }
+        }
+      })
+    },
+    // 数据提取->来自于 选择用户 返回数据
+    getUser (val) {
+      this.config.data.extenlist = val.toString()
+    },
+    // 数据分配->分配给 选择用户 返回数据
+    getQc (val) {
+      const index = this.config.index
+      this.groupAllocation[index].agent = val.toString()
+      this.$set(this.groupAllocation[index], 'agentstatus', 'success')
+      this.$set(this.groupAllocation[index], 'agenthelp', '')
+    },
+    // 修改的抽屉以及查找对应修改的数据
+    editTask (record) {
+      this.visible = true
+      this.disstatu = false
+      this.disabled = false
+      if (record.extra_all === '1') {
+        this.allocatestate = true
+      } else {
+        this.allocatestate = false
+      }
+      const id = record && record.id || this.selectedRowKeys
+      this.tip = ''
+      this.taskname = record.taskname
+      this.config = {
+        id: id,
+        action: 'edit',
+        title: '修改',
+        url: '/quality/task/edit',
+        data: {}
+      }
+      this.config.data = record
+      if (!record.agentlist) {
+        return false
+      } else {
+        this.groupAllocation = []
+        for (const j in record.agentlist) {
+          this.groupAllocation.push(record.agentlist[j])
+        }
+      }
+      for (const i in this.temp_name) {
+        if (record.templateid === this.temp_name[i].value) {
+          this.config.data.template_name = this.temp_name[i].display
+        }
+      }
+      this.loading = false
+    },
+    // 提取分配抽屉
+    allotTask (record) {
+      this.visible = true
+      this.disstatu = true
+      this.disabled = true
+      const id = record && record.id || this.selectedRowKeys
+      if (record.extra_all === '1') {
+        this.allocatestate = true
+      } else {
+        this.allocatestate = false
+      }
+      const templateid = record.templateid
+      this.config = {
+        templateid: templateid,
+        id: id,
+        action: 'distribution',
+        title: '提取&分配',
+        url: '/quality/task/init',
+        data: {}
+      }
+      this.config.data = record
+      if (!record.agentlist) {
+        return false
+      } else {
+        this.groupAllocation = []
+        for (const j in record.agentlist) {
+          this.groupAllocation.push(record.agentlist[j])
+        }
+      }
+      for (const i in this.temp_name) {
+        if (record.templateid === this.temp_name[i].value) {
+          this.config.data.template_name = this.temp_name[i].display
+        }
+      }
+      this.loading = false
+    },
+    // 查看明细数据显示
+    detailsDataShow (parameter) {
+      this.paramDetails['taskid'] = this.taskid
+      return this.axios({
+        url: this.config.url,
+        data: Object.assign(parameter, this.paramDetails)
+      }).then(res => {
+        for (const i in res.result.data) {
+          if (res.result.data[i].result === '1') {
+            res.result.data[i].result = '合格'
+          } else {
+            res.result.data[i].result = '不合格'
+          }
+        }
+        return res.result
+      })
+    },
+    // 获取搜索框搜索时间
+    getSearchdate (date, dateString) {
+      this.paramDetails.begin_time = dateString[0]
+      this.paramDetails.endTime = dateString[1]
+    },
+    // 查看详情搜索
+    detailsSearch () {
+      const table = this.$refs.tabledetails
+      table.refresh()
+    },
+    // 提取分配中重新分配抽屉
+    Redistribution (record) {
+      this.visibleRedistribution = true
+      const detailsid = record && record.id || this.selectedRowKeys
+      this.configfen = {
+        taskid: this.taskid,
+        detailsid: detailsid,
+        url: '/quality/task/viewDetails',
+        data: {}
+      }
+    },
+    // 重新分配提交
+    Redistributioncheck () {
+      const table = this.$refs.tabledetails
+      const self = this
+      this.$confirm({
+        title: '您确认要重新分配吗？',
+        onOk () {
+          self.axios({
+            url: '/quality/task/redistribution',
+            data: { id: self.configfen.detailsid }
+          }).then(res => {
+            self.$message.success('分配成功')
+            table.refresh()
+            self.visibleRedistribution = false
+          })
+        }
+      })
+    },
+    // 每人提取数量
+    allocate () {
+      this.allocatestate = true
+    },
+    // 每人提取数据框不显示
+    allocateClose () {
+      this.allocatestate = false
+    },
+    // 刷新
+    refresh () {
+      this.$refs.table.refresh()
+    },
+    refresh2 () {
+      this.$refs.tableread.refresh()
+    },
+    refresh3 () {
+      this.$refs.tabledetails.refresh()
+    },
+    // 任务删除
+    deleteTask (record) {
+      const id = record && record.id
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk: () => {
+          this.axios({
+            url: '/quality/task/delete',
+            params: { id: id }
+          }).then(res => {
+            if (res.code === 0) {
+              this.$message.success(this.$t('删除成功'))
+              this.$refs.table.refresh()
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    },
+    // 查看明细数据导出
+    Taskexport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'exportDict'
+      })
+    },
+    // 获取提取分配中呼叫时间
+    getcallDate (date, dateString) {
+      this.startTime = dateString[0]
+      this.endTime = dateString[1]
+    },
+    // 当前月第一天至今
+    getyesterday () {
+      const sTime = '00:00:00'
+      const eTime = '23:59:59'
+      var yestime = new Date()
+      yestime.setTime(yestime.getTime() - 24 * 60 * 60 * 1000)
+      var yesterday = yestime.getFullYear() + '-' + (yestime.getMonth() + 1) + '-' + yestime.getDate()
+      this.startTime = yesterday + ' ' + sTime
+      this.endTime = yesterday + ' ' + eTime
+      this.callDate = [this.startTime ? this.moment(this.startTime, 'YYYY-MM-DD HH:mm:ss') : '', this.endTime ? this.moment(this.endTime, 'YYYY-MM-DD HH:mm:ss') : '']
+    },
+    // 数据提取->来自于 选择用户
+    handleSelect () {
+      this.$refs.selectUserFormSeat.show({
+        page: 'statistic',
+        mode: 'multiple',
+        selectValue: this.form.getFieldValue('info[extenlist]') ? this.form.getFieldValue('info[extenlist]').split(',') : []
+      })
+    },
+    // 数据分配->分配给 选择用户
+    handleSelectQc (data, index) {
+      this.config.index = index
+      this.$refs.selectUserFormQc.show({
+        page: 'statistic',
+        mode: 'multiple',
+        selectValue: data ? data.split(',') : []
+      })
+    },
+    changedetailsAdvanced (tag) {
+      if (tag) {
+        this.detailsadvanced = !this.detailsadvanced
+      }
+      if (this.detailsadvanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.input {
+  background-color: #f5f5f5;
+}
+.margin {
+  margin-left: 80px;
+}
+.rattio {
+  margin-left: 20px;
+}
+.title {
+  margin-top: 5px;
+}
+/deep/.ant-drawer-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  > :first-child:not(.ant-spin-nested-loading) {
+    padding: 16px;
+  }
+  > .ant-spin-nested-loading {
+    height: 100%;
+    > .ant-spin-container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      > :first-child {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 0px;
+      }
+    }
+  }
+  .ant-tabs-bar {
+    margin-top: 2px;
+  }
+  .drawer-table {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex: auto;
+  }
+
+  .bbar {
+    padding: 10px 16px;
+    text-align: right;
+    border-top: 1px solid #e9e9e9;
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+/deep/.ant-card-body {
+  height: 100%;
+}
+/deep/.table-fill {
+  height: calc(100% - 43px);
+}
+</style>

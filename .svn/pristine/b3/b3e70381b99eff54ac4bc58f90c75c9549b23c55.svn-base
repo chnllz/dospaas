@@ -1,0 +1,59 @@
+<template>
+  <div style="padding: 10px">
+    <div>
+      <h3>要合并内容:</h3>
+      {{ obj1 }}
+      <br />
+      {{ obj2 }}
+      <br />
+      {{ obj3 }}
+    </div>
+    <div style="margin: 16px 0">
+      <h3>deepmerge合并后的内容:</h3>
+      {{ deepmergeOutput }}
+    </div>
+    <div>
+      <h3>Object.assign合并后的内容:</h3>
+      {{ assignOutput }}
+    </div>
+  </div>
+</template>
+<script>
+export default {
+  props: {
+    myName: {
+      type: String,
+      default: 'lily'
+    }
+  },
+  data () {
+    return {
+      obj1: {
+        var1: 111,
+        var2: {
+          aaa: 1111,
+          bbb: 2222
+        }
+      },
+      obj2: {
+        var1: 222,
+        var2: {
+          bbb: 3333,
+          ccc: 4444
+        }
+      },
+      obj3: {
+        var1: 333,
+        var3: 444
+      },
+      deepmergeOutput: {},
+      assignOutput: {}
+    }
+  },
+  created () {
+    Object.assign(this.assignOutput, this.obj1, this.obj2, this.obj3)
+    this.deepmergeOutput = this.$deepmerge.all([this.obj1, this.obj2, this.obj3])
+  },
+  methods: {}
+}
+</script>

@@ -1,0 +1,673 @@
+export const listButton = [
+  {
+    attribute: '<a-button icon="plus" type="primary" @click="parent.handleCreate()">{{parent.$t("创建流程")}}</a-button>',
+    barAlias: 'flow_create',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '10',
+    listOrder: '10',
+    menuType: 'bar',
+    name: '创建流程',
+    style: 'primary'
+  }, {
+    attribute: '<a-button @click="parent.handleBatchJump()" :disabled="!parent.selectedRowKeys.length">{{parent.$t("批量流转")}}</a-button>',
+    barAlias: 'flow_batchjump',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '20',
+    listOrder: '20',
+    menuType: 'bar',
+    name: '批量流转',
+    style: 'default'
+  }, {
+    attribute: '<a-button @click="parent.handleBatchRepeal()" :disabled="!parent.selectedRowKeys.length">{{parent.$t("批量取消")}}</a-button>',
+    barAlias: 'flow_batchrepeal',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '30',
+    listOrder: '30',
+    menuType: 'bar',
+    name: '批量取消',
+    style: 'default'
+  }, {
+    attribute: '<a-button @click="parent.handleBatchSearch()">{{parent.$t("批量搜索")}}</a-button>',
+    barAlias: 'sys_batchsearch',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '40',
+    listOrder: '40',
+    menuType: 'bar',
+    name: '批量搜索',
+    style: 'default'
+  }, {
+    attribute: `<a-button icon="plus" type= "primary " @click="parent.onShow({ title: parent.$t('添加'), url: '/admin/userTable/add', tplviewid: '{$tplviewid}', width: '{$drawerWidth}' })" >{{parent.$t("添加")}}</a-button>`,
+    barAlias: 'sys_add',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '50',
+    listOrder: '50',
+    menuType: 'bar',
+    name: '添加',
+    style: 'primary'
+  }, {
+    attribute: '<a-button icon="delete" @click="parent.onDelete()" type="danger" :disabled="parent.selectedRowKeys.length==0">{{parent.$t("批量删除")}}</a-button>',
+    barAlias: 'sys_bulkdelete',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '60',
+    listOrder: '60',
+    menuType: 'bar',
+    name: '批量删除',
+    style: 'default'
+  }, {
+    attribute: '<a-button icon="edit" @click="parent.onBulkEdit()">{{parent.$t("批量编辑")}}</a-button>',
+    barAlias: 'sys_bulkedit',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '70',
+    listOrder: '70',
+    menuType: 'bar',
+    name: '批量编辑',
+    style: 'default'
+  }, {
+    attribute: '<a-button icon="upload" @click="parent.onImport({barData: {$barData}})">{{parent.$t("导入")}}</a-button>',
+    barAlias: 'bar_import',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '80',
+    listOrder: '80',
+    menuType: 'bar',
+    name: '导入',
+    style: 'default'
+  }, {
+    attribute: '<a-button icon="download" @click="parent.onExport">{{parent.$t("导出")}}</a-button>',
+    barAlias: 'bar_export',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '90',
+    listOrder: '90',
+    menuType: 'bar',
+    name: '导出',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleView(record)">{{parent.$t("查看")}}</a>',
+    barAlias: 'flow_view',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '100',
+    listOrder: '100',
+    menuType: 'line',
+    name: '查看',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleProcess(record)">{{parent.$t("办理")}}</a>',
+    barAlias: 'flow_process',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '110',
+    listOrder: '110',
+    menuType: 'line',
+    name: '办理',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleTakeFlow(record)">{{parent.$t("领取")}}</a>',
+    barAlias: 'flow_take',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '120',
+    listOrder: '120',
+    menuType: 'line',
+    name: '领取',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleRemarks(record)">{{parent.$t("备注")}}</a>',
+    barAlias: 'flow_remarks',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '130',
+    listOrder: '130',
+    menuType: 'line',
+    name: '备注',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleUrge(record)">{{parent.$t("催办")}}</a>',
+    barAlias: 'flow_urge',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '140',
+    listOrder: '140',
+    menuType: 'line',
+    name: '催办',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleRepeal(record)">{{parent.$t("取消")}}</a>',
+    barAlias: 'flow_repeal',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '150',
+    listOrder: '150',
+    menuType: 'line',
+    name: '取消',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleJump(record)">{{parent.$t("流转")}}</a>',
+    barAlias: 'flow_jump',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '170',
+    listOrder: '170',
+    menuType: 'line',
+    name: '流转',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleTransfer(record)">{{parent.$t("转办")}}</a>',
+    barAlias: 'flow_transfer',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '180',
+    listOrder: '180',
+    menuType: 'line',
+    name: '转办',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleTakeProcess(record)">{{parent.$t("领办")}}</a>',
+    barAlias: 'flow_takeprocess',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '190',
+    listOrder: '190',
+    menuType: 'line',
+    name: '领办',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleHangUp(record)">{{parent.$t("挂起")}}</a>',
+    barAlias: 'flow_hangup',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '230',
+    listOrder: '230',
+    menuType: 'line',
+    name: '挂起',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.handleActivate(record)">{{parent.$t("激活")}}</a>',
+    barAlias: 'flow_activate',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '240',
+    listOrder: '240',
+    menuType: 'line',
+    name: '激活',
+    style: 'default'
+  }, {
+    attribute: `<a href= "javascript:;" @click= "parent.onShow({ title: parent.$t('详情'), url: '/admin/userTable/edit', width: '{$drawerWidth}', record: record }) ">{{parent.$t("详情")}}</a>`,
+    barAlias: 'bar_detail',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '160',
+    listOrder: '160',
+    menuType: 'line',
+    name: '详情',
+    style: 'default'
+  }, {
+    attribute: '<a href="javascript:;" @click="parent.onDelete({ record: record })">{{parent.$t("删除")}}</a>',
+    barAlias: 'sys_delete',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '210',
+    listOrder: '210',
+    menuType: 'line',
+    name: '删除',
+    style: 'default',
+    remarks: '默认为删除数据表数据。开启了“流程功能”时，删除数据表数据及对应的流程。'
+  }
+  // {
+  //   attribute: '<a href="javascript:;" @click="parent.onDelete({ record: record })">一键复制</a>',
+  //   barAlias: 'sys_copy',
+  //   barSys: '1',
+  //   barMenuPriv: '',
+  //   display: '1',
+  //   id: '220',
+  //   listOrder: '220',
+  //   menuType: 'line',
+  //   name: '一键复制',
+  //   style: 'default'
+  // }
+]
+export const cardButton = [
+  {
+    attribute: `<a-button icon="plus" type= "primary" @click= "parent.onShow({ title: parent.$t('添加'), url: '/admin/userTable/add', tplviewid: '{$tplviewid}', width: '{$drawerWidth}' })">{{parent.$t("添加")}}</a-button>`,
+    barAlias: 'sys_add',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '10',
+    listOrder: '10',
+    menuType: 'bar',
+    name: '添加',
+    style: 'primary'
+  },
+  {
+    attribute:
+      '<a-button icon="delete" @click="parent.onDelete()" type="danger" :disabled="parent.selectedRowKeys.length==0">{{parent.$t("批量删除")}}</a-button>',
+    barAlias: 'sys_bulkdelete',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '20',
+    listOrder: '20',
+    menuType: 'bar',
+    name: '批量删除',
+    style: 'default'
+  },
+  {
+    attribute: '<a-button icon="edit" @click="parent.onBulkEdit()">{{parent.$t("批量编辑")}}</a-button>',
+    barAlias: 'sys_bulkedit',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '30',
+    listOrder: '30',
+    menuType: 'bar',
+    name: '批量编辑',
+    style: 'default'
+  },
+  {
+    attribute: '<a-button icon="upload" @click="parent.onImport({barData: {$barData}})">{{parent.$t("导入")}}</a-button>',
+    barAlias: 'bar_import',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '40',
+    listOrder: '40',
+    menuType: 'bar',
+    name: '导入',
+    style: 'default'
+  },
+  {
+    attribute: '<a-button icon="download" @click="parent.onExport">{{parent.$t("导出")}}</a-button>',
+    barAlias: 'bar_export',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '50',
+    listOrder: '50',
+    menuType: 'bar',
+    name: '导出',
+    style: 'default'
+  },
+  {
+    attribute: `<a href= "javascript:;" @click= "parent.onShow({ title: parent.$t('详情'), url: '/admin/userTable/edit', width: '{$drawerWidth}', record: record })">{{parent.$t("详情")}}</a>`,
+    barAlias: 'bar_detail',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '60',
+    listOrder: '60',
+    menuType: 'line',
+    name: '选中',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.onDelete({ record: record })">{{parent.$t("删除")}}</a>',
+    barAlias: 'sys_delete',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '70',
+    listOrder: '70',
+    menuType: 'line',
+    name: '删除',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.onDelete({ record: record })">{{parent.$t("一键复制")}}</a>',
+    barAlias: 'sys_copy',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '80',
+    listOrder: '80',
+    menuType: 'line',
+    name: '一键复制',
+    style: 'default'
+  }
+]
+export const subformButton = [
+  {
+    id: '10',
+    listOrder: '10',
+    name: '添加',
+    barAlias: 'sys_add',
+    barSys: '1',
+    menuType: 'bar',
+    display: '1',
+    style: 'primary',
+    attribute: `<a-button icon="plus" type="primary" @click="parent.onShow({ title: parent.$t('添加'), url: '/admin/userTable/add', tplviewid: '{$tplviewid}', width: '{$drawerWidth}' })">{{parent.$t("添加")}}</a-button>`,
+    barMenuPriv: ''
+  },
+  {
+    id: '20',
+    listOrder: '20',
+    name: '批量删除',
+    barAlias: 'sys_bulkdelete',
+    barSys: '1',
+    menuType: 'bar',
+    display: '0',
+    style: 'default',
+    attribute:
+      '<a-button icon="delete" @click="parent.onDelete()" type="danger" :disabled="parent.selectedRowKeys.length==0">{{parent.$t("批量删除")}}< /a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: '30',
+    listOrder: '30',
+    name: '导入',
+    barAlias: 'bar_import',
+    barSys: '1',
+    menuType: 'bar',
+    display: '0',
+    style: 'default',
+    attribute: '<a-button icon="upload" @click="parent.onImport({barData: {$barData}})">{{parent.$t("导入")}}< /a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: '40',
+    listOrder: '40',
+    name: '详情',
+    barAlias: 'bar_detail',
+    barSys: '1',
+    menuType: 'line',
+    display: '1',
+    style: 'default',
+    attribute: `<a href="javascript:; " @click="parent.onShow({ title: parent.$t('详情'), url: '/admin/userTable/edit', tplviewid: '{$tplviewid}', width: '{$drawerWidth}', record: record }) ">{{parent.$t("详情")}}</a>`,
+    barMenuPriv: ''
+  },
+  {
+    id: '50',
+    listOrder: '50',
+    name: '删除',
+    barAlias: 'sys_delete',
+    barSys: '1',
+    menuType: 'line',
+    display: '0',
+    style: 'default',
+    attribute: '<a href="javascript:;" @click="parent.onDelete({ record: record })">{{parent.$t("删除")}}</a>',
+    barMenuPriv: ''
+  },
+  {
+    id: '60',
+    listOrder: '60',
+    name: '开窗选择',
+    barAlias: 'sys_subform',
+    barSys: '1',
+    menuType: 'bar',
+    display: '0',
+    style: 'default',
+    attribute: '<a-button icon="select" @click="parent.onSubform({barData: {$barData}})">{{parent.$t("开窗选择")}}</a-button>',
+    barMenuPriv: ''
+  }
+]
+export const menuAllData = [
+  {
+    id: 10,
+    listOrder: 10,
+    name: '办理',
+    barAlias: 'bar_handle',
+    barSys: 1,
+    visible: '1',
+    style: 'primary',
+    attribute: '<a-button type="primary" :loading="parent.loading" @click="parent.handleSubmit">{{parent.$t("办理")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 20,
+    listOrder: 20,
+    name: '关闭',
+    barAlias: 'bar_cancel',
+    barSys: 1,
+    visible: '1',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleCancel">{{parent.$t("关闭")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 30,
+    listOrder: 30,
+    name: '转办',
+    barAlias: 'bar_complaint',
+    barSys: 1,
+    visible: '0',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleTransfer">{{parent.$t("转办")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 40,
+    listOrder: 40,
+    name: '传阅',
+    barAlias: 'bar_bcirculated',
+    barSys: 1,
+    visible: '0',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleSubmit">{{parent.$t("传阅")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 50,
+    listOrder: 50,
+    name: '特批',
+    barAlias: 'bar_special',
+    barSys: 1,
+    visible: '0',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleSubmit">{{parent.$t("特批")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 60,
+    listOrder: 60,
+    name: '取消',
+    barAlias: 'bar_repeal',
+    barSys: 1,
+    visible: '0',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleRepeal">{{parent.$t("取消")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 70,
+    listOrder: 70,
+    name: '退回发起人',
+    barAlias: 'bar_return',
+    barSys: 1,
+    visible: '0',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleSubmit">{{parent.$t("退回发起人")}}</a-button>',
+    barMenuPriv: ''
+  },
+  {
+    id: 80,
+    listOrder: 80,
+    name: '备注',
+    barAlias: 'bar_remarks',
+    barSys: 1,
+    visible: '0',
+    style: 'default',
+    attribute: '<a-button type="default" :loading="parent.loading" @click="parent.handleRemarks">{{parent.$t("备注")}}</a-button>',
+    barMenuPriv: ''
+  }
+]
+export const extendButton = [
+  {
+    attribute: '<a-button type="primary" :loading="parent.loading" @click="parent.handleSubmit">{{parent.$t("保存")}}</a-button>',
+    barAlias: 'sys_save',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '10',
+    listOrder: '10',
+    name: '保存',
+    style: 'primary'
+  },
+  {
+    attribute: '<a-button @click="parent.visible=!parent.visible">{{parent.$t("关闭")}}</a-button>',
+    barAlias: 'sys_cancel',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '20',
+    listOrder: '20',
+    name: '关闭',
+    style: 'default'
+  }
+]
+export const workflowButton = [
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleView(record)">{{parent.$t("查看")}}</a>',
+    barAlias: 'flow_view',
+    disabled: '1',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '30',
+    listOrder: '30',
+    menuType: 'line',
+    name: '查看',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleProcess(record)">{{parent.$t("办理")}}</a>',
+    barAlias: 'flow_process',
+    disabled: '1',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '40',
+    listOrder: '40',
+    menuType: 'line',
+    name: '办理',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleTakeFlow(record)">{{parent.$t("领取")}}</a>',
+    barAlias: 'flow_take',
+    disabled: '1',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '50',
+    listOrder: '50',
+    menuType: 'line',
+    name: '领取',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleTakeProcess(record)">{{parent.$t("领办")}}</a>',
+    barAlias: 'flow_takeprocess',
+    disabled: '1',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '60',
+    listOrder: '60',
+    menuType: 'line',
+    name: '领办',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleRemarks(record)">{{parent.$t("备注")}}</a>',
+    barAlias: 'flow_remarks',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '1',
+    id: '70',
+    listOrder: '70',
+    menuType: 'line',
+    name: '备注',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleUrge(record)">{{parent.$t("催办")}}</a>',
+    barAlias: 'flow_urge',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '80',
+    listOrder: '80',
+    menuType: 'line',
+    name: '催办',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleRepeal(record)">{{parent.$t("取消")}}</a>',
+    barAlias: 'flow_repeal',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '90',
+    listOrder: '90',
+    menuType: 'line',
+    name: '取消',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleJump(record)">{{parent.$t("流转")}}</a>',
+    barAlias: 'flow_jump',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '100',
+    listOrder: '100',
+    menuType: 'line',
+    name: '流转',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleTransfer(record)">{{parent.$t("转办")}}</a>',
+    barAlias: 'flow_transfer',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '110',
+    listOrder: '110',
+    menuType: 'line',
+    name: '转办',
+    style: 'default'
+  },
+  {
+    attribute: '<a href="javascript:;" @click="parent.handleDelete(record)">{{parent.$t("删除")}}</a>',
+    barAlias: 'flow_delete',
+    barSys: '1',
+    barMenuPriv: '',
+    display: '0',
+    id: '120',
+    listOrder: '120',
+    menuType: 'line',
+    name: '删除',
+    style: 'default'
+  }
+]

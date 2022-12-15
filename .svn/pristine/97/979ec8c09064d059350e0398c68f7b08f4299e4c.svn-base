@@ -1,0 +1,156 @@
+<template>
+  <a-spin :spinning="loading" class="container">
+    <a-form :form="form">
+      <k-form-design
+        ref="kFormDesign"
+        :fieldColumns="fieldColumns"
+        :myTemplate="myTemplate"
+        :tplInitJs="tplInitJs"
+        :verifJs="verifJs"
+        :formdata="data"
+        :setting="setting"
+        :params="{
+          fieldColumns: fieldColumns,
+          tableList: tableList,
+          tableId: config.tableId
+        }"
+      />
+    </a-form>
+  </a-spin>
+</template>
+<script>
+import Vue from 'vue'
+import KFormDesign from '@/views/admin/FormDesign/packages/index'
+Vue.use(KFormDesign)
+export default {
+  props: {
+    configdata: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      data: {},
+      setting: {},
+      tplInitJs: '',
+      verifJs: '',
+      myTemplate: [],
+      fieldColumns: [],
+      tableList: [],
+      form: this.$form.createForm(this)
+    }
+  },
+  // 祖先级组件数据传递，以及被子孙级组件动态修改
+  provide () {
+    this.theme = Vue.observable({
+      viewData: {}
+    })
+    return {
+      theme: this.theme
+    }
+  },
+  mounted () {
+    this.show()
+  },
+  methods: {
+    show () {
+      this.loading = true
+      this.config = this.configdata
+      this.axios({
+        url: this.config.action === 'add' ? this.config.submitUrl : this.config.url,
+        data: Object.assign({ action: 'get', tableId: this.config.tableId ? this.config.tableId : 0, variable: 'tableFormView', id: this.config.record ? this.config.record.id : 0 })
+      }).then((res) => {
+        this.loading = false
+        this.theme.viewData = res.result
+        this.form.resetFields()
+        this.data = res.result.data
+        this.fieldColumns = res.result.fieldColumns
+        this.tableList = res.result.tableList
+        this.setting = res.result.setting
+        this.myTemplate = res.result.setting.myTemplate
+        this.tplInitJs = res.result.setting.tplSetting ? res.result.setting.tplSetting.tplInitJs : ''
+        this.verifJs = res.result.setting.tplSetting ? res.result.setting.tplSetting.verifJs : ''
+        if (this.config.action === 'copy') {
+          this.data.name = ''
+        }
+      })
+    },
+    handleSubmit (e) {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          const myTemplate = this.$refs.kFormDesign ? this.$refs.kFormDesign.data.list : this.myTemplate
+          if (!values.setting) {
+            values.setting = {}
+          }
+          if (!values.info) {
+            values.info = {}
+          }
+          values.setting.description = this.setting.description
+          values.setting.myTemplate = myTemplate
+          // 获取表单规则
+          values.setting.fieldRule = this.theme.viewData.setting.fieldRule || []
+          // tplSettin初始化
+          values.setting.tplSetting = {}
+          values.setting.tplSetting.tplInitJs = this.$refs.kFormDesign ? this.$refs.kFormDesign.initJs : this.initJs
+          values.setting.tplSetting.verifJs = this.$refs.kFormDesign ? this.$refs.kFormDesign.verifStr : this.verifJs
+          values.setting.helpText = this.setting.helpText
+          // 帮助说明内容提交
+          values.info.value = this.config.tableId
+          values.info.module = this.config.module
+          values.info.variable = this.config.variable
+          values.info.name = this.data.name
+          values.info.accessLevel = this.data.accessLevel
+          if (this.config.action === 'edit') {
+            values.id = this.data.id
+            values.uid = this.data.uid
+          }
+          this.axios({
+            url: '/admin/template/checkRepeat',
+            data: { id: this.config.action === 'edit' ? this.data.id : 0, name: values.info.name, type: 'tableFormView', tableId: this.config.tableId }
+          }).then((res) => {
+            if (res.code) {
+              this.$message.error(res.message)
+              this.loading = false
+            } else {
+              this.loading = true
+              this.axios({
+                url: this.config.submitUrl || this.config.url,
+                data: Object.assign(values, { action: 'submit' })
+              }).then((res) => {
+                if (e !== 'save') {
+                  this.visible = false
+                }
+                this.loading = false
+                this.$emit('ok', values)
+                this.$emit('refresh', values, (res.result.id || this.data.id))
+                if (res.code) {
+                  this.$message.warning(res.message)
+                } else {
+                  this.$message.success(res.message)
+                  if (this.config.action !== 'edit') {
+                    this.config.action = 'edit'
+                    this.config.submitUrl = ''
+                    this.data.id = res.result.id
+                    this.data.uid = res.result.uid
+                  }
+                }
+              })
+            }
+          })
+        } else {
+          this.$refs.kFormDesign.showPropertie = false
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改'))
+        }
+      })
+    }
+  }
+}
+</script>

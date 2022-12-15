@@ -1,0 +1,524 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="1000" :visible="visible" @close="close">
+    <a-spin :spinning="loading">
+      <a-form :form="form" @submit="handleSubmit">
+        <a-tabs v-model="activeKey">
+          <a-tab-pane :key="1" :tab="$t('导入数据')">
+            <a-form-item :label="$t('导入操作')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-radio-group
+                v-decorator="[
+                  'parameter[action]',
+                  {
+                    rules: [{ required: true, message: $t('请选择导入操作') }],
+                    initialValue: 'add' || 'edit' || 'addEdit' || 'editImg' || 'delete'
+                  }
+                ]"
+                @change="actionChange"
+              >
+                <a-radio v-if="actionShow.indexOf('add') !== -1" value="add">{{ $t('新增') }}</a-radio>
+                <a-radio v-if="actionShow.indexOf('edit') !== -1" value="edit">{{ $t('编辑') }}</a-radio>
+                <a-radio v-if="actionShow.indexOf('addEdit') !== -1" value="addEdit">{{ $t('新增&编辑') }}</a-radio>
+                <a-radio v-if="actionShow.indexOf('editImgs') !== -1" value="editImg">{{ $t('编辑图片') }}</a-radio>
+                <a-radio v-if="actionShow.indexOf('del') !== -1" value="delete">{{ $t('删除') }}</a-radio>
+              </a-radio-group>
+            </a-form-item>
+            <a-form-item v-if="action" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <span slot="label">
+                {{ $t('关联字段') }}
+                <a-tooltip
+                  :title="
+                    $t('数据导入时，系统将根据该字段对已有数据进行「编辑」或「删除」操作，建议选择具备唯一性的字段')
+                  "
+                >
+                  <a-icon type="question-circle-o" />
+                </a-tooltip>
+              </span>
+              <a-select
+                v-decorator="['parameter[associated]', { rules: [{ required: true, message: $t('请选择关联字段') }] }]"
+                showSearch
+                option-filter-prop="children"
+              >
+                <a-select-option v-for="(value, key) in fields" :key="key" :value="key">
+                  {{ value.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item v-if="action && !actionImg" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <span slot="label">
+                {{ $t('图片字段') }}
+                <a-tooltip
+                  :title="
+                    $t('数据导入时，系统将根据该字段对已有数据进行「编辑」或「删除」操作，建议选择具备唯一性的字段')
+                  "
+                >
+                  <a-icon type="question-circle-o" />
+                </a-tooltip>
+              </span>
+              <a-select
+                v-decorator="['parameter[imgField]', { rules: [{ required: true, message: $t('请选择图片字段') }] }]"
+                showSearch
+                option-filter-prop="children"
+              >
+                <a-select-option v-for="(value, key) in fields" :key="key" :value="key">
+                  {{ value.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item v-if="actionImg" :label="$t('下载模板')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <a-button icon="download" size="small" @click="handleDownload">{{ $t('点击下载') }}</a-button>
+            </a-form-item>
+            <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+              <span slot="label">
+                {{ $t('文件上传') }}
+                <a-tooltip :title="$t('请确保上传的文件格式和下载的模板保持一致，否则会导致数据无法加入')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-upload
+                name="file"
+                :showUploadList="false"
+                :action="fileAction"
+                :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                @change="handleChange"
+              >
+                <a-button icon="upload" size="small">{{ $t('点击上传') }}</a-button>
+              </a-upload>
+              <span style="margin-left: 20px">{{ fileName }}</span>
+            </a-form-item>
+            <a-table rowKey="alias" :columns="columns" :dataSource="checkdata" size="small" :pagination="false">
+              <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+              <span slot="unique" slot-scope="text, record">
+                {{ record.unique === 1 ? '√' : '×' }}
+              </span>
+              <span slot="required" slot-scope="text, record">
+                {{ record.required === 1 ? '√' : '×' }}
+              </span>
+              <span slot="check" slot-scope="text, record">
+                <a-icon v-if="record.check === 1" type="check-circle" theme="twoTone" two-tone-color="#52c41a" />
+                <a-icon v-if="record.check === 0" type="close-circle" theme="twoTone" two-tone-color="#f5222d" />
+                <a-icon v-if="record.check === 2" type="exclamation-circle" theme="twoTone" two-tone-color="#faad14" />
+              </span>
+            </a-table>
+          </a-tab-pane>
+          <a-tab-pane :key="2" :tab="$t('我的任务')">
+            <a-alert :message="message" style="margin-bottom: 8px" />
+            <div style="display: flex; margin-bottom: 8px">
+              <a-input
+                v-model="queryParamTask.name"
+                :placeholder="$t('请输入文件名搜索')"
+                @keydown.enter="$refs.tableTask.refresh()"
+              />
+              <a-space style="margin-left: 8px">
+                <a-button type="primary" @click="$refs.tableTask.refresh()">{{ $t('搜索') }}</a-button>
+                <a-button
+                  @click="
+                    () => {
+                      queryParamTask = {}
+                      $refs.tableTask.refresh()
+                    }
+                  "
+                >
+                  {{ $t('重置') }}
+                </a-button>
+              </a-space>
+            </div>
+            <s-table ref="tableTask" size="small" rowKey="id" :columns="columnsTask" :data="loadDataTable">
+              <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+              <span slot="status" slot-scope="text, record">
+                <a-badge v-if="text == '0'" status="error" :text="$t('未开始')" />
+                <a-tooltip
+                  v-else-if="text == '1'"
+                  :title="$t('总导出数: ') + record.totalCount + `', ${$t('已导出数: ')}'` + record.completeCount"
+                >
+                  <a-progress :percent="record.processing || 0" status="active" />
+                </a-tooltip>
+                <a-badge v-else-if="text == '2'" status="success" :text="$t('已完成')" />
+                <a-badge v-else-if="text == '3'" status="error" :text="$t('失败')" />
+              </span>
+              <span slot="duration" slot-scope="text">{{ text }}</span>
+              <div slot="action" slot-scope="text, record">
+                <a @click="handleView(record)">{{ $t('查看') }}</a>
+                <a-divider type="vertical" />
+                <template v-if="config.type !== 'import'">
+                  <a :disabled="record.status != 2" @click="handleDownload(record)">{{ $t('下载') }}</a>
+                  <a-divider type="vertical" />
+                </template>
+                <a :disabled="record.status == 1" @click="handleDelete(record)">{{ $t('删除') }}</a>
+              </div>
+            </s-table>
+          </a-tab-pane>
+          <a-tab-pane :key="3" :tab="$t('所有任务')">
+            <div style="display: flex; margin-bottom: 8px">
+              <a-input
+                v-model="queryParamAll.name"
+                :placeholder="$t('请输入文件名搜索')"
+                @keydown.enter="$refs.tableAll.refresh()"
+              />
+              <a-space style="margin-left: 8px">
+                <a-button type="primary" @click="$refs.tableAll.refresh()">{{ $t('搜索') }}</a-button>
+                <a-button
+                  @click="
+                    () => {
+                      queryParamAll = {}
+                      $refs.tableAll.refresh()
+                    }
+                  "
+                >
+                  {{ $t('重置') }}
+                </a-button>
+              </a-space>
+            </div>
+            <s-table ref="tableAll" size="small" rowKey="id" :columns="columnsAll" :data="AllDataTable">
+              <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+              <span slot="status" slot-scope="text, record">
+                <a-badge v-if="text == '0'" status="error" :text="$t('未开始')" />
+                <a-tooltip
+                  v-else-if="text == '1'"
+                  :title="`${$t('总导出数: ')}` + record.totalCount + `, ${$t('已导出数: ')}` + record.completeCount"
+                >
+                  <a-progress :percent="record.processing || 0" status="active" />
+                </a-tooltip>
+                <a-badge v-else-if="text == '2'" status="success" :text="$t('已完成')" />
+                <a-badge v-else-if="text == '3'" status="error" :text="$t('失败')" />
+              </span>
+              <span slot="duration" slot-scope="text">{{ text }}</span>
+            </s-table>
+          </a-tab-pane>
+        </a-tabs>
+      </a-form>
+      <div class="bbar">
+        <a-button v-show="activeKey === 1" type="primary" :disabled="checkdone" @click="handleSubmit">
+          {{ $t('导入') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <user-table-import-view ref="userTableImportView" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    UserTableImportView: () => import('./UserTableImportView')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      activeKey: 1,
+      template: {},
+      // 表头
+      columns: [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('模板字段'),
+        dataIndex: 'field'
+      }, {
+        title: this.$t('唯一'),
+        dataIndex: 'unique',
+        scopedSlots: { customRender: 'unique' }
+      }, {
+        title: this.$t('必填'),
+        dataIndex: 'required',
+        scopedSlots: { customRender: 'required' }
+      }, {
+        title: this.$t('导入字段'),
+        dataIndex: 'fieldImport'
+      }, {
+        title: this.$t('校验结果'),
+        dataIndex: 'check',
+        scopedSlots: { customRender: 'check' }
+      }],
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      checkdata: [],
+      check: '',
+      message: '',
+      action: false,
+      actionImg: true,
+      fields: [],
+      fileAction: '',
+      templateId: '',
+      actionShow: [],
+      checkdone: true,
+      fileName: null,
+      filePath: null,
+      // 搜索参数
+      queryParamTask: {},
+      // 所有任务
+      queryParamAll: {},
+      // 表头
+      columnsTask: [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('文件名'),
+        dataIndex: 'fileName',
+        width: 170
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 150
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'runTime',
+        width: 150
+      }, {
+        title: this.$t('耗时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' },
+        width: 100
+      }, {
+        title: this.$t('任务状态'),
+        dataIndex: 'status',
+        width: 130,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('文件大小'),
+        dataIndex: 'fileSize'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 120,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsAll: [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('文件名'),
+        dataIndex: 'fileName',
+        width: 170
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 150
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'runTime',
+        width: 150
+      }, {
+        title: this.$t('耗时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' },
+        width: 100
+      }, {
+        title: this.$t('任务状态'),
+        dataIndex: 'status',
+        width: 130,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser',
+        width: 90
+      }],
+      Interval: null
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.checkdata = []
+      this.activeKey = 1
+      this.importTemplate = config.barData?.importTemplate ? JSON.parse(config.barData.importTemplate) : { filePath: '', fileName: '', remarks: '', event: '' }
+      if (this.importTemplate.event && this.importTemplate.event.tableList) {
+        this.importTemplate.event.tableList.forEach(item => {
+          const obj = {
+            currentField: item.cause.currentField,
+            sourceField: item.cause.sourceField
+          }
+          item.cause = obj
+          item.effect = item.effect.map(mapItem => {
+            const obj = {
+              currentField: mapItem.currentField,
+              sourceField: mapItem.sourceField
+            }
+            return obj
+          })
+        })
+      }
+      this.fileAction = `${process.env.VUE_APP_API_BASE_URL}${config.url}?templateId=${config.templateId}`
+      this.templateId = config.templateId
+      this.actionShow = this.importTemplate.modal ? this.importTemplate.modal.action : ['add']
+      this.fileName = null
+      // 刚进入的时候数据刷新数据
+      this.action = false
+      this.axios({
+        url: `/admin/field/getAliasFieldMapping?tableId=${config.tableId}`
+      }).then((res) => {
+        this.loading = false
+        this.fields = res.result
+      })
+    },
+    // 我的任务显示
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/task/list',
+        data: Object.assign(parameter, this.queryParamTask, { type: 'import', number: this.config.templateId, sortField: 'inputTime', sortOrder: 'descend', access: 'myTask' })
+      }).then(res => {
+        res.result.data = this.changeData(res.result.data)
+        this.message = res.result.processMsg
+        clearInterval(this.Interval)
+        if (res.result.data.some(item => item.status !== 2)) {
+          this.runtime()
+        }
+        return res.result
+      })
+    },
+    // 所有任务显示
+    AllDataTable (parameter) {
+      return this.axios({
+        url: '/admin/task/list',
+        data: Object.assign(parameter, this.queryParamAll, { type: 'import', number: this.config.templateId, sortField: 'inputTime', sortOrder: 'descend', access: 'allTask' })
+      }).then(res => {
+        res.result.data = this.changeData(res.result.data)
+        clearInterval(this.Interval)
+        if (res.result.data.some(item => item.status !== 2)) {
+          this.runtime()
+        }
+        return res.result
+      })
+    },
+    changeData (array) {
+      return array.map(item => {
+        const obj = item
+        const setting = item.setting
+        obj.fileName = setting.fileName ? setting.fileName.replace(/.xlsx/, '') : ''
+        obj.filePath = setting.filePath ? setting.filePath : ''
+        obj.processing = item.complete_count / item.total_count
+        return obj
+      })
+    },
+    runtime () {
+      this.Interval = setTimeout(() => {
+        if (this.activeKey === 2) {
+          this.$refs.tableTask.refresh()
+        } else if (this.activeKey === 3) {
+          this.$refs.tableAll.refresh()
+        } else {
+          clearInterval(this.Interval)
+        }
+      }, 5000)
+    },
+    close () {
+      this.visible = !this.visible
+      clearInterval(this.Interval)
+    },
+    // 文件上传触发
+    handleChange (info) {
+      this.loading = true
+      if (info.file.status === 'done') {
+        this.loading = false
+        this.checkdata = info.file.response.result.data
+        this.checkdone = !info.file.response.result.check
+        this.fileName = info.file.response.result.fileName
+        this.filePath = info.file.response.result.filePath
+        this.template = info.file.response.result.template
+      } else if (info.file.status === 'error') {
+        this.loading = false
+        this.$message.error(`${info.file.name} file upload failed.`)
+      }
+    },
+    // 模板下载
+    handleDownload () {
+      if (this.importTemplate.modal) {
+        window.open(`${process.env.VUE_APP_API_BASE_URL}admin/api/downloadTemplate/?templateId=${this.templateId}`, '', '')
+      } else {
+        this.$message.error(this.$t('未设置下载模板'))
+      }
+    },
+    actionChange (e) {
+      this.action = e.target.value !== 'add'
+      this.actionImg = e.target.value !== 'editImg'
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          var checkField = false
+          if (values.parameter.action === 'add') {
+            checkField = true
+          } else {
+            for (var key in this.checkdata) {
+              if (values.parameter.associated === this.checkdata[key].alias) {
+                checkField = true
+                break
+              }
+            }
+          }
+          if (checkField) {
+            this.loading = true
+            values.parameter = Object.assign(values.parameter, {
+              uid: this.config.templateId
+            })
+            values = {
+              type: 'import',
+              className: 'GeneralTask',
+              number: this.config.templateId,
+              parameter: values.parameter,
+              filePath: this.filePath,
+              fileName: this.fileName
+            }
+            this.axios({
+              url: 'admin/task/add',
+              data: values
+            }).then((res) => {
+              this.loading = false
+              this.$emit('ok', values)
+              if (res.code) {
+                this.$message.warning(res.message)
+              } else {
+                this.$message.success(res.message)
+                this.form.resetFields()
+                this.activeKey = 2
+                this.checkdata = []
+                this.checkdone = true
+                this.action = false
+                this.fileName = null
+                this.$nextTick(() => {
+                  this.$refs.tableTask.refresh()
+                })
+              }
+            })
+          } else {
+            this.$message.info(this.$t('导入的数据中没有关键字段，请调整后重试。'))
+          }
+        }
+      })
+    },
+    // 任务查看
+    handleView (record) {
+      this.$refs.userTableImportView.show({
+        action: 'view',
+        title: this.$t('查看'),
+        url: '/admin/task/get',
+        record: record
+      })
+    },
+    // 任务删除
+    handleDelete (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/task/delete',
+            params: { id: record.id }
+          }).then(res => {
+            that.$refs.tableTask.refresh()
+          })
+        }
+      })
+    }
+  }
+}
+</script>

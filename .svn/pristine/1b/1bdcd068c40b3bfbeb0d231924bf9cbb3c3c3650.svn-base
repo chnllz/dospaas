@@ -1,0 +1,311 @@
+<template>
+  <div ref="page" class="page">
+    <a-row style="margin-bottom: 8px">
+      <a-col :span="20">
+        <a-space>
+          <a-button v-action:add icon="plus" type="primary" @click="handleAdd">{{ $t('添加') }}</a-button>
+          <a-button v-action:import icon="upload" @click="handleImport">{{ $t('导入') }}</a-button>
+          <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+          <a-button v-action:sort icon="sort-ascending" @click="handleSort">{{ $t('排序') }}</a-button>
+        </a-space>
+      </a-col>
+      <a-col :span="4" style="text-align: right">
+        <a-popover v-model="helpVisible" trigger="click" :arrowPointAtCenter="true" placement="bottomRight">
+          <template slot="content">
+            <div style="width: 350px" class="helpText">
+              <div v-dompurify-html="helpIllustrate" v-viewer></div>
+            </div>
+          </template>
+          <a-icon
+            type="question-circle"
+            style="font-size: 16px; margin-right: 8px; color: rgba(0, 0, 0, 0.65)"
+            @click="handleHelp"
+          ></a-icon>
+        </a-popover>
+      </a-col>
+    </a-row>
+    <a-spin :spinning="false" style="flex: 1; overflow-y: auto">
+      <a-table
+        ref="table"
+        :scroll="{ y: scrollY }"
+        size="small"
+        rowKey="id"
+        :columns="columns"
+        :dataSource="tableData"
+        :pagination="false"
+        :expandIconColumnIndex="3"
+        :loading="loading"
+        @expand="expand"
+      >
+        <div slot="action" slot-scope="text, record">
+          <a :disabled="record.accessLevel === 2" @click="handleEdit(record)">{{ $t('编辑') }}</a>
+          <a-divider type="vertical" />
+          <a :disabled="record.subCount === 0" @click="handleSort(record)">{{ $t('排序') }}</a>
+          <a-divider type="vertical" />
+          <a :disabled="record.accessLevel" @click="handleDelete(record)">{{ $t('删除') }}</a>
+          <a-divider type="vertical" />
+          <a @click="handleCopy(record)">{{ $t('复制') }}</a>
+          <a-divider type="vertical" />
+          <a @click="handleAdd(record)">{{ $t('添加子菜单') }}</a>
+        </div>
+        <span slot="icon" slot-scope="text">
+          <a-icon v-if="text.indexOf('fa-') === -1" :type="text" />
+          <font-awesome-icon v-else :icon="text" class="font-awesome-icon" />
+        </span>
+        <span slot="menuName" slot-scope="text, record">
+          {{ text + (record.subCount > 0 ? '(' + record.subCount + ')' : '') }}
+        </span>
+        <span slot="enabled" slot-scope="text">
+          <a-badge v-if="text == '1'" status="success" :text="$t('是')" />
+          <a-badge v-else status="error" :text="$t('否')" />
+        </span>
+
+        <span slot="display" slot-scope="text">
+          <a-badge v-if="text == '1'" status="success" :text="$t('是')" />
+          <a-badge v-else status="error" :text="$t('否')" />
+        </span>
+      </a-table>
+    </a-spin>
+    <menu-form ref="menuForm" @ok="handleOk" />
+    <drag-sort ref="dragSort" @ok="handleOk" />
+    <general-export ref="generalExport" />
+  </div>
+</template>
+
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    MenuForm: () => import('@/views/admin/Menu/MenuForm'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      scrollY: false,
+      breadcrumb: [],
+      queryParam: {},
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 300,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        width: 80,
+        dataIndex: 'id'
+      }, {
+        title: this.$t('图标'),
+        width: 80,
+        dataIndex: 'icon',
+        scopedSlots: { customRender: 'icon' }
+      }, {
+        title: this.$t('菜单名称'),
+        width: 200,
+        dataIndex: 'menuName',
+        scopedSlots: { customRender: 'menuName' }
+      }, {
+        title: this.$t('是否启用'),
+        width: 100,
+        dataIndex: 'enabled',
+        scopedSlots: { customRender: 'enabled' }
+      }, {
+        title: this.$t('是否显示'),
+        width: 100,
+        dataIndex: 'display',
+        scopedSlots: { customRender: 'display' }
+      }, {
+        title: this.$t('视图'),
+        dataIndex: 'view',
+        ellipsis: true,
+        customRender: (text, record) => {
+          if (text) {
+            const array = JSON.parse(text)
+            const list = []
+            array.forEach(item => {
+              const domNode = (<div>{item.viewPath || '--'}</div>)
+              list.push(domNode)
+            })
+            return record.viewMode ? this.$t('组合视图') : list
+          }
+        }
+      }, {
+        title: this.$t('功能权限'),
+        dataIndex: 'priv',
+        ellipsis: true
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks'
+      }],
+      tableData: [],
+      selectRecord: {},
+      loading: false,
+      helpVisible: false,
+      helpIllustrate: ''
+    }
+  },
+  created () {
+    this.loadData('')
+  },
+  mounted () {
+    this.scrollY = this.$refs.page.offsetHeight - this.$refs.page.offsetTop
+  },
+  methods: {
+    loadData (parentMenuId, record) {
+      this.loading = true
+      this.axios({
+        url: '/admin/menu/init',
+        data: { pageNo: 1, pageSize: 999, parentMenuId }
+      }).then(res => {
+        this.loading = false
+        if (res.code === 0) {
+          const data = res.result.data && res.result.data.map(item => {
+            if (item.subCount > 0) {
+              item.children = []
+            }
+            return item
+          })
+          if (!parentMenuId) {
+            this.tableData = data
+          } else {
+            if (record.subCount > 0) {
+              record.children = data
+            }
+            this.tableData = JSON.parse(JSON.stringify(this.tableData))
+          }
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+    },
+    expand (expanded, record) {
+      if (expanded) {
+        this.loadData(record.menuId, record)
+      }
+    },
+    handleSort (record) {
+      this.selectRecord = record
+      this.$refs.dragSort.show({
+        tableName: 'admin_menu',
+        sortName: 'menuName',
+        where: record.menuId ? `parentMenuId = '${record.menuId}'` : `parentMenuId is null`
+      })
+    },
+    handleImport () {
+      this.$refs.generalExport.show({
+        slotScoped: false,
+        title: this.$t('导入'),
+        type: 'import',
+        className: 'ImportMenuTask',
+        filePath: 'static/template/admin/菜单导入模板.txt',
+        parameter: {
+          parentMenuId: this.queryParam.parentMenuId || ''
+        }
+      })
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportMenuTask',
+        exportSuffix: '.txt',
+        parameter: {
+          parentMenuId: this.queryParam.parentMenuId || ''
+        }
+      })
+    },
+    handleAdd (record) {
+      this.selectRecord = record
+      this.breadcrumb = []
+      this.axios({
+        url: '/admin/menu/init',
+        data: { pageNo: 1, pageSize: 999, parentMenuId: record.parentMenuId }
+      }).then(res => {
+        this.breadcrumb = res.result.path
+        this.breadcrumb.push(record)
+        this.$refs.menuForm.show({
+          action: 'add',
+          title: this.$t('添加'),
+          url: '/admin/menu/add',
+          breadcrumb: this.breadcrumb
+        })
+      })
+    },
+    handleCopy (record) {
+      this.selectRecord = this.getParentRecord(this.tableData, record.parentMenuId)
+      this.$refs.menuForm.show({
+        action: 'copy',
+        title: this.$t('复制'),
+        url: '/admin/menu/edit',
+        submitUrl: '/admin/menu/add',
+        record: record
+      })
+    },
+    // 获取父元素
+    getParentRecord (parentArr, parentMenuId) {
+      let record = {}
+      if (!parentMenuId) {
+        return {}
+      }
+      for (let i = 0; i < parentArr.length; i++) {
+        const item = parentArr[i]
+        if (item.menuId === parentMenuId) {
+          record = item
+        } else if (item.children && Object.keys(record).length === 0) {
+          record = this.getParentRecord(item.children, parentMenuId)
+        }
+      }
+      return record
+    },
+    handleEdit (record) {
+      this.selectRecord = record
+      this.$refs.menuForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}：${record.menuName}`,
+        url: '/admin/menu/edit',
+        record: record
+      })
+    },
+    handleDelete (record) {
+      const parentRecord = this.getParentRecord(this.tableData, record.parentMenuId)
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk: () => {
+          this.axios({
+            url: '/admin/menu/delete',
+            data: { menuId: record.menuId }
+          }).then(res => {
+            this.loadData(parentRecord.menuId, parentRecord)
+          })
+        }
+      })
+    },
+    handleHelp () {
+      this.helpVisible = false
+      this.axios({
+        url: '/admin/document/edit',
+        data: {
+          action: 'get',
+          number: '22041616493217'
+        }
+      }).then(res => {
+        if (!res.code) {
+          const obj = res.result
+          if (obj.displayMode === 'drawer') {
+            this.helpVisible = false
+            this.$showDocument({ visible: true, content: obj.content })
+          } else {
+            this.helpVisible = true
+            this.helpIllustrate = obj.content
+          }
+        } else {
+          this.$message.warning(res.message)
+        }
+      })
+    },
+    handleOk () {
+      this.loadData(this.selectRecord.menuId, this.selectRecord)
+    }
+  }
+}
+</script>

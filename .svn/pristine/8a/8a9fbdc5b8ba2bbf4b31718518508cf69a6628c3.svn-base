@@ -1,0 +1,193 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" :colon="false" class="search">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = { type: 'receive' }
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row :class="advanced ? 'advanced' : 'normal'" class="form">
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('阅读状态')">
+              <a-select v-model="queryParam.readStatus" allowClear @change="handleOk">
+                <a-select-option value="0">{{ $t('未读') }}</a-select-option>
+                <a-select-option value="1">{{ $t('已读') }}</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('标题')">
+              <a-input v-model="queryParam.title" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('作者')">
+              <a-input v-model="queryParam.author" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('发送时间')">
+              <a-range-picker
+                v-model="inputTime"
+                :ranges="{
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('昨天')]: [moment().startOf('day').subtract('day', 1), moment().endOf('day').subtract('day', 1)],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                :show-time="{ format: 'HH:mm:ss' }"
+                format="YYYY-MM-DD HH:mm:ss"
+                style="width: 100%"
+                @change="onSendTime"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <s-table
+      ref="table"
+      style="flex-grow: 1; margin: 8px"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :scroll="{ y: true }"
+      :columns="columns"
+      :data="loadDataTable"
+      :sorter="sorter"
+    >
+      <span slot="isRead" slot-scope="text, record">
+        <a-badge v-if="record.receiverRead.includes(userInfo.username)" status="success" :text="$t('已读')" />
+        <a-badge v-else status="error" :text="$t('未读')" />
+      </span>
+      <div slot="action" slot-scope="text, record">
+        <a @click="handleView(record)">{{ $t('查看') }}</a>
+      </div>
+    </s-table>
+    <view-form ref="viewForm" @ok="handleOk" />
+  </div>
+</template>
+<script>
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('base'),
+  components: {
+    viewForm: () => import('./InformView')
+  },
+  data () {
+    return {
+      advanced: false,
+      // 搜索参数
+      queryParam: {},
+      inputTime: null,
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 80,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('阅读状态'),
+        width: 80,
+        sorter: true,
+        scopedSlots: { customRender: 'isRead' }
+      }, {
+        title: this.$t('标题'),
+        dataIndex: 'title',
+        sorter: true
+      }, {
+        title: this.$t('作者'),
+        dataIndex: 'author',
+        width: 100,
+        sorter: true
+      }, {
+        title: this.$t('发送时间'),
+        dataIndex: 'sendTime',
+        width: 140,
+        sorter: true
+      }],
+      colLayout: {},
+      sorter: { field: 'id', order: 'descend' }
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/base/Inform/init',
+        data: Object.assign(parameter, this.queryParam, { type: 'receive' })
+      }).then(res => {
+        return res.result
+      })
+    },
+    handleAdd () {
+      this.$refs.modalForm.show({
+        action: 'add',
+        title: this.$t('发送公告'),
+        url: '/base/inform/senderInform'
+      })
+    },
+    handleView (record) {
+      this.$refs.viewForm.show({
+        title: this.$t('查看'),
+        record: record,
+        type: 'received'
+      })
+    },
+    onSendTime (date, dateString) {
+      this.inputTime = date
+      this.queryParam.sendTime = dateString
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    handleDelete (record) {
+      const that = this
+      const id = record && record.id
+      const type = this.queryParam.type
+      this.$confirm({
+        title: record ? this.$t('您确认要删除该记录吗？') : this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/base/inform/delete',
+            data: { id: id, type: type }
+          }).then(res => {
+            that.$refs.table.refresh()
+          })
+        }
+      })
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    }
+  }
+}
+</script>

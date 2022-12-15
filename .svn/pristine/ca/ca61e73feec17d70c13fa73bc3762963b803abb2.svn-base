@@ -1,0 +1,155 @@
+<template>
+  <a-drawer :visible="visible" :destroyOnClose="true" :width="1400" :title="config.title" @close="visible = !visible">
+    <div style="padding: 0; height: 100%; overflow: auto; display: flex; flex-direction: column">
+      <a-row style="margin: 0; padding: 8px 4px" :gutter="[16, 6]">
+        <a-col v-for="item of fontAwesomeData" :key="item" :span="2">
+          <a-checkable-tag
+            :checked="fontAwesomeCheck == item"
+            style="text-align: center; border-radius: 2px; cursor: pointer; width: 100%"
+            :style="fontAwesomeCheck == item ? '' : 'border: 1px dashed #d9d9d9'"
+            @change="(checked) => selected(item, checked)"
+          >
+            {{ item }}
+          </a-checkable-tag>
+        </a-col>
+      </a-row>
+      <a-input-search
+        v-model="fontAwesomeValue"
+        style="padding: 1px"
+        :placeholder="$t('请输入图标名称搜索')"
+        @change="onSearch()"
+      />
+      <div
+        style="
+          flex-grow: 1;
+          overflow-y: auto;
+          display: flex;
+          flex-wrap: wrap;
+          flex-direction: row;
+          padding: 8px;
+          align-content: flex-start;
+        "
+      >
+        <div v-for="(item, index) in fontAwesomeInitData" :key="index" class="myIcon" @click="handleClick(item)">
+          <div><font-awesome-icon :icon="item" /></div>
+          <div>{{ item }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="bbar">
+      <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+    </div>
+  </a-drawer>
+</template>
+<script>
+import fontAwesome from './fontAwesome'
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      fontAwesomeData: [],
+      fontAwesomeInitData: [],
+      fontAwesomeRealData: [],
+      fontAwesomeCheck: ['全部'],
+      fontAwesomeValue: '',
+      tabKey: 'outlined',
+      config: {
+        title: this.$t('选择图标')
+      },
+      load: false
+    }
+  },
+  mounted () {
+    if (!this.load) {
+      Promise.resolve().then(() => {
+        let arr = []
+        for (const item of fontAwesome) {
+          arr = arr.concat(item.items)
+        }
+        this.fontAwesomeRealData = arr
+        this.fontAwesomeInitData = [...new Set(arr)]
+      })
+      const res = fontAwesome.map(item => {
+        return item.type
+      })
+      this.fontAwesomeData = ['全部', ...res]
+    }
+  },
+  methods: {
+    show () {
+      this.load = true
+      this.visible = true
+    },
+    // 搜索
+    onSearch () {
+      const value = this.fontAwesomeValue
+      if (!value) {
+        this.fontAwesomeInitData = this.fontAwesomeRealData
+      }
+      const arr = this.fontAwesomeRealData.filter(item => {
+        return item.indexOf(value) !== -1
+      })
+      this.fontAwesomeInitData = [...new Set(arr)]
+    },
+    getValue (arr, val) {
+      return arr.filter(item => {
+        return item.indexOf(val) !== -1
+      })
+    },
+    handleClick (myitem) {
+      this.visible = false
+      this.$emit('ok', { type: myitem })
+    },
+    selected (tag, checked) {
+      const nextChecked = tag
+      this.fontAwesomeCheck = nextChecked
+
+      const arr = fontAwesome.filter(item => {
+        return nextChecked === item.type
+      })
+      if (arr.length) {
+        let res = []
+        for (const one of arr) {
+          res = res.concat(one.items)
+        }
+        this.fontAwesomeInitData = [...new Set(res)]
+      } else {
+        this.fontAwesomeInitData = this.fontAwesomeRealData
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/ .ant-drawer-body {
+  display: flex;
+  flex-direction: column;
+}
+.myIcon {
+  display: inline-block;
+  width: 68px;
+  text-align: center;
+  border-radius: 4px;
+  cursor: pointer;
+  :first-child {
+    font-size: 30px;
+    line-height: 50px;
+  }
+  :last-child {
+    line-height: 20px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    width: 100%;
+    padding: 0 4px;
+  }
+  &:hover {
+    background: rgb(24, 144, 255);
+    color: #fff;
+    :first-child {
+      font-size: 40px;
+    }
+  }
+}
+</style>

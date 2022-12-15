@@ -1,0 +1,297 @@
+import Mock from 'mockjs2'
+import { builder, getQueryParameters } from '@/mock/util'
+// 坐席状态监控
+const serverState = (options) => {
+    const parameters = getQueryParameters(options)
+    const serverStateData = {
+        agent_data: {
+            count: 100,
+            data: []
+        },
+        call_data: {
+            data: []
+        }
+    }
+    const arr = ['4', '0', '1', '-1', '16', '8', '2']
+    const arrName = ['林磊', '小寒', '周尊华', '梁瑞轩', '李超玉', '花花', '大黄']
+    const arrTime = ['56分钟', '1小时30分钟', '2小时', '10分钟', '5分钟', '3小时']
+    for (let i = 0; i < 100; i++) {
+        const status = arr[Math.floor((Math.random() * arr.length))]
+        const realname = arrName[Math.floor((Math.random() * arrName.length))]
+        const time = arrTime[Math.floor((Math.random() * arrTime.length))]
+        serverStateData.agent_data.data.push({
+            id: i + 1,
+            realname: realname,
+            call_answer: i + 3,
+            call_answer_time: '11:22:32',
+            call_out: i + 1,
+            call_out_time: '11:00:32',
+            extension: '3221',
+            status: status,
+            time: time,
+            username: realname
+        })
+    }
+    const arrZt = ['已处理', '未处理']
+    const arrLdhm = ['13898888888', '13865888888', '17889569875', '13727651903', '13627651904']
+    const arrLdsj = ['22/03/09 09:00:00', '22/03/09 10:02:00', '22/03/09 11:06:00', '22/03/09 12:04:00']
+    const arrWait = ['10分钟', '2分钟', '30分钟', '5分钟']
+    for (let i = 0; i < parseInt(parameters.rightTotal); i++) {
+        const zt = arrZt[Math.floor((Math.random() * arrZt.length))]
+        const ldhm = arrLdhm[Math.floor((Math.random() * arrLdhm.length))]
+        const ldsj = arrLdsj[Math.floor((Math.random() * arrLdsj.length))]
+        const waittime = arrWait[Math.floor((Math.random() * arrWait.length))]
+        serverStateData.call_data.data.push({
+            id: i + 1,
+            ldhm: ldhm,
+            ldsj: ldsj,
+            waittime: waittime,
+            zt: zt
+        })
+    }
+
+    return builder({
+        data: serverStateData
+    })
+}
+// 话务宏观监控
+const serverViewData = {
+    avg_wait: '00:00:12',
+    call_data: {
+        agentmiss_num: 560,
+        answer_num: 680,
+        avg_duration: '00:23:11',
+        call_num: 60,
+        giveup_num: 860
+    },
+    callout_data: {
+        answer_num: 32,
+        callout_answer: 32,
+        callout_num: '123',
+        noanswer_num: 221
+    },
+    chart1_data: {
+        name_data: ['在线(27)', '空闲(17)', '示忙(15)', '通话(12)', '振铃(12)', '离线(21)'],
+        value_data: [27, 17, 15, 12, 12, 21]
+    },
+    chart2_data: {
+        name_data: ['00时', '01时', '02时', '03时', '04时', '05时', '06时', '07时', '08时', '09时', '10时', '11时'],
+        value_abandon: [0.8, 0.7, 0.6, 0.2, 0.4, 0.2, 0.6, 0.5, 0.4, 0.7, 0.6, 0.9],
+        value_agent: [0.6, 0.6, 0.9, 0.5, 0.6, 0.3, 0.2, 0.2, 0.1, 0.7, 0.5, 0.6],
+        value_agentmiss: [0.7, 0.3, 0.2, 0.1, 0.6, 0.8, 0.3, 0.5, 0.4, 0.4, 0.2, 0.5],
+        value_answer: [0.4, 0.5, 0.1, 0.2, 0.1, 0.8, 0.6, 0.5, 0.5, 0.4, 0.5, 0.3],
+        value_connect: [0.2, 0.3, 0.8, 0.9, 0.6, 0.2, 0.5, 0.5, 0.6, 0.1, 0.5, 0.3],
+        value_incall: [0.5, 0.4, 0.7, 0.3, 0.4, 0.5, 0.9, 0.5, 0.6, 0.4, 0.6, 0.1]
+    },
+    chart3_data: [{
+        value: '37.00',
+        name: '接通率',
+        selected: 'true'
+    }, {
+        value: '63.00',
+        name: '放弃率'
+    }],
+    current_wait: 3519,
+    max_wait: '00:00:12'
+}
+const serverView = (options) => {
+    return builder({
+        data: serverViewData
+    })
+}
+// 今日客服活动
+const ServiceActivities = (options) => {
+    const arr = ['jx', 'sm', 'lk', 'dc']
+    const arrData = []
+    for (let i = 0; i < 100; i++) {
+        const status = arr[Math.floor((Math.random() * arr.length))]
+        arrData.push({
+            id: i,
+            service_name: 'gangshiming（甘思名）',
+            status: status,
+            ztcxsj: '02:12:22',
+            dqhhs: '12',
+            ljhhs: '12',
+            ljxxs: '12',
+            pjhhsc: '12:28:32',
+            pjsxsc: '12:28:32',
+            pjxysc: '12:28:32',
+            myd: '12%',
+            scjxsj: '12:28:32'
+        })
+    }
+    return builder({
+        data: arrData
+    })
+}
+// 在线宏观监控
+const todayData = (options) => {
+    const dataList = [{
+        name: '南海诸岛',
+        value: 5,
+        eventTotal: 100,
+        specialImportant: 10,
+        import: 10,
+        compare: 10,
+        common: 40,
+        specail: 20
+    }, {
+        name: '新疆',
+        value: 88
+    }]
+    const firstMap = ['贵州', '广西', '广东', '香港', '甘肃', '广州', '福建']
+    const secondMap = ['湖南', '江西', '湖北', '安徽']
+    const thirdMap = ['云南', '四川', '陕西', '海南', '重庆', '河南', '山东', '江苏', '上海', '浙江', '台湾', '河北', '山西', '宁夏', '北京', '天津', '辽宁', '吉林', '黑龙江']
+    const forthMap = ['西藏', '青海', '内蒙古']
+    firstMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 1001
+        })
+    })
+    secondMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 690
+        })
+    })
+    thirdMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 488
+        })
+    })
+    forthMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 5
+        })
+    })
+    const tableDataEfficiency = []
+    const tableDataService = []
+    for (let i = 0; i < 8; i++) {
+        tableDataEfficiency.push({
+            pm: i + 1,
+            id: i,
+            service: '001(张三)',
+            hhl: '999',
+            kfxxs: '3221',
+            hhzsc: '12:22:22'
+        })
+        tableDataService.push({
+            pm: i + 1,
+            id: i,
+            service: '001(张三)',
+            myl: '99.33%',
+            zhhl: '999',
+            zpjl: '666',
+            pjl: '66.66%'
+        })
+    }
+    return builder({
+        data: {
+            dataList,
+            tableDataEfficiency,
+            tableDataService,
+            inSession: '23',
+            inLineUp: '49',
+            sessionAverage: {
+                hours: '13',
+                minutes: '13',
+                seconds: '13'
+            },
+            dialogNumList: '37672',
+            firstSecond: {
+                minutes: '19',
+                seconds: '13'
+            },
+            lineUp: {
+                minutes: '19',
+                seconds: '13'
+            }
+        }
+    })
+}
+// 全国进线分布
+const NationalIncomeLine = (options) => {
+    const tableData = []
+    const dataList = [{
+        name: '南海诸岛',
+        value: 5,
+        eventTotal: 100,
+        specialImportant: 10,
+        import: 10,
+        compare: 10,
+        common: 40,
+        specail: 20
+    }, {
+        name: '新疆',
+        value: 88
+    }]
+    const firstMap = ['贵州', '广西', '广东', '香港', '甘肃', '广州', '福建']
+    const secondMap = ['湖南', '江西', '湖北', '安徽']
+    const thirdMap = ['云南', '四川', '陕西', '海南', '重庆', '河南', '山东', '江苏', '上海', '浙江', '台湾', '河北', '山西', '宁夏', '北京', '天津', '辽宁', '吉林', '黑龙江']
+    const forthMap = ['西藏', '青海', '内蒙古']
+    firstMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 1001
+        })
+    })
+    secondMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 690
+        })
+    })
+    thirdMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 488
+        })
+    })
+    forthMap.forEach(item => {
+        dataList.push({
+            name: item,
+            value: 5
+        })
+    })
+    const arrProvince = ['贵州', '广西', '广东', '香港', '甘肃', '广州', '福建', '湖南', '江西', '湖北', '安徽', '云南', '四川', '陕西', '海南', '重庆', '河南', '山东', '江苏', '上海', '浙江', '台湾', '河北', '山西', '宁夏', '北京', '天津', '辽宁', '吉林', '黑龙江', '西藏', '青海', '内蒙古', '南海诸岛', '新疆']
+    const arrJtl = ['260', '560', '860', '76', '651', '756']
+    const arrJtl2 = ['25%', '65%', '30%', '10%', '69%', '95%']
+    for (let i = 0; i < arrProvince.length; i++) {
+        const jtl = arrJtl[Math.floor((Math.random() * arrJtl.length))]
+        const jtl2 = arrJtl2[Math.floor((Math.random() * arrJtl2.length))]
+        const sf = dataList.find(item => item.name === arrProvince[i])
+        tableData.push({
+            pm: i + 1,
+            id: i,
+            sf: arrProvince[i],
+            jxl: sf.value,
+            jtl: jtl,
+            jtl2: jtl2
+        })
+    }
+    return builder({
+        data: {
+            all_answer_rate: 38,
+            data: {
+                dataList: dataList,
+                data: tableData,
+                count: arrProvince.length
+            },
+            history_count: 37672,
+            today_count: 2864
+        }
+    })
+}
+// 坐席状态监控初始化数据
+Mock.mock(/\/monitor\/serverState\/mockInit/, 'post', serverState)
+// 话务宏观监控初始化数据
+Mock.mock(/\/monitor\/serverView\/mockInit/, 'post', serverView)
+// 今日客服活动初始化数据
+Mock.mock(/\/monitor\/ServiceActivities\/mockInit/, 'post', ServiceActivities)
+// 在线宏观监控初始化数据
+Mock.mock(/\/monitor\/todayData\/mockInit/, 'post', todayData)
+// 全国进线分布初始化数据
+Mock.mock(/\/monitor\/NationalIncomeLine\/mockInit/, 'post', NationalIncomeLine)

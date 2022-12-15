@@ -1,0 +1,502 @@
+<template>
+  <a-card size="small" style="height: 100%">
+    <a-row :gutter="[8]">
+      <a-col :span="16">
+        <a-spin :spinning="chatLoading">
+          <a-row :gutter="8">
+            <a-col :span="6">
+              <a-input-search allowClear @search="getChatList" />
+              <a-list
+                style="height: calc(100vh - 160px); overflow-y: auto"
+                item-layout="horizontal"
+                :data-source="chatList"
+              >
+                <a-list-item
+                  slot="renderItem"
+                  slot-scope="item"
+                  class="chatList"
+                  style="padding-left: 8px"
+                  :style="{ background: chatListCheck === item.visitorId ? '#EDEDED' : '' }"
+                  @click="getRelatedList(item)"
+                >
+                  <a-list-item-meta :description="$t('{0}条相关聊天记录', { 0: item.count })">
+                    <span slot="title">{{ item.visitorName }}</span>
+                  </a-list-item-meta>
+                </a-list-item>
+              </a-list>
+            </a-col>
+            <a-col :span="18" style="background: #f5f6f7">
+              <a-list
+                style="height: calc(100vh - 133px); overflow-y: auto"
+                item-layout="horizontal"
+                :loading="relatedLoading"
+                :data-source="relatedList"
+              >
+                <a-list-item
+                  slot="renderItem"
+                  slot-scope="item"
+                  style="padding-left: 16px"
+                  class="relatedList"
+                  :style="{ background: relatedListCheck === item.id ? '#DDDEE0' : '' }"
+                  @click="relatedGetContent(item)"
+                >
+                  <a-list-item-meta>
+                    <div slot="title">
+                      <a-row type="flex" align="middle">
+                        <a-col flex="auto">
+                          <span>{{ item.visitorName }}</span>
+                        </a-col>
+                        <a-col flex="140px">
+                          <span>{{ moment(item.inputTime).format('YYYY-MM-DD HH:mm:ss') }}</span>
+                        </a-col>
+                      </a-row>
+                    </div>
+                    <div slot="description" v-dompurify-html="item.content"></div>
+                  </a-list-item-meta>
+                </a-list-item>
+              </a-list>
+            </a-col>
+          </a-row>
+        </a-spin>
+      </a-col>
+      <a-col :span="8">
+        <a-spin v-if="contentList.length" :spinning="loadingContent">
+          <div
+            ref="chats"
+            style="height: calc(100vh - 133px); overflow-y: auto; padding-top: 20px"
+            @scroll="popupScroll"
+          >
+            <div v-if="noMore" style="width: 100%; text-align: center; font-size: 12px; color: rgb(220, 220, 220)">
+              {{ $t('--没有更多数据--') }}
+            </div>
+            <div v-for="(item, i) in contentList" :key="i" style="padding-bottom: 20px">
+              <!-- 系统消息 -->
+              <div
+                v-if="
+                  [
+                    '2011',
+                    '1027',
+                    '1028',
+                    '1030',
+                    '1044',
+                    '1002',
+                    '1031',
+                    '1033',
+                    '1049',
+                    '1050',
+                    '1051',
+                    '1052',
+                    '1054',
+                    '1055',
+                    '1056',
+                    '1057',
+                    '1058',
+                    '1059',
+                    '1060',
+                    '1061',
+                    '1003',
+                    '1018',
+                    '1064',
+                    '1029',
+                    '1065',
+                    '1041',
+                    '1066',
+                    '1062',
+                    '1063'
+                  ].includes(item.code) && item.content
+                "
+                class="systemReminder"
+              >
+                <span
+                  v-if="['1030', '1002'].includes(item.code)"
+                  style="padding: 14px 32px; background: #cbc8c8; border-radius: 5px; color: #f5f5f5; line-height: 40px"
+                >
+                  {{ item.content }}
+                </span>
+                <span v-else-if="['1018', '1003'].includes(item.code)">
+                  <span style="padding: 2px 20px; background: #d0d1d6; border-radius: 10px; color: #f5f5f5">
+                    {{ item.content }}
+                  </span>
+                </span>
+                <span v-else>{{ item.content }}</span>
+              </div>
+              <!-- 客服消息 -->
+              <div
+                v-else-if="['1009', '1011', '1013', '1023', '1019', '1015', '1016'].includes(item.code) && item.content"
+                style="display: flex; flex-direction: column; align-items: flex-end; margin-right: 16px"
+              >
+                <div style="padding-bottom: 8px">
+                  <a-space>
+                    <span>{{ item.serviceName }}</span>
+                    <span>{{ item.inputTime }}</span>
+                  </a-space>
+                </div>
+                <div v-if="['1013'].includes(item.code)" style="max-width: 300px; width: 100vw">
+                  <a-card v-if="item.contentObj.status === '取件'" size="small" style="margin: 0">
+                    <div slot="title" style="display: flex; justify-content: space-between">
+                      <div>{{ item.contentObj.staffCompanyName }} {{ item.contentObj.expressid }}</div>
+                      <div style="color: rgba(0, 0, 0, 0.35)">{{ item.contentObj.pickType }}</div>
+                    </div>
+                    <div style="padding: 8px">
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">保管服务费：</span>
+                        <span>￥{{ item.contentObj.custodyMoney }}</span>
+                      </div>
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">收派员：</span>
+                        <span>{{ item.contentObj.staffMobile || '--' }}</span>
+                      </div>
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">柜机地址：</span>
+                        <span>{{ item.contentObj.edAdress || '--' }}</span>
+                      </div>
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">入柜时间：</span>
+                        <span>{{ item.contentObj.sendTm || '--' }}</span>
+                      </div>
+                      <div>
+                        <span style="color: rgba(0, 0, 0, 0.35)">取件时间：</span>
+                        <span>{{ item.contentObj.pickTm || '--' }}</span>
+                      </div>
+                    </div>
+                  </a-card>
+                  <a-card v-else-if="item.contentObj.status === '存包'" size="small" style="margin: 0">
+                    <div slot="title" style="display: flex; justify-content: space-between">
+                      <div>
+                        {{ item.contentObj.orderTypeName }}
+                      </div>
+                      <a-tag color="blue">{{ item.contentObj.orderStatusName }}</a-tag>
+                    </div>
+                    <div style="padding: 8px">
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">订单编号：</span>
+                        <span>{{ item.contentObj.orderId }}</span>
+                      </div>
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">到期时间：</span>
+                        <span>{{ item.contentObj.expiredTime || '--' }}</span>
+                      </div>
+                      <div style="margin-bottom: 8px">
+                        <span style="color: rgba(0, 0, 0, 0.35)">格口编号：</span>
+                        <span>{{ item.contentObj.boxId || '--' }}</span>
+                      </div>
+                      <div>
+                        <span style="color: rgba(0, 0, 0, 0.35)">柜机地址：</span>
+                        <span>{{ item.contentObj.cabinetAddress || '--' }}</span>
+                      </div>
+                    </div>
+                  </a-card>
+                  <a-card
+                    v-else-if="item.contentObj.status === '寄件'"
+                    size="small"
+                    :title="`${item.contentObj.expressCompanyName} ${item.contentObj.expressNo}`"
+                    style="margin: 0"
+                  >
+                    <div style="padding: 8px">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 8px">
+                        <div style="text-align: center">
+                          <div style="font-size: 18px; font-weight: 600">
+                            {{ item.contentObj.senderCityName }}
+                          </div>
+                          <div style="color: rgba(0, 0, 0, 0.35)">
+                            {{ item.contentObj.senderName }}
+                          </div>
+                        </div>
+                        <div style="display: inline-block; text-align: center">
+                          <img style="width: 100%; max-width: 120px" src="./visitorImg/right.png" mode="" />
+                          <div style="color: rgba(0, 0, 0, 0.35)">
+                            {{ sendStatus[item.contentObj.sendStatus] }}
+                          </div>
+                        </div>
+                        <div style="text-align: center">
+                          <div style="font-size: 18px; font-weight: 600">
+                            {{ item.contentObj.receiverCityName }}
+                          </div>
+                          <div style="color: rgba(0, 0, 0, 0.35)">
+                            {{ item.contentObj.receiverName }}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <span style="color: rgba(0, 0, 0, 0.35)">寄出时间：</span>
+                        <span>{{ item.contentObj.orderCreateTime || '--' }}</span>
+                      </div>
+                    </div>
+                  </a-card>
+                </div>
+                <div
+                  v-else
+                  class="replyBox"
+                  :style="{ backgroundColor: item.id === relatedListCheck ? '#FFE8CC' : '#A7EBE4' }"
+                >
+                  <span
+                    :ref="`replyContentRef${item.id}`"
+                    v-viewer
+                    v-dompurify-html="item.content"
+                    class="replyContent"
+                  ></span>
+                </div>
+              </div>
+              <div
+                v-else-if="['1008', '1010'].includes(item.code)"
+                style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 16px"
+              >
+                <div style="padding-bottom: 8px">
+                  <a-space>
+                    <span>{{ item.visitorName }}</span>
+                    <span>{{ item.inputTime }}</span>
+                  </a-space>
+                </div>
+                <div class="chatBox" :style="{ backgroundColor: item.id === relatedListCheck ? '#FFE8CC' : '#EBEBEB' }">
+                  <span v-viewer v-dompurify-html="item.content" class="chatContent"></span>
+                </div>
+              </div>
+              <a-modal
+                v-if="item.content.search('img') != -1 && item.content.search('s-news-img') == -1"
+                :visible="imgPreviewVisible"
+                :footer="null"
+                @cancel="imgPreviewCancel"
+              >
+                <div v-dompurify-html="imagePreviewItem" class="imgPreview"></div>
+              </a-modal>
+            </div>
+            <div v-if="loadMore" style="width: 100%; text-align: center">
+              <a @click="loadingMore">{{ $t('--加载更多--') }}</a>
+            </div>
+          </div>
+        </a-spin>
+        <a-empty v-else style="text-align: center" :image="simpleImage" />
+      </a-col>
+    </a-row>
+  </a-card>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { Empty } from 'ant-design-vue'
+export default {
+  i18n: window.lang('chat'),
+  data () {
+    this.getChatList = debounce(this.getChatList, 500)
+    this.getRelatedList = debounce(this.getRelatedList, 500)
+    this.relatedGetContent = debounce(this.relatedGetContent, 500)
+    return {
+      chatList: [],
+      relatedList: [],
+      chatListCheck: '',
+      relatedListCheck: '',
+      contentList: [],
+      loadingContent: false,
+      chatLoading: false,
+      relatedLoading: false,
+      content: '',
+      contentTitle: '',
+      pageParams: {
+        pageSize: 20
+      },
+      noMore: false,
+      loadMore: false,
+      scrollStats: true,
+      simpleImage: Empty.PRESENTED_IMAGE_SIMPLE
+    }
+  },
+  methods: {
+    // 获取相关搜索内容
+    getChatList (value) {
+      this.content = value
+      if (value) {
+        this.chatLoading = true
+        this.chatList = []
+        this.relatedList = []
+        this.contentList = []
+        this.contentTitle = ''
+        this.relatedListCheck = ''
+        this.pageParams = {
+          pageSize: 20
+        }
+        this.noMore = false
+        this.loadMore = false
+        this.scrollStats = true
+        this.axios({
+          url: '/chat/historyConversation/globalSearch',
+          data: {
+            content: value
+          }
+        }).then(res => {
+          this.chatLoading = false
+          this.chatList = res.result.data
+          if (res.result.data.length) {
+            this.getRelatedList(this.chatList[0])
+          }
+        })
+      }
+    },
+    // 获取访客具体相关内容
+    getRelatedList (record) {
+      this.relatedLoading = true
+      this.axios({
+        url: '/chat/historyConversation/singleSearch',
+        data: {
+          content: this.content,
+          visitorId: record.visitorId
+        }
+      }).then(res => {
+        this.relatedLoading = false
+        this.chatListCheck = record.visitorId
+        this.relatedListCheck = ''
+        this.relatedList = res.result.data
+        this.contentList = []
+      })
+    },
+    relatedGetContent (record) {
+      this.relatedListCheck = record.id
+      this.contentTitle = record.visitorName
+      const params = Object.assign({
+        id: record.id,
+        conversationId: record.conversationId,
+        type: 'up'
+      }, this.pageParams)
+      this.scrollStats = true
+      this.getContentList(record, params).then((res) => {
+        res.result.data.forEach(item => {
+          if (item.code === '1013' && item.content) {
+            item.contentObj = JSON.parse(item.content)
+          } else if (item.chatsCode === '1027' || item.chatsCode === '1028') {
+            this.getReCall(item)
+          }
+        })
+        this.contentList = res.result.data
+        if (res.result.data.length < this.pageParams.pageSize) {
+          this.noMore = true
+        } else {
+          this.loadMore = true
+          this.noMore = false
+        }
+        this.$nextTick(() => {
+          this.$refs.chats.scrollTop = this.$refs.chats.scrollHeight
+        })
+      })
+    },
+    // 获取具体聊天记录
+    getContentList (record, params) {
+      return new Promise((resolve, reject) => {
+        this.loadingContent = true
+        this.axios({
+          url: '/chat/historyConversation/detailedSearch',
+          data: params
+        }).then(res => {
+          this.loadingContent = false
+          resolve(res)
+        })
+      })
+    },
+    // 置顶加载数据
+    popupScroll (e) {
+      const height = JSON.parse(JSON.stringify(e.target.scrollHeight))
+      const scrollTop = e.target.scrollTop
+      if (scrollTop === 0 && this.scrollStats) {
+        const record = this.contentList[0]
+        const params = Object.assign({
+          id: record.id,
+          conversationId: record.conversationId,
+          type: 'up'
+        }, this.pageParams)
+        this.getContentList(record, params).then((res) => {
+          const data = res.result.data
+          data.splice(-1, 1)
+          this.contentList = [...data, ...this.contentList]
+          if (res.result.data.length < (this.pageParams.pageSize - 1)) {
+            this.scrollStats = false
+            this.noMore = true
+          }
+          this.$nextTick(() => {
+            e.target.scrollTop = e.target.scrollHeight - height
+          })
+        })
+      }
+    },
+    // 修改显示撤回的消息
+    getReCall (item) {
+      let user = ''
+      if (item.chatsCode === '1027') {
+        user = item.visitorId
+      } else {
+        user = this.$t('你')
+      }
+      this.$set(item, 'content', `${user}${this.$t('撤回了一条消息')}`)
+    },
+    loadingMore () {
+      const record = this.contentList[this.contentList.length - 1]
+      const params = Object.assign({
+        id: record.id,
+        conversationId: record.conversationId,
+        type: 'down'
+      }, this.pageParams)
+      const height = this.$refs.chats.scrollHeight
+      this.getContentList(record, params).then((res) => {
+        const data = res.result.data
+        data.splice(0, 1)
+        data.forEach(item => {
+          if (item.code === '1013' && item.content) {
+            item.contentObj = JSON.parse(item.content)
+          } else if (item.chatsCode === '1027' || item.chatsCode === '1028') {
+            this.getReCall(item)
+          }
+        })
+        this.contentList = [...this.contentList, ...data]
+        if (res.result.data.length < (this.pageParams.pageSize - 1)) {
+          this.loadMore = false
+        } else {
+          this.loadMore = true
+        }
+        this.$nextTick(() => {
+          this.$refs.chats.scrollTop = height - 500
+        })
+      })
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+.chatList:hover {
+  background: #ededed;
+}
+.relatedList:hover {
+  background: #d9d9d9;
+}
+.systemReminder {
+  width: 100%;
+  text-align: center;
+  color: #aaaaaa;
+}
+
+/deep/.chatBox,
+/deep/.replyBox {
+  display: inline-block;
+  text-align: left;
+  word-break: break-all;
+  max-width: 450px;
+  padding: 12px;
+  border-radius: 9px;
+  img {
+    max-width: 417px;
+    max-height: 200px;
+  }
+}
+.chatBox {
+  color: #333333;
+}
+.replyBox {
+  color: #333333;
+  overflow: hidden;
+  text-align: right;
+}
+.replyContent {
+  color: #333333;
+}
+/deep/.imgPreview {
+  width: 100%;
+  img {
+    width: 100%;
+  }
+}
+</style>

@@ -1,0 +1,497 @@
+<template>
+  <div class="page">
+    <a-spin :spinning="loading">
+      <a-tabs v-model="currentTab" :animated="false" @change="handleTabChange">
+        <a-tab-pane v-for="parentItem in tabList" :key="parentItem.key" :tab="parentItem.title">
+          <a-form :labelCol="{ span: 7 }" :wrapperCol="{ span: 17 }" class="search">
+            <a-card size="small" :title="$t('搜索')">
+              <a-space slot="extra">
+                <a-button htmlType="submit" @click="getDataList">{{ $t('搜索') }}</a-button>
+                <a-button @click="reset">{{ $t('重置') }}</a-button>
+                <a-button
+                  :icon="advanced ? 'up' : 'down'"
+                  style="font-size: 11px"
+                  @click="advanced = !advanced"
+                ></a-button>
+              </a-space>
+              <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+                <a-col :span="6">
+                  <a-form-item :label="$t('会话开始时间')">
+                    <a-range-picker
+                      v-if="['day', 'time'].includes(parentItem.key)"
+                      v-model="showObj['sessionTime' + parentItem.key]"
+                      :allowClear="false"
+                      :disabled-date="disabledDate"
+                      :ranges="{
+                        [$t('昨天')]: [
+                          moment().startOf('day').subtract('day', 1),
+                          moment().endOf('day').subtract('day', 1)
+                        ],
+                        [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                        [$t('最近七天')]: [moment().subtract(7, 'days'), moment()],
+                        [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                        [$t('最近31天')]: [moment().subtract(31, 'days'), moment()]
+                      }"
+                      format="YYYY-MM-DD"
+                      style="width: 100%"
+                      @change="getInputTime"
+                      @openChange="onOpenChange"
+                      @calendarChange="onCalendarChange"
+                    />
+                    <a-range-picker
+                      v-else-if="parentItem.key == 'month'"
+                      v-model="showObj['sessionTime' + parentItem.key]"
+                      style="width: 100%"
+                      :allowClear="false"
+                      format="YYYY-MM"
+                      :ranges="{
+                        [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                        [$t('上个月')]: [
+                          moment().startOf('month').subtract('month', 1),
+                          moment().endOf('month').subtract('month', 1)
+                        ],
+                        [$t('最近3个月')]: [moment().subtract(2, 'month'), moment()]
+                      }"
+                      :mode="modeMonth"
+                      :open="openMonth"
+                      @change="
+                        (date, dateString) => {
+                          queryParam.startTime = dateString[0] + '-01'
+                          queryParam.endTime = dateString[1] + '-01'
+                        }
+                      "
+                      @openChange="openMonthChange"
+                      @panelChange="handlePanelChange"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col v-if="parentItem.key === 'time'" :span="6">
+                  <a-form-item :label="$t('时间段')">
+                    <a-select v-model="showObj['period' + parentItem.key]" style="width: 100%">
+                      <a-select-option v-for="(item, index) in timeIntervalData" :key="index" :value="item.value">
+                        {{ item.label }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('技能组')">
+                    <a-select
+                      v-model="showObj['groupId' + parentItem.key]"
+                      mode="multiple"
+                      allowClear
+                      showSearch
+                      option-filter-prop="children"
+                      style="width: 100%"
+                    >
+                      <a-select-option v-for="item in groupList" :key="item.id" :value="item.id">
+                        {{ item.name }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('渠道')">
+                    <a-select
+                      v-model="showObj['channel' + parentItem.key]"
+                      style="width: 100%"
+                      mode="multiple"
+                      allowClear
+                      showSearch
+                      option-filter-prop="children"
+                    >
+                      <a-select-option v-for="item in channelLists" :key="item.value" :value="item.value">
+                        {{ item.label }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('首响合格时长')">
+                    <div style="display: flex; margin-top: 4px">
+                      <a-input-number
+                        v-model="showObj['responseTime' + parentItem.key]"
+                        style="width: 100%; margin-right: -1px"
+                        :min="1"
+                        :max="60"
+                      ></a-input-number>
+                      <a-button style="display: inline-block">{{ $t('秒') }}</a-button>
+                    </div>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('平均响应合格时长')">
+                    <div style="display: flex; margin-top: 4px">
+                      <a-input-number
+                        v-model="showObj['replyTime' + parentItem.key]"
+                        style="width: 100%; margin-right: -1px"
+                        :min="1"
+                        :max="60"
+                      ></a-input-number>
+                      <a-button style="display: inline-block">{{ $t('秒') }}</a-button>
+                    </div>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="6">
+                  <a-form-item :label="$t('超长会话时长')">
+                    <div style="display: flex; margin-top: 4px">
+                      <a-input-number
+                        v-model="showObj['conversationTime' + parentItem.key]"
+                        style="width: 100%; margin-right: -1px"
+                        :min="1"
+                        :max="60"
+                      ></a-input-number>
+                      <a-button style="display: inline-block">{{ $t('分钟') }}</a-button>
+                    </div>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </a-card>
+          </a-form>
+          <a-row type="flex" justify="space-between" align="middle" style="margin-bottom: 8px">
+            <a-col>
+              <a-space>
+                <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+              </a-space>
+            </a-col>
+            <a-col style="margin: 8px 8px 0">
+              <a-popover placement="left">
+                <template slot="content">
+                  <div v-dompurify-html="content.replace(/。/g, `。 <br />`)" style="width: 400px"></div>
+                </template>
+                <a-icon type="question-circle" style="font-size: 16px" />
+              </a-popover>
+            </a-col>
+          </a-row>
+          <a-table
+            ref="table"
+            :pagination="false"
+            :scroll="{ x: true, y: advanced ? windowHeight - 400 : windowHeight - 365 }"
+            class="table-fill"
+            size="small"
+            rowKey="conversationDate"
+            :columns="columns"
+            :dataSource="showTable['dataList' + parentItem.key]"
+            :sorter="sorter"
+          ></a-table>
+        </a-tab-pane>
+      </a-tabs>
+      <general-export ref="generalExport" />
+    </a-spin>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      loading: false,
+      // 搜索栏显示参数
+      showObj: {
+        sessionTimeday: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+        sessionTimetime: [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)],
+        sessionTimemonth: [this.moment().startOf('month'), this.moment().startOf('month')],
+        periodTime: '60'
+      },
+      // 表格数据对象
+      showTable: {},
+      showApi: {
+        dayIs: false,
+        monthIs: false,
+        timeIs: false
+      },
+      openMonth: false,
+      modeMonth: ['month', 'month'],
+      disabledCurrent: null,
+      timeIntervalData: [{
+        label: this.$t('1小时'),
+        value: '60'
+      }, {
+        label: this.$t('30分钟'),
+        value: '30'
+      }, {
+        label: this.$t('15分钟'),
+        value: '15'
+      }],
+      tabList: [{
+        title: this.$t('响应时效-按天'),
+        key: 'day'
+      }, {
+        title: this.$t('响应时效-按月'),
+        key: 'month'
+      }, {
+        title: this.$t('响应时效-按时段'),
+        key: 'time'
+      }],
+      currentTab: 'day',
+      content: `${this.$t('会话开始时间：访客接入在线客服系统的时间。')}<br />
+                ${this.$t('总会话量：访客被客服接起的数量。')}<br />
+                ${this.$t('平均会话时长：总会话时长/总会话量。')}<br />
+                ${this.$t('访客平均排队时长：总排队时长/总会话量（排队时长为访客开始排队到访客被客服接起的时间间隔）。')}<br />
+                ${this.$t('平均首次响应时长：首次响应总时长/总会话量（排除没有产生首次响应的会话）。首次响应时长：访客被客服接起，访客发送首条消息后，客服第一次回复的时间间隔。')}<br />
+                ${this.$t('首次响应合格率：首次响应时长≤统计设置下{首次响应合格时长}的会话量/总会话量（排除没有产生首次响应的会话）。')}<br />
+                ${this.$t('平均响应时长：所有会话轮次下（排除没有产生首次响应的会话），访客发言到客服回复的时间间隔的平均值。 平均响应合格率：平均响应时长≤统计设置下{平均响应合格时长}的会话量/总会话量（排除没有产生首次响应的会话）。')}<br />
+                ${this.$t('超长会话量：会话时长＞统计设置下{超长会话时长}的会话量。')}<br />`,
+      advanced: false,
+      queryParam: {
+        startTime: this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        endTime: this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD'),
+        responseTime: null,
+        replyTime: null,
+        conversationTime: null,
+        sortField: 'conversationDate',
+        sortOrder: 'descend',
+        tab: 'day'
+      },
+      groupList: [],
+      channelLists: [],
+      showTime: [this.moment('00:00:00', 'HH:mm:ss'), this.moment('23:59:59', 'HH:mm:ss')],
+      columns: [{
+        title: '#',
+        width: 40,
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('会话开始时间'),
+        width: 140,
+        dataIndex: 'conversationDate',
+        sorter: (a, b) => Date.parse(b.conversationDate.replace(/-/g, '/')) - Date.parse(a.conversationDate.replace(/-/g, '/'))
+      }, {
+        title: this.$t('总会话量'),
+        width: 140,
+        dataIndex: 'conversationNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.conversationNumber - b.conversationNumber
+      }, {
+        title: this.$t('平均会话时长'),
+        width: 140,
+        dataIndex: 'avgConversationTime',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.avgConversationTime - b.avgConversationTime,
+        customRender: (text) => {
+          let sec = parseInt(text)
+          let min = 0
+          let hour = 0
+          if (sec > 59) {
+            min = parseInt(sec / 60)
+            sec = parseInt(sec % 60)
+            if (min > 59) {
+              hour = parseInt(min / 60)
+              min = parseInt(min % 60)
+            }
+          }
+          const result = `${parseInt(hour) < 10 ? '0' + parseInt(hour) : parseInt(hour)}:${parseInt(min) < 10 ? '0' + parseInt(min) : parseInt(min)}:${parseInt(sec) < 10 ? '0' + parseInt(sec) : parseInt(sec)}`
+          return result
+        }
+      }, {
+        title: this.$t('访客平均排队时长(秒)'),
+        dataIndex: 'queueTime',
+        width: 200,
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.queueTime - b.queueTime
+      }, {
+        title: this.$t('平均首次响应时长(秒)'),
+        dataIndex: 'firstReplyTime',
+        width: 200,
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.firstReplyTime - b.firstReplyTime
+      }, {
+        title: this.$t('首次响应合格率'),
+        dataIndex: 'firstReplyTimeQualifiedRate',
+        width: 160,
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.firstReplyTimeQualifiedRate.replace('%', '') - b.firstReplyTimeQualifiedRate.replace('%', '')
+      }, {
+        title: this.$t('平均响应时长(秒)'),
+        width: 160,
+        dataIndex: 'avgReplyTimeQualifiedNumber',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.avgReplyTimeQualifiedNumber - b.avgReplyTimeQualifiedNumber
+      }, {
+        title: this.$t('平均响应合格率'),
+        width: 160,
+        dataIndex: 'avgReplyTimeQualifiedRate',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.avgReplyTimeQualifiedRate.replace('%', '') - b.avgReplyTimeQualifiedRate.replace('%', '')
+      }, {
+        title: this.$t('超长会话量'),
+        width: 120,
+        dataIndex: 'longConversation',
+        sorter: (a, b) => a.conversationDate === this.$t('合计') ? 0 : a.longConversation - b.longConversation
+      }],
+      sorter: { field: 'conversationDate', order: 'ascend' },
+      params: {},
+      dataList: [],
+      windowHeight: document.documentElement.clientHeight,
+      settingControl: {}
+    }
+  },
+  mounted () {
+    this.axios({
+      url: '/chat/setting/base',
+      data: { action: 'get' }
+    }).then(res => {
+      this.settingControl = res.result.info
+      this.groupList = res.result.groupList
+      const responseTime = Number(this.settingControl.firstResponseQualifiedTime)
+      const replyTime = Number(this.settingControl.averageResponseQualifiedTime)
+      const conversationTime = Number(this.settingControl.longSessionTime)
+      this.queryParam.responseTime = responseTime
+      this.queryParam.replyTime = replyTime
+      this.queryParam.conversationTime = conversationTime
+      const strArr = ['day', 'month', 'time']
+      strArr.forEach(element => {
+        this.$set(this.showObj, ['responseTime' + element], responseTime)
+        this.$set(this.showObj, ['replyTime' + element], replyTime)
+        this.$set(this.showObj, ['conversationTime' + element], conversationTime)
+        this.$set(this.showObj, ['groupId' + element], undefined)
+        this.$set(this.showObj, ['channel' + element], undefined)
+      })
+      this.getChannel()
+      this.getDataList()
+    })
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+  },
+  methods: {
+    getDataList () {
+      this.queryParam.groupId = this.showObj['groupId' + this.currentTab]
+      this.queryParam.channel = this.showObj['channel' + this.currentTab]
+      this.queryParam.responseTime = this.showObj['responseTime' + this.currentTab]
+      this.queryParam.period = this.showObj['period' + this.currentTab]
+      this.queryParam.replyTime = this.showObj['replyTime' + this.currentTab]
+      this.queryParam.conversationTime = this.showObj['conversationTime' + this.currentTab]
+      this.queryParam.tab = this.currentTab === 'day' ? 'day' : this.currentTab === 'month' ? 'month' : 'time'
+      this.loading = true
+      this.axios({
+        url: '/chat/customerReport/responseInit',
+        data: this.queryParam
+      }).then(res => {
+        this.loading = false
+        if (res.result?.total) {
+          const obj = { ...res.result.total, ...{ id: parseInt(Math.random() * (10000000 - 100000 + 1) + 100000, 10), conversationDate: this.$t('合计') } }
+          res.result.data.push(obj)
+        }
+        this.showTable['dataList' + this.currentTab] = res.result.data
+        this.$forceUpdate()
+      })
+    },
+    // 获取渠道
+    getChannel () {
+      this.axios({
+        url: '/chat/channel/getChannel'
+      }).then(res => {
+        this.channelLists = res.result
+      })
+    },
+    handleTabChange (activeKey) {
+      this.currentTab = activeKey
+      if (['day', 'month'].includes(activeKey)) {
+        delete this.queryParam.period
+        this.columns[1].title = this.$t('会话开始时间')
+        this.columns[1].sorter = (a, b) => Date.parse(b.conversationDate) - Date.parse(a.conversationDate)
+        if (activeKey === 'month' && !this.showApi.monthIs) {
+          this.getDataList()
+          this.showApi.monthIs = true
+        }
+      } else {
+        this.$set(this.queryParam, 'period', '60')
+        this.columns[1].title = this.$t('会话时间段')
+        this.columns[1].sorter = false
+        if (!this.showApi.timeIs) {
+          this.getDataList()
+          this.showApi.timeIs = true
+        }
+      }
+      this.queryParam.startTime = this.showObj['sessionTime' + this.currentTab][0].format('YYYY-MM-DD')
+      this.queryParam.endTime = this.showObj['sessionTime' + this.currentTab][1].format('YYYY-MM-DD')
+    },
+    // 重置
+    reset () {
+      this.showObj['groupId' + this.currentTab] = undefined
+      this.showObj['channel' + this.currentTab] = undefined
+      this.showObj['period' + this.currentTab] = this.currentTab === 'time' ? '60' : undefined
+      const { firstResponseQualifiedTime, averageResponseQualifiedTime, longSessionTime } = this.settingControl
+      this.showObj['responseTime' + this.currentTab] = Number(firstResponseQualifiedTime)
+      this.showObj['replyTime' + this.currentTab] = Number(averageResponseQualifiedTime)
+      this.showObj['conversationTime' + this.currentTab] = Number(longSessionTime)
+      const startDayTime = this.moment().startOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      const startMonth = this.moment().startOf('month').format('YYYY-MM-DD')
+      const endDayTime = this.moment().endOf('day').subtract('day', 1).format('YYYY-MM-DD')
+      this.queryParam = {
+        responseTime: Number(this.settingControl.firstResponseQualifiedTime),
+        replyTime: Number(this.settingControl.averageResponseQualifiedTime),
+        conversationTime: Number(this.settingControl.longSessionTime),
+        startTime: ['day', 'time'].includes(this.currentTab) ? startDayTime : startMonth,
+        endTime: ['day', 'time'].includes(this.currentTab) ? endDayTime : startMonth,
+        period: this.currentTab === 'time' ? '60' : undefined,
+        sortField: 'conversationDate',
+        sortOrder: 'descend',
+        tab: this.currentTab
+      }
+      const day = [this.moment().startOf('day').subtract('day', 1), this.moment().endOf('day').subtract('day', 1)]
+      const month = [this.moment().startOf('month'), this.moment().startOf('month')]
+      this.showObj['sessionTime' + this.currentTab] = ['day', 'time'].includes(this.currentTab) ? day : this.currentTab === 'month' ? month : ''
+      this.getDataList()
+    },
+    onOpenChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+    },
+    onCalendarChange (dates) {
+      // 获取手动选择的时间段起始值
+      this.disabledCurrent = dates[0]
+    },
+    disabledDate (current, date) {
+      if (!this.disabledCurrent) return false
+      return (current && current < this.moment(this.disabledCurrent).subtract(31, 'days').endOf('day')) || current > this.moment(this.disabledCurrent).add(30, 'days').endOf('day')
+    },
+    getInputTime (date, dateString) {
+      this.queryParam.startTime = dateString[0]
+      this.queryParam.endTime = dateString[1]
+    },
+    // 控制月份中改变的设置
+    openMonthChange (status) {
+      // 清空禁用时间段的设置
+      this.disabledCurrent = null
+      this.openMonth = status
+    },
+    handlePanelChange (value, mode) {
+      const chooseTime = value
+      this.modeMonth = [
+        mode[0] === 'date' ? 'month' : mode[0],
+        mode[1] === 'date' ? 'month' : mode[1]
+      ]
+      if (mode[0] === 'date') {
+        this.disabledCurrent = value[0]
+      } else {
+        this.disabledCurrent = null
+      }
+      if (mode[1] === 'date') {
+        this.openMonth = false
+        const time = value[1].diff(value[0], 'month')
+        if (time > 11) {
+          chooseTime[0] = this.moment(value[1]).subtract(11, 'M').startOf('day')
+        }
+      }
+      this.queryParam.startTime = chooseTime[0].format('YYYY-MM-DD')
+      this.queryParam.endTime = chooseTime[1].format('YYYY-MM-DD')
+      this.showObj['sessionTime' + this.currentTab] = chooseTime
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        number: 'SysResponse',
+        className: 'ExportChatStatsTask',
+        parameter: {
+          condition: {
+            req: Object.assign(this.queryParam),
+            type: 'response'
+          }
+        }
+      })
+    }
+  }
+}
+</script>

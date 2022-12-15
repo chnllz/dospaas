@@ -1,0 +1,163 @@
+import Vue from 'vue'
+import router from './router'
+import store from './store'
+import storage from '@/utils/storage'
+import NProgress from 'nprogress' // progress bar
+import '@/components/NProgress/nprogress.less' // progress bar custom style
+import { setDocumentTitle } from '@/utils/domUtil'
+import VueCookies from 'vue-cookies'
+import { axios } from './utils/request'
+import { throttle } from 'echarts/lib/export'
+import cloneDeep from 'lodash.clonedeep'
+import { Base64 } from 'js-base64'
+
+Vue.use(VueCookies)
+const getQueryVariable = (variable, type) => {
+  const query = window.location.search.substring(1)
+  const vars = query.split('&')
+  const arr = []
+  const search = {}
+  for (let i = 0; i < vars.length; i++) {
+    const pair = vars[i].split('=')
+    if (type) {
+      search[pair[0]] = pair[1]
+    } else if (pair[0] === variable) {
+      return pair[1]
+    } else if (!variable && pair[0] !== 'login') {
+      arr.push(vars[i])
+    }
+  }
+  return type ? search : arr.length ? arr.join('&') : ''
+}
+const allQuery = getQueryVariable('', 'all')
+const login = getQueryVariable('login')
+// 设置cookie的存储路径和生命周期
+VueCookies.config('Session', process.env.VUE_APP_BASE_URL)
+NProgress.configure({ showSpinner: false }) // NProgress Configuration
+if (!storage.get('rememberMe') && VueCookies.get('Login') !== 'true') {
+  storage.remove('Access-Token')
+}
+
+const reSetRouters = (list) => {
+  let childRoute = []
+  list.forEach(item => {
+    if (!item.children) {
+      childRoute = childRoute.concat([item])
+    } else {
+      childRoute = childRoute.concat(reSetRouters(item.children))
+    }
+  })
+  return childRoute
+}
+
+router.beforeEach((to, from, next) => {
+  Vue.prototype.currentRoute = to
+  NProgress.start() // start progress bar
+  const domTitle = store.getters.setting.title
+  if (domTitle) {
+    if (to.meta && to.meta.title) {
+      setDocumentTitle(`${to.meta.title} - ${domTitle}`)
+    } else {
+      setDocumentTitle(`${domTitle}`)
+    }
+  }
+  if (storage.get('Access-Token')) {
+    /* has token */
+    if (to.path === '/user/login') {
+      next({ path: '/' })
+      NProgress.done()
+    } else {
+      if (store.getters.roles.length === 0) {
+        store.dispatch('GetInfo').then(res => {
+          const roles = res.result && res.result.role
+          store.dispatch('GenerateRoutes', { roles }).then(() => {
+            // 根据roles权限生成可访问的路由表
+            // 动态添加可访问路由表
+            const reChild = cloneDeep(store.getters.addRouters)
+            reChild[0].children = reSetRouters(reChild[0].children)
+            router.addRoutes(reChild)
+            next({ ...to, replace: true })
+          })
+        }).catch((error) => {
+          store.commit('NOTIFICATION', error)
+          store.dispatch('Logout').then(res => {
+            next({ path: '/user/login' })
+          })
+        })
+      } else {
+        next()
+      }
+    }
+  } else {
+    const protocol = location.protocol
+    const host = location.host
+    const pathname = location.pathname
+    // const basePath = location.href
+    const jumpPath = protocol + '//' + host + pathname
+    const authentication = getQueryVariable('authentication')
+    if (login) {
+      let loginSys = () => {
+        axios({
+          url: login,
+          data: Object.assign({}, allQuery, {
+            serviceUrl: jumpPath
+          })
+        }).then(res => {
+          if (res.code === 0) {
+            storage.set('Access-Token', res.result.token)
+            VueCookies.set('Login', 'true')
+            next({ path: '/' })
+          } else {
+            store.commit('NOTIFICATION', res)
+            setTimeout(() => {
+              next({ path: '/user/login' })
+            }, 3000)
+          }
+        })
+      }
+      loginSys = throttle(loginSys, 3000)
+      loginSys()
+    } else if (authentication) {
+      const str = Base64.decode(authentication) || '{}'
+      let authenticationObj = {}
+      try {
+        authenticationObj = JSON.parse(str)
+      } catch (error) {
+        console.error(error)
+      }
+      let getAuthentication = () => {
+        axios({
+          url: authenticationObj.url,
+          data: {
+            url: `${window.location.href}?authentication=${authentication}`
+          }
+        }).then(res => {
+          if (res.code === 0 && res.result && res.result.token) {
+            storage.set('Access-Token', res.result.token)
+            storage.set('rememberMe', true)
+            location.href = res.result.url
+          } else if (res.code === 0 && res.result) {
+            location.href = res.result
+          } else {
+            store.commit('NOTIFICATION', res)
+            setTimeout(() => {
+              location.href = jumpPath
+            }, 3000)
+          }
+        })
+      }
+      getAuthentication = throttle(getAuthentication, 3000)
+      getAuthentication()
+    } else if (to.meta.requireLogin === false) {
+      // 在免登录白名单，直接进入
+      next()
+    } else {
+      next({ path: '/user/login' })
+      NProgress.done() // if current page is login will not trigger afterEach hook, so manually handle it
+    }
+  }
+})
+
+router.afterEach(() => {
+  NProgress.done() // finish progress bar
+})

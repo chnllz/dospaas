@@ -1,0 +1,527 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="1200" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('选择权限')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group
+            v-if="config.selectType == 'radio'"
+            v-decorator="['fieldpriv', { initialValue: fieldpriv }]"
+            @change="
+              (e) => {
+                fieldpriv = e.target.value
+              }
+            "
+          >
+            <a-radio v-for="(value, key) in privArr" :key="key" :value="key">{{ value }}</a-radio>
+          </a-radio-group>
+          <a-checkbox-group
+            v-else-if="config.selectType == 'checkbox'"
+            v-decorator="['fieldpriv', { initialValue: fieldpriv }]"
+            @change="
+              (e) => {
+                fieldpriv = e
+              }
+            "
+          >
+            <a-checkbox v-for="(value, key) in privArr" :key="key" :value="key">{{ value }}</a-checkbox>
+          </a-checkbox-group>
+        </a-form-item>
+        <a-row :gutter="20">
+          <a-col :span="12">
+            <a-tabs v-model="activeKey" size="small">
+              <a-tab-pane key="user" :tab="$t('用户')">
+                <a-row type="flex" :gutter="10" style="margin: 10px 0">
+                  <a-col flex="auto">
+                    <a-form-item>
+                      <a-select v-model="userParamType" @change="userParam = {}">
+                        <a-select-option value="username">{{ $t('账号') }}</a-select-option>
+                        <a-select-option value="department">{{ $t('部门') }}</a-select-option>
+                        <a-select-option value="role">{{ $t('角色') }}</a-select-option>
+                      </a-select>
+                    </a-form-item>
+                  </a-col>
+                  <a-col flex="300px">
+                    <a-form-item v-if="userParamType === 'username'">
+                      <a-input-search
+                        :placeholder="$t('请输入账号称搜索')"
+                        @search="
+                          (e) => {
+                            userParam.username = e
+                            $refs.tableUser.refresh(true)
+                          }
+                        "
+                      />
+                    </a-form-item>
+                    <a-form-item v-else-if="userParamType === 'department'">
+                      <a-input-search
+                        :placeholder="$t('请输入部门名称搜索')"
+                        @search="
+                          (e) => {
+                            userParam.departmentName = e
+                            $refs.tableUser.refresh(true)
+                          }
+                        "
+                      />
+                    </a-form-item>
+                    <a-form-item v-else>
+                      <a-input-search
+                        :placeholder="$t('请输入角色名称搜索')"
+                        @search="
+                          (e) => {
+                            userParam.roleName = e
+                            $refs.tableUser.refresh(true)
+                          }
+                        "
+                      />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+                <s-table
+                  ref="tableUser"
+                  size="small"
+                  rowKey="id"
+                  :columns="columnsUser"
+                  :data="loadUserData"
+                  :sorter="{ field: 'id', order: 'descend' }"
+                >
+                  <div slot="action" slot-scope="text, record">
+                    <a @click="dataSelect(record, 'user')">{{ $t('选择') }}</a>
+                  </div>
+                </s-table>
+              </a-tab-pane>
+              <a-tab-pane key="department" :tab="$t('部门')">
+                <a-table
+                  ref="tableDepartment"
+                  size="small"
+                  rowKey="value"
+                  :columns="columnsDepartment"
+                  :dataSource="selectData"
+                  :pagination="false"
+                  :sorter="{ field: 'listOrder', order: 'ascend' }"
+                  @expand="getDepartment"
+                >
+                  <div slot="title">
+                    <a-select
+                      show-search
+                      allowClear
+                      :value="undefined"
+                      mode="multiple"
+                      :placeholder="$t('输入部门名称进行搜索')"
+                      :default-active-first-option="false"
+                      :show-arrow="false"
+                      :filter-option="false"
+                      :not-found-content="null"
+                      :autoClearSearchValue="false"
+                      @search="getDepartmentData"
+                      @change="
+                        (e) => {
+                          if (!e) {
+                            departmentSearch = []
+                          }
+                        }
+                      "
+                    >
+                      <a-select-option
+                        v-for="dep in departmentSearch"
+                        :key="dep.departmentId"
+                        :value="dep.departmentId"
+                        @click="depSelect(dep)"
+                      >
+                        {{ dep.fullDepartmentName }}
+                      </a-select-option>
+                    </a-select>
+                  </div>
+                  <span slot="label" slot-scope="text, record">
+                    <a-icon v-if="record.icon" :type="record.icon" />
+                    {{ text }}
+                  </span>
+                  <div slot="action" slot-scope="text, record">
+                    <a @click="dataSelect(record, 'department')">{{ $t('选择') }}</a>
+                  </div>
+                </a-table>
+              </a-tab-pane>
+              <a-tab-pane key="role" :tab="$t('角色')">
+                <a-card size="small">
+                  <a-input-search
+                    v-model="queryParam.roleName"
+                    style="margin-bottom: 8px"
+                    :placeholder="$t('请输入角色名称')"
+                    @search="$refs.tableRole.refresh(true)"
+                  />
+                  <s-table
+                    ref="tableRole"
+                    size="small"
+                    rowKey="roleId"
+                    :columns="columnsRole"
+                    :data="loadDataTable"
+                    :sorter="{ field: 'listOrder', order: 'ascend' }"
+                  >
+                    <div slot="action" slot-scope="text, record">
+                      <a @click="dataSelect(record, 'role')">{{ $t('选择') }}</a>
+                    </div>
+                  </s-table>
+                </a-card>
+              </a-tab-pane>
+            </a-tabs>
+          </a-col>
+          <a-col :span="12">
+            <a-popconfirm
+              :title="$t('您确认要清空所有吗?')"
+              :ok-text="$t('确认')"
+              :cancel-text="$t('取消')"
+              @confirm="userListData = []"
+            >
+              <a-button style="margin-bottom: 10px">{{ $t('清空') }}</a-button>
+            </a-popconfirm>
+            <a-table
+              size="small"
+              rowKey="id"
+              :columns="columnsFieldPriv"
+              :dataSource="userListData"
+              :pagination="{ pageSize: 20 }"
+            >
+              <div slot="permissions" slot-scope="text">
+                <div v-if="text.includes('visit')">{{ $t('可访问') }}</div>
+                <div v-if="text.includes('inherit')">{{ $t('继承') }}</div>
+                <div v-if="text.includes('allow')">{{ $t('允许') }}</div>
+                <div v-if="text.includes('readonly')">{{ $t('只读') }}</div>
+                <div v-if="text.includes('hidden')">{{ $t('隐藏') }}</div>
+                <div v-if="text.includes('priv_flow')">{{ $t('部门待办') }}</div>
+                <div v-if="text.includes('all_flow')">{{ $t('所有流程') }}</div>
+                <div v-if="text.includes('all_process')">{{ $t('所有待办') }}</div>
+              </div>
+              <span slot="type" slot-scope="text">
+                <a-badge v-if="text == 'department'" status="success" :text="$t('部门')" />
+                <a-badge v-else-if="text == 'user'" status="success" :text="$t('用户')" />
+                <a-badge v-else-if="text == 'role'" status="success" :text="$t('角色')" />
+              </span>
+              <span slot="data" slot-scope="text, record">
+                <template v-for="(value, key) in departmentArr">
+                  <span v-if="record.type === 'department' && text == key" :key="key">
+                    <a-icon type="apartment" />
+                    {{ value }}
+                  </span>
+                </template>
+                <template v-for="(value, key) in roleArr">
+                  <span v-if="record.type === 'role' && text == key" :key="key">
+                    <a-icon type="team" />
+                    {{ value }}
+                  </span>
+                </template>
+                <span v-if="record.type == 'user'">
+                  <a-icon type="user" />
+                  {{ text }}
+                </span>
+              </span>
+              <div slot="action" slot-scope="text, record">
+                <a @click="handleDelete(record)">{{ $t('删除') }}</a>
+              </div>
+            </a-table>
+          </a-col>
+        </a-row>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      replaceFields: {
+        title: 'title',
+        key: 'value'
+      },
+      activeKey: 'user',
+      userParamType: 'username',
+      config: {},
+      defaultFlag: false,
+      visible: false,
+      loading: false,
+      labelCol: { span: 2 },
+      wrapperCol: { span: 22 },
+      form: this.$form.createForm(this),
+      data: [],
+      userListData: [],
+      defaultSelectedKeys: [], // 单选初始化值
+      checkedKeys: [], // 多选初始化值
+      columnsFieldPriv: [{
+        title: this.$t('名称'),
+        dataIndex: 'data',
+        scopedSlots: { customRender: 'data' }
+      }, {
+        title: this.$t('权限'),
+        dataIndex: 'permissions',
+        width: 80,
+        scopedSlots: { customRender: 'permissions' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 80,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsDepartment: [{
+        title: this.$t('名称'),
+        dataIndex: 'label',
+        scopedSlots: { customRender: 'label' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsUser: [{
+        title: this.$t('账号'),
+        dataIndex: 'username',
+        sorter: true
+      }, {
+        title: this.$t('真实姓名'),
+        dataIndex: 'realName',
+        sorter: true
+      }, {
+        title: this.$t('所属部门'),
+        dataIndex: 'departmentName',
+        sorter: true
+      }, {
+        title: this.$t('所属角色'),
+        dataIndex: 'roleName',
+        sorter: true
+      }, {
+        title: this.$t('操作'),
+        align: 'center',
+        dataIndex: 'id',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      columnsRole: [{
+        title: this.$t('角色'),
+        dataIndex: 'roleName'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 50,
+        scopedSlots: { customRender: 'action' }
+      }],
+      expandedKeys: [],
+      autoExpandParent: false,
+      selectList: [], // 默认值单选选中的用户
+      selectData: [], // 部门选择，角色选择
+      rowSelectionRole: {
+        selectedRowKeys: [],
+        selectedRows: [],
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.rowSelectionRole.selectedRowKeys = selectedRowKeys
+          this.rowSelectionRole.selectedRows = selectedRows
+        }
+      },
+      departmentArr: [],
+      departmentSearch: [],
+      roleArr: [],
+      queryParam: {},
+      userParam: {},
+      depParam: {},
+      list: [], // 部门角色选择
+      privArr: {},
+      fieldpriv: '',
+      recordIndex: '',
+      recordKey: ''
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.loading = true
+      this.data = config.record
+      this.activeKey = 'user'
+      this.recordIndex = config.index
+      this.recordKey = config.key
+      this.userListData = this.data[this.recordKey] || []
+      this.fieldpriv = config.defaultpriv
+      this.privArr = config.privArr
+      this.list = this.userListData.filter(item => item.type === 'department')
+      this.rowSelectionRole.selectedRowKeys = []
+      this.rowSelectionRole.selectedRows = []
+      this.selectData = []
+      this.axios({
+        url: '/admin/department/getChildren',
+        data: { 'parentDepartmentId': null }
+      }).then((res) => {
+        this.loading = false
+        res.result.forEach(item => {
+          item.icon = 'home'
+          if (item.childCount) {
+            item.title = item.label + '(' + item.childCount + ')'
+            item.children = [{
+              value: parseInt(Math.random() * (100000 - 100 + 1) + 100, 10)
+            }]
+          } else {
+            item.title = item.label
+            item.isLeaf = true
+          }
+        })
+        this.selectData = res.result
+        // 初始化值
+      })
+      this.axios({
+        url: '/admin/department/getDepartmentArr'
+      }).then((res) => {
+        this.departmentArr = res.result.data
+      })
+      this.axios({
+        url: '/admin/role/getRoleArr'
+      }).then((res) => {
+        this.roleArr = res.result.data
+      })
+    },
+    getDepartmentData (e) {
+      const page = {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'id',
+        sortOrder: 'descend'
+      }
+      if (e) {
+        this.axios({
+          url: '/admin/search/departmentSearch',
+          data: Object.assign(page, { searchName: e })
+        }).then(res => {
+          this.departmentSearch = res.result.data
+        })
+      } else {
+        this.departmentSearch = []
+      }
+    },
+
+    loadUserData (parameter) {
+      return this.axios({
+        url: '/admin/search/userSearch',
+        data: Object.assign(parameter, this.userParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    getDepartment (expanded, record) {
+      this.axios({
+        url: '/admin/department/getChildren',
+        data: { parentDepartmentId: record.value }
+      }).then(res => {
+        res.result.forEach(item => {
+          item.icon = 'apartment'
+          if (!item.childCount) {
+            item.isLeaf = true
+            item.title = item.label
+          } else {
+            item.children = [{
+              value: parseInt(Math.random() * (100000 - 100 + 1) + 100, 10)
+            }]
+            item.title = item.label + '(' + item.childCount + ')'
+          }
+        })
+        const array = res.result
+        this.$set(record, 'children', array)
+      })
+    },
+    dataSelect (record, type) {
+      let obj = {}
+      if (type === 'user') {
+        obj = {
+          permissions: JSON.parse(JSON.stringify(this.fieldpriv)),
+          type: type,
+          data: record.username,
+          id: record.username
+        }
+      } else {
+        obj = {
+          permissions: JSON.parse(JSON.stringify(this.fieldpriv)),
+          type: type,
+          data: type === 'role' ? record.roleId : record.value,
+          id: type === 'role' ? record.roleId : record.value
+        }
+      }
+      if (this.userListData.every(item => item.id !== obj.id)) {
+        this.userListData.push(obj)
+      }
+    },
+    depSelect (data) {
+      const obj = {
+        permissions: JSON.parse(JSON.stringify(this.fieldpriv)),
+        type: 'department',
+        data: data.departmentId,
+        id: data.departmentId
+      }
+      if (this.userListData.every(item => item.id !== obj.id)) {
+        this.userListData.push(obj)
+      }
+    },
+    onExpand (expandedKeys) {
+      this.expandedKeys = expandedKeys
+      this.autoExpandParent = false
+    },
+    // 单选
+    onSelect (selectedKeys, info) {
+      if (this.defaultFlag) {
+        this.selectList = selectedKeys[0]
+      }
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/role/list',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 多选
+    onCheck (val, e, type) {
+      this.list = e.checkedNodes.map(item => {
+        const obj = {}
+        obj.title = item.data.props.label
+        obj.value = item.data.props.value
+        obj.id = item.data.props.value
+        obj.permissions = this.fieldpriv
+        obj.type = item.data.props.type
+        obj.data = item.data.props.value
+        return obj
+      })
+      this.checkedKeys = this.list.map(item => item.value)
+    },
+    unique (arr, val) {
+      const res = new Map()
+      return arr.filter(item => !res.has(item[val]) && res.set(item[val], 1))
+    },
+    // 删除选中用户
+    handleDelete (record) {
+      const dataSource = [...this.userListData]
+      if (this.activeKey === 'role') {
+        this.userListData = dataSource.filter(item => item.data !== record.data)
+        this.rowSelectionRole.selectedRowKeys = this.rowSelectionRole.selectedRowKeys.filter(item => item !== record.data)
+        this.rowSelectionRole.selectedRows = this.rowSelectionRole.selectedRows.filter(item => item.data !== record.data)
+        this.$refs.tableRole.updateSelect(this.rowSelectionRole.selectedRowKeys, this.rowSelectionRole.selectedRows)
+      } else {
+        this.userListData = dataSource.filter(item => item.data !== record.data)
+      }
+      this.checkedKeys = this.checkedKeys.filter(item => item !== record.data)
+      this.list = JSON.parse(JSON.stringify(this.userListData))
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          this.visible = false
+          this.$message.success(this.$t('操作成功'))
+          if (this.config.alias) {
+            this.$emit('ok', { data: this.userListData, recordIndex: this.recordIndex, alias: this.config.alias })
+          } else {
+            this.$emit('func', this.userListData, this.recordIndex)
+          }
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,272 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = { month: moment() }
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('部门')">
+              <a-tree-select
+                v-model="queryParam.department"
+                :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                treeNodeFilterProp="title"
+                showSearch
+                allowClear
+                :replaceFields="{
+                  value: 'departmentId',
+                  title: 'name'
+                }"
+                style="width: 100%"
+                :tree-data="departmentList"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('班次')">
+              <a-select v-model="queryParam.bc" allowClear>
+                <a-select-option v-for="(item, index) in bcList" :key="index" :value="item.bcmc">
+                  {{ item.bcmc }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('所属月份')">
+              <a-month-picker
+                v-model="queryParam.month"
+                format="YYYY-MM"
+                :allowClear="false"
+                style="width: 100%"
+                :placeholder="$t('请选择月份')"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('用户')">
+              <a-input v-model="queryParam.username" allowClear />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button icon="upload" type="primary" @click="handleImport">{{ $t('排班导入') }}</a-button>
+      <a-button icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+      <a-button @click="intelligentScheduling">{{ $t('智能排班') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :scroll="{ x: 100 }"
+      :data="loadDataTable"
+      :showPagination="false"
+      :sorter="{ field: 'id', order: 'ascend' }"
+    >
+      <div slot="username" slot-scope="text, record">
+        <template v-if="record.user.userName">{{ record.user.userName }}（{{ record.user.realName }}）</template>
+        <template v-else>--</template>
+      </div>
+      <div slot="departmentName" slot-scope="text, record">
+        <template v-if="record.user.departmentName">{{ record.user.departmentName }}</template>
+        <template v-else>--</template>
+      </div>
+    </s-table>
+    <general-export ref="generalExport" @ok="handleOk" />
+    <schedule-drawer ref="scheduleDrawer" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('crm'),
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport'),
+    ScheduleDrawer: () => import('./ScheduleDrawer')
+  },
+  data () {
+    return {
+      colLayout: {},
+      advanced: false,
+      userFormKey: 'userForm',
+      windowHeight: document.documentElement.clientHeight,
+      // 搜索参数
+      queryParam: {
+        month: this.moment()
+      },
+      departmentList: [],
+      bcList: [],
+      // 表头
+      columns: []
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+    this.getBcList()
+    this.getDepartmentList()
+  },
+  mounted () {
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+  },
+  methods: {
+    getBcList () {
+      this.axios({
+        url: '/crm/pbxx/getBcList'
+      }).then(res => {
+        this.bcList = res.result.data
+      })
+    },
+    getDepartmentList () {
+      this.axios({
+        url: '/crm/pbxx/getDepartmentList'
+      }).then(res => {
+        this.departmentList = res.result.data
+      })
+    },
+    changeColumn (dataList) {
+      const monthValue = this.queryParam.month.format('YYYY-MM')
+      const year = this.moment().year()
+      const month = parseInt(monthValue.split('-')[1])
+      const week = [this.$t('一'), this.$t('二'), this.$t('三'), this.$t('四'), this.$t('五'), this.$t('六'), this.$t('日')]
+      const day = new Date(year, month, 0).getDate()
+      this.columns = [{
+        title: this.$t('用户'),
+        scopedSlots: { customRender: 'username' },
+        fixed: 'left',
+        align: 'center',
+        width: 190
+      }, {
+        title: this.$t('部门'),
+        scopedSlots: { customRender: 'departmentName' },
+        fixed: 'left',
+        align: 'center',
+        width: 190
+      }, {
+        title: this.$t('排班总工时'),
+        dataIndex: 'count',
+        fixed: 'left',
+        customRender: (text) => {
+          return text ?? '--'
+        },
+        align: 'center',
+        width: 90
+      }]
+      for (let i = 1; i < day + 1; i++) {
+        const date = (month < 10 ? ('0' + month) : month) + '/' + (i < 10 ? ('0' + i) : i)
+        this.columns.splice(this.columns.length, 0, {
+          dataIndex: 'data.' + date,
+          customRender: (text, record) => {
+            if (!text) {
+              text = ''
+            }
+            const style = { color: text.includes('请假') ? 'red' : 'blue' }
+            let string = ''
+            const content = text.split(' ')
+            if (dataList.length > 0) {
+              if (text === 'OFF') {
+                string = 'OFF'
+              } else if (text.includes('请假 日程')) {
+                string = (<div><div>{content[0]}</div><div style="color: red">{content[1]}</div><div style="color: blue">{content[2]}</div></div>)
+              } else if (text.includes('请假') || text.includes('日程')) {
+                string = <div><div>{content[0]}</div><div style={style}>{content[1]}</div></div>
+              } else {
+                string = (<div><div>{content[0]}</div></div>)
+              }
+            }
+            return string
+          },
+          title: () => {
+            const nowWeek = this.moment(year + '-' + month + '-' + i).format('E')
+            return <div><div>{week[nowWeek - 1]}</div><div>{date}</div></div>
+          },
+          align: 'center',
+          width: 180
+        })
+        // this.scroll.x = this.scroll.x + 140
+      }
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    },
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/crm/pbxx/init',
+        data: Object.assign({
+          sortField: 'id', sortOrder: 'ascend'
+        }, {
+          username: this.queryParam.username,
+          month: this.queryParam.month.format('YYYY-MM'),
+          bc: this.queryParam.bc,
+          department: this.queryParam.department
+        })
+      }).then(res => {
+        if (res.result.data.length > 0) {
+          this.changeColumn(res.result.data)
+        }
+        res.result.data.forEach(item => {
+          item.id = parseInt(Math.random() * (100000000 - 1000000 + 1) + 1000000, 10)
+        })
+        return res.result
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    handleImport () {
+      this.$refs.generalExport.show({
+        title: this.$t('排班导入'),
+        type: 'import',
+        number: 'SysPbxx',
+        className: 'ImportPbxxSettingTask',
+        filePath: 'static/template/排班导入模板.xlsx'
+      })
+    },
+    handleExport () {
+      const monthValue = this.queryParam.month.format('YYYY-MM')
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportPbTask',
+        parameter: {
+          condition: { ...this.queryParam, ...{ month: monthValue } }
+        }
+      })
+    },
+    intelligentScheduling () {
+      this.$refs.scheduleDrawer.show()
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+//暂时解决滚动条无法滚动
+
+/deep/ .ant-table-fixed-left {
+  overflow: hidden !important;
+  height: 95% !important;
+}
+</style>

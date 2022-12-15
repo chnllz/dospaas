@@ -1,0 +1,579 @@
+<template>
+  <div>
+    <div style="width: 100%">
+      <div>
+        <span>{{ $t('以下组合方式') }}</span>
+        <a-select v-model="logic" style="width: 100px; padding-left: 10px" size="small">
+          <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+          <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+        </a-select>
+      </div>
+      <a-row v-for="(item, index) in data" :key="index" type="flex" align="middle" :gutter="8" style="margin-top: 16px">
+        <a-col flex="auto">
+          <a-select
+            v-model="item.type"
+            size="small"
+            @change="
+              (val) => {
+                typeChange(val, index)
+              }
+            "
+          >
+            <a-select-option value="notSet">{{ $t('无条件满足') }}</a-select-option>
+            <a-select-option value="field">{{ $t('字段') }}</a-select-option>
+            <a-select-option value="currentUser">{{ $t('当前用户') }}</a-select-option>
+            <a-select-option value="currentDepartment">{{ $t('当前用户所属部门') }}</a-select-option>
+            <a-select-option value="currentRole">{{ $t('当前用户所属角色') }}</a-select-option>
+            <a-select-option value="custom">{{ $t('自定义') }}</a-select-option>
+          </a-select>
+        </a-col>
+        <a-col v-if="item.type === 'custom'" flex="1">
+          <a-row type="flex" align="middle">
+            <a-col :span="24">
+              <querier-codemirror-input ref="querierCodemirrorInput" :params.sync="item.condition" />
+            </a-col>
+            <div
+              style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+              size="small"
+              @click="handleCodemirror(item, index)"
+            >
+              fx
+            </div>
+          </a-row>
+        </a-col>
+        <a-col v-else-if="item.type === 'notSet'" flex="auto"></a-col>
+        <a-col v-else-if="item.type === 'field'" :span="4">
+          <a-select
+            v-model="item.alias"
+            size="small"
+            show-search
+            :allowClear="true"
+            option-filter-prop="children"
+            @change="
+              (val) => {
+                item.condition = [
+                  {
+                    include: '',
+                    value: ''
+                  }
+                ]
+                fieldArr.forEach((item1) => {
+                  if (item1.alias === val) {
+                    item1.settings = JSON.parse(item1.setting)
+                    // 判断是否有数据字典
+                    item.src = item1.settings.form.src ? item1.settings.form.src : ''
+                    item.formType = item1.formType
+                    item.fieldId = item1.fieldId
+                    item.fieldType = item1.fieldType
+                    if (item1.formType === 'treeselect') {
+                      item.dataSource = item1.settings.attribute.dataSource
+                    } else if (item.src) {
+                      getOption(item)
+                    } else {
+                      item.option = []
+                    }
+                    item.form = item1.settings.form
+                    // 根据字段，给出相应条件
+                    if (['text', 'textarea', 'serialnumber'].indexOf(item1.formType) !== -1) {
+                      item.conditionArr = [
+                        { enName: 'equal', cnName: $t('等于') },
+                        { enName: 'ne', cnName: $t('不等于') },
+                        { enName: 'contain', cnName: $t('包含') },
+                        { enName: 'nc', cnName: $t('不包含') },
+                        { enName: 'bw', cnName: $t('开始于') },
+                        { enName: 'ew', cnName: $t('结束于') },
+                        { enName: 'em', cnName: $t('为空') },
+                        { enName: 'nem', cnName: $t('不为空') }
+                      ]
+                    } else if (['radio', 'switch', 'combobox', 'score'].indexOf(item1.formType) !== -1) {
+                      item.conditionArr = [
+                        { enName: 'equal', cnName: $t('等于') },
+                        { enName: 'ne', cnName: $t('不等于') },
+                        { enName: 'em', cnName: $t('为空') },
+                        { enName: 'nem', cnName: $t('不为空') }
+                      ]
+                    } else if (['number', 'datetime'].indexOf(item1.formType) !== -1) {
+                      item.conditionArr = [
+                        { enName: 'equal', cnName: $t('等于') },
+                        { enName: 'ne', cnName: $t('不等于') },
+                        { enName: 'great', cnName: $t('大于') },
+                        { enName: 'ge', cnName: $t('大于等于') },
+                        { enName: 'lt', cnName: $t('小于') },
+                        { enName: 'le', cnName: $t('小于等于') },
+                        { enName: 'em', cnName: $t('为空') },
+                        { enName: 'nem', cnName: $t('不为空') }
+                      ]
+                    } else if (['associated'].indexOf(item1.formType) !== -1) {
+                      item.conditionArr = [
+                        { enName: 'equal', cnName: $t('等于') },
+                        { enName: 'ne', cnName: $t('不等于') },
+                        { enName: 'contain', cnName: $t('包含') },
+                        { enName: 'nc', cnName: $t('不包含') },
+                        { enName: 'bw', cnName: $t('开始于') },
+                        { enName: 'ew', cnName: $t('结束于') },
+                        { enName: 'em', cnName: $t('为空') },
+                        { enName: 'nem', cnName: $t('不为空') }
+                      ]
+                    } else if (['address', 'treeselect', 'tag'].indexOf(item1.formType) !== -1) {
+                      item.conditionArr = [
+                        { enName: 'contain', cnName: $t('包含') },
+                        { enName: 'nc', cnName: $t('不包含') },
+                        { enName: 'em', cnName: $t('为空') },
+                        { enName: 'nem', cnName: $t('不为空') }
+                      ]
+                    } else if (['cascader', 'checkbox'].indexOf(item1.formType) !== -1) {
+                      item.conditionArr = [
+                        { enName: 'equal', cnName: $t('等于') },
+                        { enName: 'ne', cnName: $t('不等于') },
+                        { enName: 'contain', cnName: $t('包含') },
+                        { enName: 'nc', cnName: $t('不包含') },
+                        { enName: 'em', cnName: $t('为空') },
+                        { enName: 'nem', cnName: $t('不为空') }
+                      ]
+                    }
+                  }
+                })
+              }
+            "
+          >
+            <a-select-option v-for="(fieldItem, fieldIndex) in fieldArr" :key="fieldIndex" :value="fieldItem.alias">
+              {{ fieldItem.name }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+        <a-col v-if="item.type !== 'field' && item.type !== 'custom' && item.type !== 'notSet'" :span="4">
+          <a-select v-model="item.include" size="small">
+            <a-select-option value="bl">{{ $t('属于') }}</a-select-option>
+            <a-select-option value="nbl">{{ $t('不属于') }}</a-select-option>
+          </a-select>
+        </a-col>
+        <a-col v-if="item.type !== 'custom' && item.type !== 'notSet'" :span="12">
+          <a-row
+            v-for="(includeItem, includeIndex) in item.condition"
+            :key="includeIndex"
+            type="flex"
+            align="middle"
+            :gutter="8"
+          >
+            <a-col v-if="item.type === 'field'" :span="6" :style="{ marginTop: includeIndex === 0 ? 0 : '8px' }">
+              <a-select
+                v-model="includeItem.include"
+                size="small"
+                @change="
+                  (value) => {
+                    choiceInclude(value, includeItem)
+                  }
+                "
+              >
+                <a-select-option
+                  v-for="(crItem, crIndex) in item.conditionArr"
+                  :key="crIndex"
+                  option-filter-prop="children"
+                  :value="crItem.enName"
+                >
+                  {{ crItem.cnName }}
+                </a-select-option>
+              </a-select>
+            </a-col>
+            <a-col v-if="item.type === 'field'" :span="15" :style="{ marginTop: includeIndex === 0 ? 0 : '8px' }">
+              <template v-if="includeItem.include !== 'em' && includeItem.include !== 'nem'">
+                <!-- 日期 -->
+                <a-date-picker
+                  v-if="item.formType === 'datetime' && item.fieldType === 'DATETIME'"
+                  size="small"
+                  style="width: 100%"
+                  :defaultValue="includeItem.value ? moment(includeItem.value, 'YYYY-MM-DD HH:mm:ss') : null"
+                  format="YYYY-MM-DD HH:mm:ss"
+                  @change="
+                    (dates, dateStrings) => {
+                      includeItem.value = dateStrings
+                    }
+                  "
+                ></a-date-picker>
+                <a-date-picker
+                  v-else-if="item.formType === 'datetime' && item.fieldType === 'DATE'"
+                  size="small"
+                  style="width: 100%"
+                  :defaultValue="includeItem.value ? moment(includeItem.value, 'YYYY-MM-DD') : null"
+                  format="YYYY-MM-DD"
+                  @change="
+                    (dates, dateStrings) => {
+                      includeItem.value = dateStrings
+                    }
+                  "
+                ></a-date-picker>
+                <a-time-picker
+                  v-else-if="item.formType === 'datetime' && item.fieldType === 'TIME'"
+                  size="small"
+                  style="width: 100%"
+                  :defaultValue="includeItem.value ? moment(includeItem.value, 'HH:mm:ss') : null"
+                  format="HH:mm:ss"
+                  @change="
+                    (dates, dateStrings) => {
+                      includeItem.value = dateStrings
+                    }
+                  "
+                ></a-time-picker>
+                <!-- 树选择 -->
+                <div v-else-if="item.formType === 'treeselect'">
+                  <data-picker
+                    ref="dataPicker"
+                    :name="item.alias + index + index + includeIndex"
+                    size="small"
+                    :parentId="item.dataSource === 'addressBook' ? 'parentNumber' : 'parentDictDataNumber'"
+                    :parameter="
+                      item.dataSource === 'addressBook' ? {} : { dictCategoryNumber: item.src, filterDisabled: true }
+                    "
+                    displayType="tree"
+                    :url="
+                      item.dataSource === 'addressBook' ? '/admin/address/getAddressChildren' : '/admin/dict/initData'
+                    "
+                    :searchUrl="
+                      item.dataSource === 'addressBook' ? '/admin/search/addressSearch' : '/admin/search/dictSearch'
+                    "
+                    :scope="scope"
+                    :value="includeItem.option"
+                    :optionsConversion="
+                      (list, displayType, searchType) =>
+                        optionsConversionTreeselect(item, list, displayType, searchType)
+                    "
+                    @select="
+                      (data, options) => {
+                        includeItem.value = data
+                        includeItem.optionCustom = options
+                      }
+                    "
+                  />
+                </div>
+                <!-- 地址 -->
+                <div v-else-if="item.formType === 'address'">
+                  <address-select
+                    size="small"
+                    :series="item.form.showSeries"
+                    @send="
+                      (display, val) => {
+                        includeItem.value = val
+                      }
+                    "
+                  />
+                </div>
+                <!-- 标签 -->
+                <a-cascader
+                  v-else-if="item.formType === 'tag'"
+                  v-model="includeItem.value"
+                  style="width: 100%"
+                  :options="tagOption"
+                  :placeholder="$t('请选择')"
+                />
+                <a-input v-else-if="!item.src" v-model="includeItem.value" size="small" />
+                <!-- 下拉框 -->
+                <a-select
+                  v-else-if="item.src && item.formType === 'combobox'"
+                  size="small"
+                  :placeholder="$t('请选择')"
+                  :defaultValue="includeItem.value ? includeItem.value : undefined"
+                  changeOnSelect
+                  mode="tags"
+                  @change="
+                    (value) => {
+                      includeItem.value = value
+                    }
+                  "
+                >
+                  <a-select-option
+                    v-for="(fieldItem, fieldKey) in item.option"
+                    :key="fieldKey"
+                    :value="fieldItem.value"
+                  >
+                    {{ fieldItem.label }}
+                  </a-select-option>
+                </a-select>
+              </template>
+              <template v-else>
+                <a-input size="small" type="text" disabled />
+              </template>
+            </a-col>
+            <a-col v-else-if="item.type === 'currentUser'" :span="20" style="padding-right: 14px">
+              <data-picker
+                :placeholder="$t('请选择用户')"
+                name="user"
+                displayType="list"
+                size="small"
+                url="/admin/search/userSearch"
+                searchUrl="/admin/search/userSearch"
+                :value="includeItem.options"
+                :scope="scope"
+                :multiple="true"
+                :parameter="{ sortField: 'username' }"
+                :optionsConversion="
+                  (list, displayType, searchType) => {
+                    return list.map((item) => {
+                      const obj = item
+                      obj.key = item.username
+                      obj.label = `${item.username}(${item.realName})`
+                      return obj
+                    })
+                  }
+                "
+                @select="
+                  (data, options) => {
+                    includeItem.value = data
+                    $set(includeItem, 'options', options)
+                  }
+                "
+              />
+            </a-col>
+            <a-col v-else-if="item.type === 'currentDepartment'" :span="20" style="padding-right: 14px">
+              <data-picker
+                :placeholder="$t('请选择部门')"
+                name="departmentId"
+                parentId="parentDepartmentId"
+                displayType="tree"
+                size="small"
+                :multiple="true"
+                url="/admin/department/init"
+                searchUrl="/admin/search/departmentSearch"
+                :value="includeItem.options"
+                :scope="scope"
+                :optionsConversion="
+                  (list, displayType, searchType) => {
+                    if (searchType) {
+                      return list.map((item) => {
+                        const obj = item
+                        obj.key = item.departmentId
+                        obj.label = item.fullDepartmentName
+                        return obj
+                      })
+                    } else {
+                      return list.map((item) => {
+                        const obj = item
+                        obj.key = item.departmentId
+                        obj.label = item.departmentName
+                        return obj
+                      })
+                    }
+                  }
+                "
+                @select="
+                  (data, options) => {
+                    includeItem.value = data
+                    $set(includeItem, 'options', options)
+                  }
+                "
+              />
+            </a-col>
+            <a-col v-else-if="item.type === 'currentRole'" :span="20" style="padding-right: 14px">
+              <data-picker
+                :placeholder="$t('请选择角色')"
+                name="user"
+                displayType="list"
+                size="small"
+                :multiple="true"
+                url="/admin/search/roleSearch"
+                searchUrl="/admin/search/roleSearch"
+                :value="includeItem.options"
+                :scope="scope"
+                :optionsConversion="
+                  (list, displayType, searchType) => {
+                    return list.map((item) => {
+                      const obj = item
+                      obj.key = item.roleId
+                      obj.label = item.roleName
+                      return obj
+                    })
+                  }
+                "
+                @select="
+                  (data, options) => {
+                    includeItem.value = data
+                    $set(includeItem, 'options', options)
+                  }
+                "
+              />
+            </a-col>
+            <a-col flex="65px" style="display: flex; align-items: center; justify-content: center">
+              <a-icon
+                :style="{ fontSize: '24px', color: '#52c41a' }"
+                type="plus-square"
+                theme="filled"
+                @click="
+                  item.type === 'field'
+                    ? item.condition.splice(includeIndex + 1, 0, { include: '', value: undefined })
+                    : item.condition.splice(includeIndex + 1, 0, { value: [] })
+                "
+              />
+              <a-icon
+                :style="{
+                  fontSize: '24px',
+                  color: item.condition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                  'padding-left': '8px'
+                }"
+                type="minus-square"
+                theme="filled"
+                @click="deleteCondition(index, includeIndex)"
+              />
+            </a-col>
+          </a-row>
+        </a-col>
+        <a-col v-if="item.type !== 'custom' && item.type !== 'notSet'" flex="107px">
+          <a-select v-model="item.logic" style="width: 100%" size="small">
+            <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+            <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+          </a-select>
+        </a-col>
+        <a-col flex="70px" style="display: flex; align-items: center">
+          <a-icon
+            :style="{ fontSize: '24px', color: '#52c41a' }"
+            type="plus-square"
+            theme="filled"
+            @click="
+              data.splice(index + 1, 0, {
+                type: 'field',
+                condition: [
+                  {
+                    include: '',
+                    value: ''
+                  }
+                ],
+                logic: 'and'
+              })
+            "
+          />
+          <a-icon
+            :style="{ fontSize: '24px', color: data.length === 1 ? '#bfbfbf' : '#ff4d4f', 'padding-left': '8px' }"
+            type="minus-square"
+            theme="filled"
+            @click="deleteSimpleCondition(index)"
+          />
+        </a-col>
+        <a-divider v-if="data.length !== 1"></a-divider>
+      </a-row>
+    </div>
+    <QuerierCodemirror ref="querierCodemirror" :params.sync="data" @ok="getCodeVal" />
+  </div>
+</template>
+<script>
+export default {
+  name: 'ConditionalRules',
+  components: {
+    QuerierCodemirrorInput: () => import('./QuerierCodemirrorInput'),
+    QuerierCodemirror: () => import('./QuerierCodemirror')
+  },
+  props: {
+    conditionSetting: {
+      type: Object,
+      default: () => { }
+    },
+    fieldArr: {
+      type: Array,
+      default: () => []
+    },
+    tableId: {
+      type: String,
+      default: ''
+    }
+  },
+  data () {
+    return {
+      scope: this,
+      data: [],
+      logic: 'and'
+    }
+  },
+  watch: {
+    conditionSetting: {
+      handler (newVal) {
+        this.logic = newVal.logic || 'and'
+        this.data = newVal.conditionVisual
+        if (newVal.conditionVisual && newVal.conditionVisual.length > 0) {
+          this.data = newVal.conditionVisual
+        } else {
+          this.data = [{
+            type: 'notSet'
+          }]
+        }
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    typeChange (val, index) {
+      const item = {
+        logic: 'and',
+        type: val
+      }
+      switch (val) {
+        case 'notSet':
+          break
+        case 'field':
+          item.condition = [
+            {
+              include: '',
+              value: ''
+            }
+          ]
+          break
+        case 'custom':
+          item.condition = {}
+          break
+        default:
+          item.condition = [
+            {
+              value: [],
+              options: []
+            }
+          ]
+          break
+      }
+      this.data.splice(index, 1, item)
+    },
+    // 获取options
+    getOption (item) {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: { dictCategoryNumber: item.src }
+      }).then(res => {
+        this.$set(item, 'option', res.result)
+      })
+    },
+    // 选择关系
+    choiceInclude (value, includeItem) {
+      includeItem.value = undefined
+      if (value === 'em' || value === 'nem') {
+        delete includeItem.value
+      }
+    },
+    deleteCondition (index, includeIndex) {
+      if (this.data[index].condition.length === 1) {
+        return false
+      } else {
+        this.data[index].condition.splice(includeIndex, 1)
+        this.data = JSON.parse(JSON.stringify(this.data))
+      }
+    },
+    // 显示公式编辑器
+    handleCodemirror (item, index) {
+      this.$refs.querierCodemirror.show({
+        title: this.$t('公式编辑器'),
+        item: item,
+        index: index,
+        tableId: this.tableId,
+        page: 'ConditionRules'
+      })
+    },
+    // 获取工时编辑器的值
+    getCodeVal (val, index) {
+      const item = this.data[index]
+      item.condition = val
+      this.data.splice(index, 1, item)
+    },
+    deleteSimpleCondition (index) {
+      if (this.data.length === 1) {
+        return false
+      } else {
+        this.data.splice(index, 1)
+      }
+    }
+  }
+}
+</script>

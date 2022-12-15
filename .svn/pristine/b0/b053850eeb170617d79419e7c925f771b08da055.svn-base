@@ -1,0 +1,6 @@
+@font-face {
+  font-family: fontIcon;
+  font-style: normal;
+  font-weight: normal;
+  src: url("DS-Digital-Bold-Italic.ttf") format("truetype");
+}

@@ -1,0 +1,453 @@
+<template>
+  <div>
+    <div class="table-operator">
+      <a-button v-action:add icon="plus" @click="handleAdd">{{ $t('添加') }}</a-button>
+      <a-button icon="import" @click="darwerOpen">{{ $t('从模板中添加') }}</a-button>
+      <a-button @click="addFlowButton">{{ $t('一键切换成流程按钮') }}</a-button>
+      <a-button icon="sort-ascending" @click="handleSort">{{ $t('排序') }}</a-button>
+    </div>
+    <a-table
+      v-if="showFlag"
+      ref="table"
+      rowKey="id"
+      :columns="columns"
+      :scroll="{ y: windowHeight - 300 }"
+      :dataSource="myBarMenus"
+      size="small"
+      :pagination="false"
+    >
+      <span slot="buttonType" slot-scope="text">
+        <template v-if="text == '1'">{{ $t('系统默认') }}</template>
+        <template v-else>{{ $t('自定义') }}</template>
+      </span>
+      <span slot="menuType" slot-scope="text">
+        {{ text === 'line' ? $t('行菜单') : $t('工具栏菜单') }}
+      </span>
+      <span slot="display" slot-scope="text, record">
+        <a-switch
+          :disabled="record.disabled == 1"
+          :defaultChecked="text === '1' ? true : false"
+          @change="
+            (value) => {
+              record.display = value ? '1' : '0'
+            }
+          "
+        />
+      </span>
+      <span slot="style" slot-scope="text">
+        <template v-if="text == 'primary'">Primary</template>
+        <template v-else-if="text == 'default'">Default</template>
+        <template v-else-if="text == 'dashed'">Dashed</template>
+        <template v-else-if="text == 'danger'">Danger</template>
+        <template v-else-if="text == 'link'">Link</template>
+      </span>
+      <span slot="barMenuPriv" slot-scope="text, record, index">
+        <a @click="handleFieldPriv(record, index)">
+          <a-badge :status="text != '' ? 'success' : 'default'" />
+          {{ $t('设置') }}
+        </a>
+        <a-divider type="vertical" />
+        <a @click="copyPrivShow(record)">{{ $t('复制权限给') }}</a>
+      </span>
+      <span slot="attribute" slot-scope="text">
+        <a-badge v-if="text != ''" status="success" text="√" />
+        <a-badge v-else status="error" text="×" />
+      </span>
+      <div slot="action" slot-scope="text, record, index">
+        <a @click="handleEdit(record, index)">{{ $t('编辑') }}</a>
+        <a-divider
+          v-if="record.usage === 'bar_import' || record.settingType === 'import' || record.settingType === 'export'"
+          type="vertical"
+        />
+        <a
+          v-if="record.usage === 'bar_import' || record.settingType === 'import' || record.settingType === 'export'"
+          @click="hadnleModel(record, index)"
+        >
+          {{ $t('模板管理') }}
+        </a>
+        <a-divider v-if="record.usage === 'sys_subform' || record.settingType === 'subform'" type="vertical" />
+        <a
+          v-if="record.usage === 'sys_subform' || record.settingType === 'subform'"
+          @click="hadnleWindow(record, index)"
+        >
+          {{ $t('开窗选择') }}
+        </a>
+        <a-divider v-if="record.usage === 'sys_batchsearch'" type="vertical" />
+        <a v-if="record.usage === 'sys_batchsearch'" @click="handleBatchSearch(record, index)">{{ $t('配置') }}</a>
+        <a-divider type="vertical" />
+        <a @click="handleDelete(record, index)">{{ $t('删除') }}</a>
+      </div>
+    </a-table>
+    <!-- 设置附加属性 -->
+    <tool-form ref="toolForm" :myBarMenus="myBarMenus" @ok="handleOk" />
+    <!-- 访问权限 -->
+    <priv-visit-form ref="privVisitForm" :params="{ formView: myBarMenus }" @func="getBarMenus" />
+    <!-- 排序 -->
+    <tool-sort ref="toolSort" @ok="getSort" />
+    <!-- 权限复制 -->
+    <priv-copy ref="privCopy" @ok="getCopy" />
+    <!-- 导入模板管理 -->
+    <tool-import
+      ref="toolImport"
+      :key="importKey"
+      :tabThis="tabThis"
+      :tableidAll="tableidAll"
+      :active="active"
+      @func="getImportTemplate"
+    ></tool-import>
+    <!-- 开窗选择 -->
+    <tool-window ref="toolWindow" :key="winKey" @ok="getWinData" />
+    <tool-button-choose ref="toolButtonChoose" @ok="getButtonData" />
+    <a-modal :title="$t('搜索字段配置')" :visible="visible" @ok="getSearchField" @cancel="visible = !visible">
+      <a-form :form="form">
+        <a-form-item :label="$t('搜索字段')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+          <a-select
+            v-decorator="[
+              'searchField',
+              {
+                initialValue: myBarMenus[buttonIndex] ? myBarMenus[buttonIndex].searchField : undefined,
+                rules: [{ required: true, message: $t('请选择搜索字段') }]
+              }
+            ]"
+          >
+            <a-select-option v-for="field in fieldColumns" :key="field.alias">
+              {{ field.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+  </div>
+</template>
+<script>
+import { listButton, cardButton, subformButton, workflowButton } from './DefaultButton'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    ToolForm: () => import('./ToolForm'),
+    PrivVisitForm: () => import('./PrivVisitForm'),
+    ToolImport: () => import('./ToolImport'),
+    ToolWindow: () => import('./ToolWindow'),
+    ToolSort: () => import('./ToolSort'),
+    ToolButtonChoose: () => import('@/views/admin/Table/ToolButtonChoose'),
+    PrivCopy: () => import('@/views/admin/Table/PrivCopy')
+  },
+  props: {
+    dataWindowButtons: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: true
+    },
+    tabThis: {
+      type: Object,
+      default () {
+        return {}
+      }
+    },
+    config: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: true
+    },
+    tableidAll: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: false
+    },
+    fieldColumns: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: false
+    },
+    fieldMappings: {
+      type: Array,
+      default () {
+        return []
+      },
+      required: false
+    },
+    active: {
+      type: String,
+      default () {
+        return ''
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      showFlag: true,
+      advanced: false,
+      importKey: 'importKey',
+      winKey: 'winKey',
+      visible: false,
+      buttonIndex: '',
+      form: this.$form.createForm(this),
+      // 搜索参数
+      queryParam: {},
+      columnsDrawer: [{
+        title: this.$t('按钮名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('菜单类型'),
+        dataIndex: 'menuType',
+        scopedSlots: { customRender: 'menuType' }
+      }],
+      // 表头
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 200,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: '#',
+        dataIndex: 'listOrder',
+        width: 60,
+        customRender: (text, record, index) => {
+          return index + 1
+        }
+      }, {
+        title: this.$t('按钮名称'),
+        width: 140,
+        dataIndex: 'name'
+      }, {
+        title: this.$t('按钮类型'),
+        dataIndex: 'buttonType',
+        width: 140,
+        scopedSlots: { customRender: 'buttonType' }
+      }, {
+        title: this.$t('菜单类型'),
+        dataIndex: 'menuType',
+        width: 140,
+        scopedSlots: { customRender: 'menuType' }
+      }, {
+        title: this.$t('是否显示'),
+        dataIndex: 'display',
+        width: 140,
+        scopedSlots: { customRender: 'display' }
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks',
+        customRender: (text) => {
+          return text ?? '--'
+        }
+      }, {
+        title: this.$t('授权'),
+        dataIndex: 'barMenuPriv',
+        width: 150,
+        scopedSlots: { customRender: 'barMenuPriv' }
+      }],
+      myBarMenus: '',
+      importTemplate: {},
+      windowHeight: document.documentElement.clientHeight
+    }
+  },
+  computed: {
+    listArray () {
+      if (this.config.variable === 'tableCardWindow') {
+        return cardButton
+      } else if (this.config.variable === 'tableSubformWindow') {
+        return subformButton
+      } else if (this.config.variable === 'workflow_list') {
+        return workflowButton
+      } else {
+        return listButton
+      }
+    }
+  },
+  watch: {
+    dataWindowButtons: {
+      handler (newValue) {
+        if (this.config.action === 'add' && !this.myBarMenus.length) {
+          this.myBarMenus = JSON.parse(JSON.stringify(this.listArray)).filter(item => item.usage !== 'sys_copy')
+        } else {
+          this.myBarMenus = newValue
+        }
+        this.showFlag = false
+        this.$nextTick(() => {
+          this.showFlag = true
+        })
+      },
+      immediate: true
+    }
+  },
+  mounted () {
+    window.onresize = () => {
+      return (() => {
+        window.fullHeight = document.documentElement.clientHeight
+        this.windowHeight = window.fullHeight
+      })()
+    }
+  },
+  methods: {
+    handleAdd () {
+      this.$refs.toolForm.show({
+        action: 'add',
+        title: this.$t('添加工具条'),
+        record: {
+          id: (new Date()).valueOf(),
+          listOrder: this.myBarMenus.length * 10 + 10,
+          name: '',
+          buttonType: 0,
+          attribute: ''
+        }
+      })
+    },
+    handleEdit (record, index) {
+      this.$refs.toolForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}: ${record.name}`,
+        record: record,
+        index: index
+      })
+    },
+    // 排序
+    handleSort () {
+      const data = JSON.parse(JSON.stringify(this.myBarMenus))
+      data.map(item => {
+        item.realName = item.name
+        if (item.menuType === 'bar') {
+          item.name = item.name + ` (${this.$t('工具栏菜单')})`
+        } else {
+          item.name = item.name + ` (${this.$t('行菜单')})`
+        }
+        return item
+      })
+      const barButton = data.filter(item => item.menuType === 'bar')
+      const lineButton = data.filter(item => item.menuType === 'line')
+      this.$refs.toolSort.show({
+        title: this.$t('排序'),
+        lineButton,
+        barButton
+      })
+    },
+    getSort (data) {
+      data.forEach(item => {
+        item.name = item.realName
+        delete item.realName
+      })
+      this.myBarMenus = data
+    },
+    darwerOpen () {
+      this.$refs.toolButtonChoose.show({
+        listArray: this.listArray,
+        unCheckBar: this.listArray.filter(item => !this.myBarMenus.find(barItem => barItem.usage === item.usage))
+      })
+    },
+    copyPrivShow (record) {
+      this.$refs.privCopy.show({
+        title: this.$t('复制权限'),
+        name: record.name,
+        priv: record.barMenuPriv,
+        dataIndex: 'name',
+        record: record,
+        data: this.myBarMenus.filter(item => item.id !== record.id)
+      })
+    },
+    getCopy (selectedRowKeys, priv) {
+      this.myBarMenus.forEach(item => {
+        if (selectedRowKeys.includes(item.id)) {
+          item.barMenuPriv = priv
+        }
+      })
+    },
+    getButtonData (data) {
+      this.myBarMenus = [...this.myBarMenus, ...data]
+    },
+    handleBatchSearch (record, index) {
+      this.buttonIndex = index
+      this.visible = true
+    },
+    getSearchField () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.myBarMenus[this.buttonIndex].searchField = values.searchField
+          this.visible = false
+        }
+      })
+    },
+    // 选择开窗
+    hadnleWindow (record, index) {
+      this.winKey = this.winKey === 'winKey' ? 'winKey_1' : 'winKey'
+      this.$nextTick(() => {
+        this.$refs.toolWindow.show({
+          url: '/admin/field/add',
+          tableId: this.config.tableId,
+          record: record,
+          index: index
+        })
+      })
+    },
+    // 获取开窗数据
+    getWinData (value, index) {
+      this.myBarMenus[index].importTemplate = JSON.stringify(value)
+      this.$emit('func', this.myBarMenus)
+    },
+    handleDelete (record, index) {
+      this.myBarMenus.splice(index, 1)
+      this.$emit('func', this.myBarMenus)
+    },
+    handleFieldPriv (record, index) {
+      this.$refs.privVisitForm.show({
+        action: 'edit',
+        title: `${this.$t('访问权限授权')}: ${record.name}`,
+        record: record,
+        index: index,
+        key: 'barMenuPriv',
+        selectType: 'radio',
+        privArr: {
+          visit: this.$t('可访问')
+        },
+        defaultpriv: 'visit'
+      })
+    },
+    addFlowButton () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确定要清空已有按钮，添加【创建流程】、【查看】、【办理】、【备注】按钮吗？'),
+        onOk () {
+          that.myBarMenus = listButton.filter(item => ['flow_create', 'flow_view', 'flow_process', 'flow_remarks'].includes(item.usage))
+        }
+      })
+    },
+    handleOk () {
+      this.$emit('func', this.myBarMenus)
+    },
+    getBarMenus (e) {
+      this.myBarMenus = e
+      this.$emit('func', this.myBarMenus)
+    },
+    getImportTemplate (data, index) {
+      this.myBarMenus[index].importTemplate = JSON.stringify(data)
+      this.$emit('func', this.myBarMenus)
+    },
+    getExportTemplate (data, index) {
+      this.myBarMenus[index].importTemplate = JSON.stringify(data)
+      this.$emit('func', this.myBarMenus)
+    },
+    hadnleModel (record, index) {
+      const that = this
+      if (record.usage === 'bar_import' || record.settingType === 'import') {
+        this.importKey = this.importKey === 'importKey' ? 'importKey_1' : 'importKey'
+        this.$nextTick(() => {
+          this.$refs.toolImport.show({
+            tableId: that.config.tableId,
+            dataWindowButtons: this.dataWindowButtons,
+            record: record,
+            index: index
+          })
+        })
+      }
+    }
+  }
+}
+</script>

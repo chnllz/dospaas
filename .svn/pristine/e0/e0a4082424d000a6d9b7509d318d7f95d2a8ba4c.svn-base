@@ -1,0 +1,215 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item :label="$t('姓名')">
+              <a-input v-model="queryParam.name" :placeholder="$t('请输入姓名')" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('电话')">
+              <a-input v-model="queryParam.number" :placeholder="$t('请输入电话')" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('备注')">
+              <a-input v-model="queryParam.remarks" :placeholder="$t('请输入备注')" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('创建人')">
+              <a-input v-model="queryParam.inputUser" :placeholder="$t('请输入创建人')" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item :label="$t('最后修改人')">
+              <a-input v-model="queryParam.updateUser" :placeholder="$t('请输入最后修改人')" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <a-space>
+      <a-button v-action:add icon="plus" type="primary" @click="handleAdd">{{ $t('添加') }}</a-button>
+      <a-button
+        v-action:delete
+        icon="delete"
+        type="danger"
+        :disabled="selectedRowKeys.length == 0"
+        @click="handleDelete"
+      >
+        {{ $t('批量删除') }}
+      </a-button>
+      <a-button v-action:import icon="upload" @click="handleImport">{{ $t('导入') }}</a-button>
+      <a-button v-action:export icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+    </a-space>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      class="table-fill"
+      :class="[totalCount === 0 ? 'table-fill-empty' : '']"
+      :data="loadDataTable"
+      :rowSelection="rowSelection"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a v-if="$auth('edit')" @click="handleEdit(record)">{{ $t('编辑') }}</a>
+        <span v-else style="color: gray">{{ $t('编辑') }}</span>
+        <a-divider type="vertical" />
+        <a v-if="$auth('delete')" @click="handleDelete(record)">{{ $t('删除') }}</a>
+        <span v-else style="color: gray">{{ $t('删除') }}</span>
+      </div>
+    </s-table>
+    <user-form ref="userForm" @ok="handleOk" />
+    <general-export ref="generalExport" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('test'),
+  components: {
+    UserForm: () => import('./UserForm'),
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport')
+  },
+  data () {
+    return {
+      advanced: false,
+      form: this.$form.createForm(this),
+      queryParam: {},
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 150,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        sorter: true
+      }, {
+        title: this.$t('姓名'),
+        dataIndex: 'name',
+        sorter: true
+      }, {
+        title: this.$t('电话'),
+        dataIndex: 'number',
+        sorter: true
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser',
+        sorter: true
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        sorter: true
+      }, {
+        title: this.$t('最后修改人'),
+        dataIndex: 'updateUser',
+        sorter: true
+      }, {
+        title: this.$t('最后修改时间'),
+        dataIndex: 'updateTime',
+        sorter: true
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks',
+        sorter: true
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      totalCount: 0
+    }
+  },
+  methods: {
+    // 加载表格数据
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/test/user/list',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        this.totalCount = res.result.totalCount || res.result.data.length
+        return res.result
+      })
+    },
+    handleOk () {
+      this.$refs.table.refresh()
+    },
+    // 添加
+    handleAdd () {
+      this.$refs.userForm.showAdd()
+    },
+    // 编辑
+    handleEdit (record) {
+      this.$refs.userForm.showEdit({
+        id: record.id
+      })
+    },
+    // 删除
+    handleDelete (record) {
+      const me = this
+      let ids
+      if (record.id) {
+        ids = record.id
+      } else {
+        ids = this.selectedRowKeys.join(',')
+      }
+      this.$confirm({
+        title: this.$t('您确认要删除选中的记录吗？'),
+        onOk () {
+          me.axios({
+            url: '/test/user/delete',
+            params: { ids: ids },
+            loading: true
+          }).then(res => {
+            me.$message.success(res.message)
+            me.$refs.table.refresh()
+          })
+        }
+      })
+    },
+    // 导出
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'TestUserTask',
+        parameter: {
+          condition: this.queryParam
+        }
+      })
+    },
+    // 导入
+    handleImport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导入'),
+        type: 'import',
+        className: 'TestUserTask',
+        filePath: 'static/template/test/用户导入模板.xlsx'
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,429 @@
+<template>
+  <a-drawer :title="config.title" :width="600" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-alert
+          v-if="config.action === 'add'"
+          showIcon
+          :message="$t('如果没有修改表格的默认排序方案（按{排序}升序），新建的数据会展现在最后一页')"
+          type="info"
+          style="margin-bottom: 8px"
+        />
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('字典类型') }}
+            <a-tooltip v-if="config.action !== 'add'" placement="top">
+              <template slot="title">{{ $t('一旦创建，不允许修改。') }}</template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-select
+            v-decorator="[
+              'info[dictType]',
+              { initialValue: data.dictType, rules: [{ required: true, message: $t('请选择字典类型') }] }
+            ]"
+            :disabled="config.action !== 'add'"
+            @change="handleType"
+          >
+            <a-select-option value="basic">{{ $t('基础') }}</a-select-option>
+            <a-select-option value="table">{{ $t('数据表') }}</a-select-option>
+            <a-select-option value="sql">SQL</a-select-option>
+            <a-select-option value="callback">{{ $t('自定义') }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('字典名称') }}
+            <a-tooltip :title="$t('不允许重复。')">
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input
+            v-if="data.dictType === 'basic' && config.action === 'add'"
+            v-decorator="[
+              'info[dictCategoryName]',
+              {
+                initialValue: data.dictCategoryName,
+                rules: [{ required: true, message: $t('请输入字典名称') }, { validator: checkName }]
+              }
+            ]"
+            @change="changeName"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+          <a-input
+            v-else
+            v-decorator="[
+              'info[dictCategoryName]',
+              {
+                initialValue: data.dictCategoryName,
+                rules: [{ required: true, message: $t('请输入字典名称') }, { validator: checkName }]
+              }
+            ]"
+            @change="changeName"
+          >
+            <set-lang slot="addonAfter" />
+          </a-input>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ $t('字典编号') }}
+            <a-tooltip placement="top">
+              <template slot="title">
+                <span>
+                  {{
+                    $t(
+                      '系统名称创建时由{显示名称}拼音全拼组成，使用小驼峰命名法。如：{显示名称}="我爱祖国"，自动生成的{系统名称}为"woAiZuGuo"。同一模块下，不允许重复。'
+                    )
+                  }}
+                </span>
+              </template>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-input
+            v-decorator="[
+              'info[dictCategoryNumber]',
+              {
+                initialValue: data.dictCategoryNumber,
+                rules: [
+                  { required: true, message: $t('请输入字典系统名称') },
+                  {
+                    validator: (rule, value, callback) => {
+                      const reg = new RegExp(/^[_-\w]{2,}$/)
+                      const reg1 = new RegExp(/(?<=[\_\-])([\-\_])/)
+                      if (!value) {
+                        callback()
+                      }
+                      if (!reg1.test(value) && reg.test(value)) {
+                        callback()
+                      } else {
+                        callback($t('请输入至少两位数，且不允许连续出现-或_'))
+                      }
+                    }
+                  }
+                ]
+              }
+            ]"
+            :disabled="editable"
+          >
+            <template v-if="config.action === 'edit'">
+              <a-icon v-if="editable" slot="addonAfter" type="edit" style="cursor: pointer" @click="handleEdit" />
+              <a-icon v-else slot="addonAfter" type="edit" style="cursor: pointer" @click="editable = true" />
+            </template>
+          </a-input>
+        </a-form-item>
+        <a-form-item
+          v-if="data.dictType === 'callback'"
+          :label="$t('自定义方法')"
+          :labelCol="labelCol"
+          :wrapperCol="wrapperCol"
+        >
+          <a-input
+            v-decorator="[
+              'info[setting][callback]',
+              { initialValue: data.setting.callback, rules: [{ required: true, message: $t('请输入字典名称') }] }
+            ]"
+            :placeholder="$t('请输入自定义方法')"
+          />
+        </a-form-item>
+        <a-form-item v-else-if="data.dictType === 'sql'" label="SQL" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea
+            v-decorator="[
+              'info[setting][sql]',
+              { initialValue: data.setting.sql, rules: [{ required: true, message: $t('请输入SQL语句') }] }
+            ]"
+            :autoSize="{ minRows: 6 }"
+            :placeholder="$t('请输入SQL语句')"
+          />
+        </a-form-item>
+        <template v-else-if="data.dictType === 'table'">
+          <a-form-item :label="$t('关联数据表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'table',
+                { initialValue: data.setting.table, rules: [{ required: true, message: $t('请选择名称字段') }] }
+              ]"
+              :placeholder="$t('请选择关联数据表')"
+              :showSearch="true"
+              :options="tableList"
+              @change="getData"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('名称字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'info[setting][tableNameField]',
+                {
+                  initialValue: data.setting.tableNameField ? [data.setting.tableNameField[2]] : [],
+                  rules: [{ required: true, message: $t('请选择名称字段') }]
+                }
+              ]"
+              :placeholder="$t('请选择名称字段')"
+              :showSearch="true"
+              :options="fieldArr"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('编号字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'info[setting][tableNumberField]',
+                {
+                  initialValue: data.setting.tableNumberField ? [data.setting.tableNumberField[2]] : [],
+                  rules: [{ required: true, message: $t('请选择编号字段') }]
+                }
+              ]"
+              :placeholder="$t('请选择编号字段')"
+              :showSearch="true"
+              :options="fieldArr"
+            />
+          </a-form-item>
+          <a-form-item :label="$t('父编号字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-cascader
+              v-decorator="[
+                'info[setting][tableParentNumberField]',
+                { initialValue: data.setting.tableParentNumberField }
+              ]"
+              :placeholder="$t('请选择父编号字段')"
+              :showSearch="true"
+              :options="fieldArr"
+            />
+          </a-form-item>
+        </template>
+        <a-form-item hidden :label="$t('字典类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[dictMode]', { initialValue: data.dictMode }]">
+            <a-radio :value="0">{{ $t('平面字典') }}</a-radio>
+            <a-radio :value="1">{{ $t('树形字典') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="userInfo.superAdmin" :label="$t('访问级别')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['info[accessLevel]', { initialValue: data.accessLevel || 0 }]">
+            <a-radio :value="0" style="width: 100%">{{ $t('可见可编可删') }}</a-radio>
+            <a-radio :value="1" style="width: 100%">{{ $t('可见可编不可删') }}</a-radio>
+            <a-radio :value="2" style="width: 100%">{{ $t('可见不可编不可删') }}</a-radio>
+            <a-radio :value="3" style="width: 100%">{{ $t('不可见不可编不可删') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item :label="$t('字典分类')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input v-decorator="['info[category]', { initialValue: data.category }]" />
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea v-decorator="['info[remarks]', { initialValue: data.remarks }]" :autoSize="{ minRows: 6 }" />
+        </a-form-item>
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">
+          {{ $t('保存') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    SetLang: () => import('@/components/SetLang')
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 1000)
+    return {
+      config: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      fieldList: {}, // 保存数据
+      fieldArr: [], // 根据数据表获取相应字段数组
+      tableList: [],
+      tableName: [],
+      data: {},
+      editable: false
+    }
+  },
+  computed: {
+    ...mapGetters(['userInfo'])
+  },
+  methods: {
+    // 打开抽屉组件
+    async show (config) {
+      this.visible = true
+      this.loading = true
+      this.config = config
+      await this.axios({
+        url: this.config.url,
+        data: {
+          info: {
+            id: config.record ? config.record.id : 0,
+            dictMode: config.record.dictMode
+          },
+          action: 'get'
+        }
+      }).then((res) => {
+        this.loading = false
+        this.form.resetFields()
+        this.data = res.result.data
+        this.tableList = res.result.moduleTable
+        if (this.data.setting && this.data.setting.tableNameField) {
+          this.data.setting.table = [this.data.setting.tableNameField[0], this.data.setting.tableNameField[1]]
+        }
+        if (config.action === 'edit') {
+          this.editable = true
+        } else {
+          this.editable = false
+          this.data.dictMode = config.record.dictMode
+        }
+        if (this.data.setting && this.data.setting.table) {
+          this.getData(this.data.setting.table)
+        }
+      })
+    },
+    // 显示名称验证是否重复
+    checkName (rule, value, callback) {
+      if (value) {
+        this.axios({
+          url: '/admin/dict/checkUnique',
+          data: {
+            dictCategoryName: value,
+            checkType: 'category',
+            action: this.config.action,
+            id: this.config.record && this.config.action === 'edit' ? this.config.record.id : undefined
+          }
+        }).then(res => {
+          if (res.code) {
+            callback(res.message)
+          } else {
+            callback()
+          }
+        })
+      } else {
+        callback()
+      }
+    },
+    // 加载级联菜单数据
+    loadDataCascader (params) {
+      return (selectedOptions) => {
+        const targetOption = selectedOptions[selectedOptions.length - 1]
+        targetOption.loading = true
+        this.axios({
+          url: params.url,
+          data: { parentNumber: targetOption.value }
+        }).then(res => {
+          targetOption.loading = false
+          targetOption.children = res.result
+          this.parentNumber = [...this.parentNumber]
+        })
+      }
+    },
+    // 修改字典类型
+    handleType (val) {
+      this.data.dictType = val
+      const { setFieldsValue } = this.form
+      setFieldsValue({ 'info[dictCategoryNumber]': '' })
+      setFieldsValue({ 'info[dictCategoryName]': '' })
+    },
+    // 自动生成系统名称
+    changeName (e) {
+      if (!this.editable || this.config.action === 'add') {
+        const val = e.target.value
+        let valArr = val.split('\n')
+        const pinyin = require('js-pinyin')
+        valArr = valArr.map(item => {
+          const reg = new RegExp(/^(?![0-9])[a-zA-Z0-9]+$/)
+          const reg2 = new RegExp(/^[a-zA-Z0-9]+$/)
+          let val = ''
+          if (item.length <= 1) {
+            val = pinyin.getFullChars(item).toLowerCase()
+          } else {
+            const str1 = pinyin.getFullChars(item.substring(0, 1)).toLowerCase()
+            const latterStr = item.substring(1, item.length)
+            const str2Arr = latterStr.split('').map(item => {
+              const itemPinyin = pinyin.getFullChars(item).toLowerCase()
+              return itemPinyin[0].toUpperCase() + itemPinyin.substring(1, itemPinyin.length)
+            })
+            const str2 = str2Arr.join('')
+            val = str1 + str2
+          }
+          val = val.split('')
+          this.getVal(val, reg)
+          if (val[0]) {
+            val[0] = val[0].toLowerCase()
+          }
+          val = val.filter(item => {
+            return reg2.test(item)
+          })
+          return val.join('')
+        })
+        const { setFieldsValue, validateFields } = this.form
+        setFieldsValue({ 'info[dictCategoryNumber]': valArr.join('\n') })
+        this.$nextTick(() => {
+          validateFields(['info[dictCategoryNumber]'], { force: true })
+        })
+      }
+    },
+    // // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    handleEdit () {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要修改系统名称吗？'),
+        content: this.$t('修改系统名称会造成系统未知错误，强烈建议不要修改'),
+        onOk () {
+          that.editable = false
+        }
+      })
+    },
+    // 获取数据表
+    getData (val) {
+      this.tableName = val
+      this.axios({
+        url: '/admin/field/getFieldOptions',
+        data: { tableId: val[1] }
+      }).then(res => {
+        this.fieldArr = res.result
+      })
+    },
+    // 表单提交
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          if (values.table) {
+            delete values.table
+            if (this.tableName.length === 0) {
+              this.tableName = this.data.setting.table
+            }
+            values.info.setting.tableNameField = [...this.tableName, ...values.info.setting.tableNameField]
+            values.info.setting.tableNumberField = [...this.tableName, ...values.info.setting.tableNumberField]
+          }
+          values.info.id = this.config.record.id
+          this.loading = true
+          this.axios({
+            url: this.config.url,
+            data: Object.assign(values, { action: 'submit' })
+          }).then((res) => {
+            this.loading = false
+            if (res.code === 0) {
+              this.$emit('ok')
+              this.visible = false
+              this.$message.success(res.message)
+              this.form.resetFields()
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    }
+  }
+}
+</script>

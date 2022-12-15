@@ -1,0 +1,3206 @@
+<template>
+  <div>
+    <a-tabs @change="tabChange">
+      <a-tab-pane key="information" :tab="$t('基础属性')">
+        <a-form :form="form">
+          <a-divider orientation="left">{{ $t('基础信息') }}</a-divider>
+          <a-row :gutter="24">
+            <a-col :span="12">
+              <a-form-item :label="$t('名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input
+                  v-decorator="[
+                    'name',
+                    { initialValue: currentSelect.nodeName, rules: [{ required: true, message: $t('请输入名称') }] }
+                  ]"
+                  @change="
+                    (e) => {
+                      currentSelect.nodeName = e.target.value
+                    }
+                  "
+                />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :label="$t('类型')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-radio-group
+                  v-decorator="[
+                    'type',
+                    { initialValue: currentSelect.type, rules: [{ required: true, message: $t('请输入类型') }] }
+                  ]"
+                  @change="
+                    (e) => {
+                      currentSelect.type = e.target.value
+                      transitionChange(e.target.value)
+                    }
+                  "
+                >
+                  <a-radio value="user_transition" :label="$t('人工变迁')">{{ $t('人工变迁') }}</a-radio>
+                  <a-radio value="time_transition" :label="$t('时间变迁')">{{ $t('时间变迁') }}</a-radio>
+                  <a-radio value="auto_transition" :label="$t('自动变迁')">{{ $t('自动变迁') }}</a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :label="$t('流程状态')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-select
+                  v-decorator="[
+                    'processStatus',
+                    {
+                      initialValue: currentSelect.processStatus,
+                      rules: [{ required: true, message: $t('请输入流程状态') }]
+                    }
+                  ]"
+                  showSearch
+                  @change="
+                    (value, option) => {
+                      currentSelect.processStatus = value
+                    }
+                  "
+                >
+                  <a-select-option v-for="item in processStatusData" :key="item.id" :value="item.dictDataNumber">
+                    {{ item.dictDataName }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item label="ID" :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <a-input :value="currentSelect.gid ? currentSelect.gid : currentSelect.id" disabled />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('变迁启用回调') }}
+                  <a-tooltip>
+                    <div slot="title">
+                      {{
+                        $t(
+                          `开启后，当输入网关经过条件判断，路由到当前变迁，并准备启动该变迁前，系统会调用此处的业务方法。返回值格式为：['errcode'=> 0, 'errmsg'=>'操作成功']，当errcode≠0时，流程无法启用当前变迁，流程保持不动，并提示errmsg对应的值。`
+                        )
+                      }}
+                    </div>
+                    <a-icon type="question-circle-o" />
+                  </a-tooltip>
+                </span>
+                <a-switch v-model="currentSelect.callbackEnable" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">
+                  {{ $t('变迁发射回调') }}
+                  <a-tooltip>
+                    <div slot="title">
+                      <div>
+                        {{
+                          $t(
+                            `开启后，变迁发射时系统会调用此处的业务方法。返回值格式为：['errcode' => 0, 'errmsg' =>'操作成功', 'place_id' => '']。`
+                          )
+                        }}
+                      </div>
+                      <div>{{ $t('1、当errcode≠0时，变迁将无法发射，并提示errmsg对应的值，流程保持不动。') }}</div>
+                      <div>{{ $t('2、当errcode=0 & place_id为空时，变迁发射成功，流程将根据系统配置进行流转。') }}</div>
+                      <div>
+                        {{
+                          $t(
+                            '3、当errcode=0 & place_id返回了库所编号(该库所编号必须通过网关与当前变迁连接，否则系统会报错)时，流程将路由至place_id对应的库所。'
+                          )
+                        }}
+                      </div>
+                    </div>
+                    <a-icon type="question-circle-o" />
+                  </a-tooltip>
+                </span>
+                <a-switch v-model="currentSelect.callbackLaunch" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+                <span slot="label">{{ $t('变迁备注回调') }}</span>
+                <a-switch v-model="currentSelect.callbackLog" />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-form-item :label="$t('备注')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-input v-model="currentSelect.remarks" style="margin-left: -2px" />
+          </a-form-item>
+          <template v-if="currentSelect.type === 'time_transition'">
+            <a-divider orientation="left">{{ $t('时间设置') }}</a-divider>
+            <a-form-item :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+              <span slot="label">
+                {{ $t('时间类型') }}
+                <a-tooltip :title="$t('通过业务数据计算时，公式编辑器返回的值格式为YYYY-MM-DD hh:mm:ss')">
+                  <a-icon type="question-circle" />
+                </a-tooltip>
+              </span>
+              <a-row>
+                <a-col :span="7">
+                  <a-select v-model="triggerTimeType" @change="getTriggerTime">
+                    <a-select-option value="relative">{{ $t('相对时间') }}</a-select-option>
+                    <a-select-option value="absolute">{{ $t('绝对时间') }}</a-select-option>
+                    <a-select-option value="compute">{{ $t('通过业务数据计算') }}</a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col :span="17" style="padding-left: 10px">
+                  <a-form-item v-if="triggerTimeType === 'relative'">
+                    <a-input
+                      v-show="false"
+                      v-decorator="[
+                        'relativeTime',
+                        {
+                          rules: [{ required: true, message: $t('请输入相对时间') }],
+                          initialValue: timedata.timeDay || timedata.timeHour || timedata.timeMinute ? '1' : undefined
+                        }
+                      ]"
+                    ></a-input>
+                    <a-input-number
+                      :value="timedata.timeDay"
+                      :min="0"
+                      @change="
+                        (value) => {
+                          timedata.timeDay = value
+                          currentSelect.triggerTimeRelative = timedata
+                          if (value) {
+                            form.setFieldsValue({ relativeTime: value })
+                          }
+                        }
+                      "
+                    />
+                    {{ $t('天') }}
+                    <a-input-number
+                      :value="timedata.timeHour"
+                      :min="0"
+                      @change="
+                        (value) => {
+                          timedata.timeHour = value
+                          currentSelect.triggerTimeRelative = timedata
+                          if (value) {
+                            form.setFieldsValue({ relativeTime: value })
+                          }
+                        }
+                      "
+                    />
+                    {{ $t('时') }}
+                    <a-input-number
+                      :value="timedata.timeMinute"
+                      :min="0"
+                      @change="
+                        (value) => {
+                          timedata.timeMinute = value
+                          currentSelect.triggerTimeRelative = timedata
+                          if (value) {
+                            form.setFieldsValue({ relativeTime: value })
+                          }
+                        }
+                      "
+                    />
+                    {{ $t('分') }}
+                  </a-form-item>
+                  <a-form-item v-else-if="triggerTimeType === 'absolute'">
+                    <a-date-picker
+                      v-decorator="[
+                        'triggerTimeAbsolute',
+                        {
+                          rules: [{ required: true, message: $t('请选择绝对时间') }],
+                          initialValue: triggerTimeAbsolute
+                        }
+                      ]"
+                      format="YYYY-MM-DD HH:mm:ss"
+                      @change="
+                        (e, value) => {
+                          triggerTimeAbsolute = value
+                          currentSelect.triggerTimeAbsolute = value
+                        }
+                      "
+                    />
+                  </a-form-item>
+                  <a-form-item v-else>
+                    <a-button @click="handleConditionTime">{{ $t('通过业务数据计算') }}</a-button>
+                    <condition ref="conditionTime" :params="triggerTimeCompute" @ok="getConditionTime" />
+                    <a-input
+                      v-show="false"
+                      v-decorator="[
+                        'conditionTime',
+                        {
+                          rules: [{ required: true, message: $t('请选择时间设置') }],
+                          initialValue: triggerTimeCompute.data.value
+                        }
+                      ]"
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </a-form-item>
+          </template>
+          <template v-else-if="currentSelect.type === 'user_transition'">
+            <a-divider orientation="left">{{ $t('办理方式') }}</a-divider>
+            <div class="table-operator">
+              <a-button v-action:add icon="plus" @click="handleAddWay">{{ $t('添加') }}</a-button>
+              <a-button icon="sort-ascending" @click="handleSort">{{ $t('排序') }}</a-button>
+              <a-button icon="eye" @click="handleEditRule">{{ $t('表单规则') }}</a-button>
+            </div>
+            <a-table
+              ref="tableWay"
+              rowKey="id"
+              :columns="columnsWay"
+              :dataSource="handleMethods"
+              size="small"
+              :pagination="false"
+            >
+              <span slot="alias" slot-scope="text, record">
+                <a-input
+                  v-if="record.editabled"
+                  v-model="record.alias"
+                  :disabled="record.aliasEditabled"
+                  size="small"
+                />
+                <span v-else>{{ text }}</span>
+              </span>
+              <span slot="way" slot-scope="text, record">
+                <a-input
+                  v-if="record.editabled"
+                  v-model="record.way"
+                  size="small"
+                  @change="(e) => handleChangeName(e, record)"
+                >
+                  <set-lang slot="addonAfter" />
+                </a-input>
+                <span v-else>{{ text }}</span>
+              </span>
+              <span slot="onOff" slot-scope="text, record">
+                <a-switch v-model="record.onOff" :disabled="!record.editabled" size="small" />
+              </span>
+              <span slot="checked" slot-scope="text, record">
+                <a-radio-group
+                  v-model="record.checked"
+                  :disabled="!record.editabled"
+                  @change="
+                    (e) => {
+                      if (e.target.value === '1') {
+                        handleMethods.forEach((item) => {
+                          item.checked = '0'
+                        })
+                      }
+                      record.checked = e.target.value
+                    }
+                  "
+                >
+                  <a-radio value="1">{{ $t('是') }}</a-radio>
+                  <a-radio value="0">{{ $t('否') }}</a-radio>
+                </a-radio-group>
+              </span>
+              <span slot="remarks" slot-scope="text, record">
+                <a-input v-if="record.editabled" v-model="record.remarks" size="small" />
+                <span v-else>{{ text }}</span>
+              </span>
+              <div slot="action" slot-scope="text, record, index">
+                <a v-if="record.editabled" @click="wayDataSubmit(record)">{{ $t('保存') }}</a>
+                <a
+                  v-else
+                  @click="
+                    () => {
+                      $set(record, 'editabled', true)
+                      $set(record, 'aliasEditabled', true)
+                    }
+                  "
+                >
+                  {{ $t('编辑') }}
+                </a>
+                <a-divider type="vertical" />
+                <a-popconfirm
+                  :title="$t('请确认是否删除?')"
+                  :ok-text="$t('确定')"
+                  :cancel-text="$t('取消')"
+                  @confirm="handleDeleteWay(index)"
+                >
+                  <a>{{ $t('删除') }}</a>
+                </a-popconfirm>
+              </div>
+            </a-table>
+            <a-form-item
+              :label="$t('办理备注规则')"
+              :labelCol="{ span: 3 }"
+              :wrapperCol="wrapperCol"
+              style="margin: 15px 0"
+            >
+              <a-radio-group :value="remarksRule" @change="getRemarksrule">
+                <a-radio value="show_no_allow">{{ $t('可见选填') }}</a-radio>
+                <a-radio value="show_allow">{{ $t('可见必填') }}</a-radio>
+                <a-radio value="hidden">{{ $t('隐藏') }}</a-radio>
+              </a-radio-group>
+            </a-form-item>
+            <a-form-item
+              :label="$t('办理备注行数范围')"
+              :labelCol="{ span: 3 }"
+              :wrapperCol="wrapperCol"
+              style="margin: 15px 0"
+            >
+              <a-row>
+                <a-col :span="4">
+                  <a-form-item>
+                    <a-input-number
+                      v-model="remarksMinRows"
+                      style="width: 100%"
+                      :min="1"
+                      @change="
+                        (num) => {
+                          remarksMinRows = num
+                          currentSelect.remarksMinRows = num
+                        }
+                      "
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :span="1" style="text-align: center">~</a-col>
+                <a-col :span="4">
+                  <a-form-item>
+                    <a-input-number
+                      v-model="remarksMaxRows"
+                      style="width: 100%"
+                      :min="parseInt(remarksMinRows) || 1"
+                      @change="
+                        (num) => {
+                          currentSelect.remarksMaxRows = num
+                        }
+                      "
+                    />
+                  </a-form-item>
+                </a-col>
+              </a-row>
+            </a-form-item>
+            <a-divider orientation="left">{{ $t('办理按钮') }}</a-divider>
+            <div class="table-operator">
+              <a-button v-action:add icon="plus" @click="handleAddMenu">{{ $t('添加') }}</a-button>
+              <a-button icon="import" @click="handleDefaultMenu">{{ $t('从模板中添加') }}</a-button>
+              <a-button icon="sort-ascending" @click="handleMenuSort">{{ $t('排序') }}</a-button>
+            </div>
+            <a-table
+              ref="tableMenu"
+              rowKey="id"
+              :columns="columnsMenu"
+              :dataSource="formViewButtons"
+              size="small"
+              :pagination="false"
+            >
+              <span slot="serial" slot-scope="text, record, index">
+                {{ index + 1 }}
+              </span>
+              <span slot="buttonType" slot-scope="text">
+                <a-badge v-if="text == 1" status="success" :text="$t('系统默认')" />
+                <a-badge v-else status="error" :text="$t('自定义')" />
+              </span>
+              <span slot="visible" slot-scope="text">
+                <a-badge v-if="text == 1" status="success" :text="$t('是')" />
+                <a-badge v-else status="error" :text="$t('否')" />
+              </span>
+              <span slot="attribute" slot-scope="text">
+                <a-badge v-if="text != ''" status="success" text="√" />
+                <a-badge v-else status="error" text="×" />
+              </span>
+              <div slot="action" slot-scope="text, record, index">
+                <a @click="handleAddressScope(record, index)">
+                  <a-badge
+                    v-if="record.bookScope && record.bookScope.priv && record.bookScope.priv.length > 0"
+                    status="success"
+                  />
+                  <a-badge v-else status="default" />
+                  {{ $t('地址簿范围') }}
+                </a>
+                <a-divider type="vertical" />
+                <a @click="handleEditMenu(record, index)">{{ $t('编辑') }}</a>
+                <a-divider type="vertical" />
+                <a-popconfirm
+                  :title="$t('请确认是否删除?')"
+                  :ok-text="$t('确定')"
+                  :cancel-text="$t('取消')"
+                  @confirm="handleDeleteMenu(record)"
+                >
+                  <a>{{ $t('删除') }}</a>
+                </a-popconfirm>
+              </div>
+            </a-table>
+          </template>
+          <a-divider orientation="left">{{ $t('任务通知') }}</a-divider>
+          <a-form-item :label="$t('通知方式')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-checkbox-group>
+              <a-checkbox value="A">{{ $t('邮件') }}</a-checkbox>
+              <a-checkbox value="B">{{ $t('站内消息') }}</a-checkbox>
+              <a-checkbox value="C">{{ $t('微信') }}</a-checkbox>
+            </a-checkbox-group>
+          </a-form-item>
+          <a-form-item :label="$t('通知模板')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-radio-group>
+              <a-radio value="1">{{ $t('使用流程默认模板') }}</a-radio>
+              <a-radio value="2">{{ $t('自定义模板') }}</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item :label="$t('通知标题')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-input />
+          </a-form-item>
+          <a-form-item :label="$t('通知内容')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-textarea :auto-size="{ minRows: 5, maxRows: 10 }" />
+          </a-form-item>
+        </a-form>
+      </a-tab-pane>
+      <a-tab-pane v-if="currentSelect.type === 'user_transition'" key="participation" :tab="$t('办理人')">
+        <a-form :form="form">
+          <a-form-item label="办理人备注" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-textarea v-model="partuserRemarks" :autoSize="{ minRows: 1, maxRows: 6 }" />
+          </a-form-item>
+          <a-form-item label="办理人类型" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-radio-group
+              v-model="handleData.type"
+              @change="
+                (e) => {
+                  if (e.target.value === 'user') {
+                    handleData.program = 'fixedUser'
+                  } else if (e.target.value === 'department') {
+                    handleData.program = 'fixedDepartment'
+                  } else if (e.target.value === 'role') {
+                    handleData.program = 'fixedRole'
+                  }
+                  changeAssociatedList(handleData.type, 'change')
+                  $forceUpdate()
+                }
+              "
+            >
+              <a-radio value="user">用户</a-radio>
+              <a-radio value="department">部门</a-radio>
+              <a-radio value="role">角色</a-radio>
+            </a-radio-group>
+          </a-form-item>
+          <a-form-item label="查找方案" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-select
+              v-model="handleData.program"
+              style="width: 300px"
+              @change="
+                (e) => {
+                  handleData.value = undefined
+                  changeAssociatedList(handleData.type, 'change')
+                  if (e === 'fromTable' && fieldArrHandle.length === 0) {
+                    // 获取 来自数据表 本表字段
+                    getFromTableField()
+                  } else if (e === 'selectRuleTable' && tableFieldsHandleList.length === 0) {
+                    // 获取 规则表数据表
+                    getTableFieldsHandleList()
+                    getFromTableField()
+                  }
+                  $forceUpdate()
+                }
+              "
+            >
+              <a-select-option v-for="item in programList" :key="item.value" :value="item.value">
+                {{ item.label }}
+              </a-select-option>
+            </a-select>
+            <!-- 固定 用户/部门/角色 -->
+            <div>
+              <data-picker
+                v-show="handleData.program === 'fixedUser'"
+                ref="user"
+                :placeholder="$t('请选择用户')"
+                name="user"
+                displayType="list"
+                size="small"
+                url="/admin/search/userSearch"
+                searchUrl="/admin/search/userSearch"
+                :value="handleData.optionArr"
+                :scope="scope"
+                :multiple="true"
+                :parameter="{ sortField: 'username' }"
+                :optionsConversion="
+                  (list, displayType, searchType) => {
+                    return list.map((item) => {
+                      const obj = item
+                      obj.key = item.username
+                      obj.label = `${item.username}(${item.realName})`
+                      return obj
+                    })
+                  }
+                "
+                @select="
+                  (data, options) => {
+                    handleData.value = data
+                    $set(handleData, 'options', options)
+                  }
+                "
+              />
+              <data-picker
+                v-show="handleData.program === 'fixedDepartment'"
+                ref="department"
+                :placeholder="$t('请选择部门')"
+                name="departmentId"
+                parentId="parentDepartmentId"
+                displayType="tree"
+                size="small"
+                :multiple="true"
+                url="/admin/department/init"
+                searchUrl="/admin/search/departmentSearch"
+                :value="handleData.optionArr"
+                :scope="scope"
+                :optionsConversion="
+                  (list, displayType, searchType) => {
+                    if (searchType) {
+                      return list.map((item) => {
+                        const obj = item
+                        obj.key = item.departmentId
+                        obj.label = item.fullDepartmentName
+                        return obj
+                      })
+                    } else {
+                      return list.map((item) => {
+                        const obj = item
+                        obj.key = item.departmentId
+                        obj.label = item.departmentName
+                        return obj
+                      })
+                    }
+                  }
+                "
+                @select="
+                  (data, options) => {
+                    handleData.value = data
+                    $set(handleData, 'options', options)
+                  }
+                "
+              />
+              <data-picker
+                v-show="handleData.program === 'fixedRole'"
+                ref="role"
+                :placeholder="$t('请选择角色')"
+                name="role"
+                displayType="list"
+                size="small"
+                :multiple="true"
+                url="/admin/search/roleSearch"
+                searchUrl="/admin/search/roleSearch"
+                :value="handleData.optionArr"
+                :scope="scope"
+                :optionsConversion="
+                  (list, displayType, searchType) => {
+                    return list.map((item) => {
+                      const obj = item
+                      obj.key = item.roleId
+                      obj.label = item.roleName
+                      return obj
+                    })
+                  }
+                "
+                @select="
+                  (data, options) => {
+                    handleData.value = data
+                    $set(handleData, 'options', options)
+                  }
+                "
+              />
+            </div>
+            <!-- 来自数据表 -->
+            <div v-if="handleData.program === 'fromTable'">
+              <a-select
+                v-model="handleData.field"
+                showSearch
+                option-filter-prop="children"
+                :allowClear="true"
+                style="width: 300px"
+                placeholder="请选择本表字段"
+              >
+                <a-select-option v-for="item in fieldArrHandle" :key="item.alias">{{ item.name }}</a-select-option>
+              </a-select>
+            </div>
+            <!-- 与流程创建人相关、与上个任务办理人相关-->
+            <div v-if="['flowAttrUser', 'taskUp'].includes(handleData.program)">
+              <a-select v-model="handleData.associateValue" style="width: 300px" @change="$forceUpdate()">
+                <a-select-option v-for="item in associatedList" :key="item.value">{{ item.label }}</a-select-option>
+              </a-select>
+            </div>
+            <!-- 与指定变迁办理人相关 -->
+            <div v-if="handleData.program === 'taskUpHandle'">
+              <a-select v-model="handleData.specifyAssociated" style="width: 300px" @change="$forceUpdate()">
+                <a-select-option v-for="item in specifyAssociatedList" :key="item.transition_id">
+                  {{ item.transition_name }}
+                </a-select-option>
+              </a-select>
+              <a-select
+                v-if="handleData.type !== 'role'"
+                v-model="handleData.associateValue"
+                style="width: 300px; margin-left: 16px"
+                @change="$forceUpdate()"
+              >
+                <a-select-option v-for="item in associatedList" :key="item.value">{{ item.label }}</a-select-option>
+              </a-select>
+            </div>
+            <!-- 查询规则表 -->
+            <div v-if="handleData.program === 'selectRuleTable'">
+              <div>
+                <a-row type="flex" align="middle">
+                  <a-col :span="22">
+                    <a-divider orientation="left"><span style="font-size: 13px">选择规则表</span></a-divider>
+                    <div>
+                      <a-cascader
+                        v-model="handleData.selectRuleTable.targetTable"
+                        size="small"
+                        style="width: 300px"
+                        :show-search="true"
+                        placeholder="请选择规则表"
+                        :options="tableFieldsHandleList"
+                        @change="
+                          (e) => {
+                            tableFieldsHandleChange(e, handleData.selectRuleTable, 'click')
+                          }
+                        "
+                      />
+                    </div>
+                    <a-divider orientation="left"><span style="font-size: 13px">查表条件</span></a-divider>
+                    <div
+                      v-for="(includeItem, includeIndex) in handleData.selectRuleTable.condition"
+                      :key="includeIndex"
+                    >
+                      <a-row :gutter="8" type="flex" align="middle">
+                        <a-col :span="6">
+                          <a-select
+                            v-model="includeItem.ruleAlias"
+                            placeholder="请选择规则表字段"
+                            showSearch
+                            option-filter-prop="children"
+                            :allowClear="true"
+                            size="small"
+                            @change="
+                              (value) => {
+                                handleData.selectRuleTable.ruleFieldList.forEach((item1) => {
+                                  if (item1.alias === value) {
+                                    // 根据字段，给出相应条件
+                                    if (['text', 'textarea', 'serialnumber'].indexOf(item1.formType) !== -1) {
+                                      includeItem.conditionArr = [
+                                        { enName: 'eq', cnName: '等于' },
+                                        { enName: 'ne', cnName: '不等于' },
+                                        { enName: 'cn', cnName: '包含' },
+                                        { enName: 'nc', cnName: '不包含' },
+                                        { enName: 'bw', cnName: '开始于' },
+                                        { enName: 'ew', cnName: '结束于' },
+                                        { enName: 'em', cnName: '为空' },
+                                        { enName: 'nem', cnName: '不为空' }
+                                      ]
+                                    } else if (
+                                      ['radio', 'switch', 'checkbox', 'combobox'].indexOf(item1.formType) !== -1
+                                    ) {
+                                      includeItem.conditionArr = [
+                                        { enName: 'eq', cnName: '等于' },
+                                        { enName: 'ne', cnName: '不等于' },
+                                        { enName: 'em', cnName: '为空' },
+                                        { enName: 'nem', cnName: '不为空' }
+                                      ]
+                                    } else if (['number', 'datetime'].indexOf(item1.formType) !== -1) {
+                                      includeItem.conditionArr = [
+                                        { enName: 'eq', cnName: '等于' },
+                                        { enName: 'ne', cnName: '不等于' },
+                                        { enName: 'gt', cnName: '大于' },
+                                        { enName: 'ge', cnName: '大于等于' },
+                                        { enName: 'lt', cnName: '小于' },
+                                        { enName: 'le', cnName: '小于等于' },
+                                        { enName: 'em', cnName: '为空' },
+                                        { enName: 'nem', cnName: '不为空' }
+                                      ]
+                                    } else if (['associated'].indexOf(item1.formType) !== -1) {
+                                      includeItem.conditionArr = [
+                                        { enName: 'eq', cnName: '等于' },
+                                        { enName: 'ne', cnName: '不等于' },
+                                        { enName: 'cn', cnName: '包含' },
+                                        { enName: 'nc', cnName: '不包含' },
+                                        { enName: 'bw', cnName: '开始于' },
+                                        { enName: 'ew', cnName: '结束于' },
+                                        { enName: 'em', cnName: '为空' },
+                                        { enName: 'nem', cnName: '不为空' }
+                                      ]
+                                    } else if (['address', 'treeselect', 'tag'].indexOf(item1.formType) !== -1) {
+                                      includeItem.conditionArr = [
+                                        { enName: 'cn', cnName: '包含' },
+                                        { enName: 'nc', cnName: '不包含' },
+                                        { enName: 'em', cnName: '为空' },
+                                        { enName: 'nem', cnName: '不为空' }
+                                      ]
+                                    } else if (['cascader'].indexOf(item1.formType) !== -1) {
+                                      includeItem.conditionArr = [
+                                        { enName: 'eq', cnName: '等于' },
+                                        { enName: 'ne', cnName: '不等于' },
+                                        { enName: 'cn', cnName: '包含' },
+                                        { enName: 'nc', cnName: '不包含' },
+                                        { enName: 'em', cnName: '为空' },
+                                        { enName: 'nem', cnName: '不为空' }
+                                      ]
+                                    }
+                                  }
+                                })
+                                includeItem.include = includeItem.conditionArr[0].enName
+                                $forceUpdate()
+                              }
+                            "
+                          >
+                            <a-select-option
+                              v-for="fieldItem in handleData.selectRuleTable.ruleFieldList"
+                              :key="fieldItem.alias"
+                            >
+                              {{ fieldItem.name }}
+                            </a-select-option>
+                          </a-select>
+                        </a-col>
+                        <a-col :span="4">
+                          <a-select
+                            v-model="includeItem.include"
+                            placeholder="请选择"
+                            size="small"
+                            @change="
+                              (value) => {
+                                choiceInclude(value, includeItem), $forceUpdate()
+                              }
+                            "
+                          >
+                            <a-select-option
+                              v-for="(crItem, crIndex) in includeItem.conditionArr"
+                              :key="crIndex"
+                              option-filter-prop="children"
+                              :value="crItem.enName"
+                            >
+                              {{ crItem.cnName }}
+                            </a-select-option>
+                          </a-select>
+                        </a-col>
+                        <template v-if="!includeItem.type">
+                          <a-col :span="4">
+                            <a-select v-model="includeItem.setType" size="small" @change="$forceUpdate()">
+                              <a-select-option value="field">本表字段</a-select-option>
+                              <a-select-option value="custom">自定义</a-select-option>
+                            </a-select>
+                          </a-col>
+                          <a-col :span="8">
+                            <a-row v-if="includeItem.setType === 'custom'" type="flex" align="middle">
+                              <a-col :span="24">
+                                <querier-codemirror-input
+                                  ref="querierCodemirrorInput"
+                                  :params.sync="includeItem.customCode"
+                                />
+                              </a-col>
+                              <div
+                                style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+                                size="small"
+                                @click="
+                                  () => {
+                                    showKey = includeIndex
+                                    $refs['customCodemirrorsRule' + showKey][0].show(
+                                      Object.assign(
+                                        {
+                                          title: '公式编辑器',
+                                          item: includeItem,
+                                          index: includeIndex
+                                        },
+                                        { tableId: mydata.tableId }
+                                      )
+                                    )
+                                  }
+                                "
+                              >
+                                fx
+                              </div>
+                              <custom-codemirror
+                                :ref="'customCodemirrorsRule' + includeIndex"
+                                @ok="
+                                  (val) => {
+                                    $set(includeItem, 'customCode', val)
+                                    $forceUpdate()
+                                  }
+                                "
+                              />
+                            </a-row>
+                            <a-select
+                              v-else
+                              v-model="includeItem.fieldAlias"
+                              size="small"
+                              showSearch
+                              option-filter-prop="children"
+                              :allowClear="true"
+                              @change="$forceUpdate()"
+                            >
+                              <a-select-option v-for="fieldItem in fieldArrHandle" :key="fieldItem.alias">
+                                {{ fieldItem.name }}
+                              </a-select-option>
+                            </a-select>
+                          </a-col>
+                        </template>
+                        <template v-else>
+                          <a-col :span="12">
+                            <a-input size="small" type="text" disabled />
+                          </a-col>
+                        </template>
+                        <a-col :span="2" style="display: flex; align-items: center; justify-content: center">
+                          <a-icon
+                            :style="{ fontSize: '24px', color: '#52c41a' }"
+                            type="plus-square"
+                            theme="filled"
+                            @click="
+                              () => {
+                                handleData.selectRuleTable.condition.push({
+                                  customCode: {
+                                    html: '',
+                                    value: ''
+                                  }
+                                })
+                                $forceUpdate()
+                              }
+                            "
+                          />
+                          <a-icon
+                            :style="{
+                              fontSize: '24px',
+                              color: handleData.selectRuleTable.condition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                              'padding-left': '5px'
+                            }"
+                            type="minus-square"
+                            theme="filled"
+                            @click="
+                              handleData.selectRuleTable.condition.length === 1
+                                ? ''
+                                : handleData.selectRuleTable.condition.splice(includeIndex, 1),
+                                $forceUpdate()
+                            "
+                          />
+                        </a-col>
+                      </a-row>
+                    </div>
+                    <a-divider orientation="left">
+                      <span style="font-size: 13px">
+                        返回{{
+                          handleData.type === 'user' ? '办理人' : handleData.type === 'department' ? '部门' : '角色'
+                        }}
+                      </span>
+                    </a-divider>
+                    <a-row :gutter="8" type="flex" align="middle" style="margin-bottom: 36px">
+                      <a-col :span="6">
+                        <a-select
+                          v-model="handleData.selectRuleTable.judgeRuleAlias"
+                          placeholder="请选择规则表返回值字段"
+                          showSearch
+                          option-filter-prop="children"
+                          :allowClear="true"
+                          size="small"
+                          @change="$forceUpdate()"
+                        >
+                          <a-select-option
+                            v-for="fieldItem in handleData.selectRuleTable.ruleFieldList"
+                            :key="fieldItem.alias"
+                          >
+                            {{ fieldItem.name }}
+                          </a-select-option>
+                        </a-select>
+                      </a-col>
+                    </a-row>
+                  </a-col>
+                  <a-col :span="2">
+                    <a-select
+                      v-model="handleData.selectRuleTable.logic"
+                      style="width: 80px; margin-left: 15px"
+                      size="small"
+                    >
+                      <a-select-option value="and">且(and)</a-select-option>
+                    </a-select>
+                  </a-col>
+                </a-row>
+              </div>
+            </div>
+            <!-- 自定义 -->
+            <div v-if="handleData.program === 'customHandle'">
+              <a-row style="margin-top: 4px">
+                <a-col :span="24">
+                  <querier-codemirror-input ref="querierCodemirrorInput" :params.sync="handleData.customCode" />
+                </a-col>
+                <div
+                  style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+                  size="small"
+                  @click="
+                    () => {
+                      const obj = { customCode: handleData.customCode || { html: '', value: '' } }
+                      $refs['customCodemirrorsCustom'].show(
+                        Object.assign(
+                          {
+                            title: '公式编辑器',
+                            item: Object.assign(obj, handleData.customCode),
+                            index: 0
+                          },
+                          mydata
+                        )
+                      )
+                    }
+                  "
+                >
+                  fx
+                </div>
+                <custom-codemirror
+                  :ref="'customCodemirrorsCustom'"
+                  @ok="
+                    (text) => {
+                      $set(handleData, 'customCode', text)
+                      $forceUpdate()
+                    }
+                  "
+                />
+              </a-row>
+            </div>
+            <div v-if="handleData.program === 'taskUpSpecify'">
+              <a-alert message="建设中" type="info" show-icon style="margin-top: 4px" />
+            </div>
+          </a-form-item>
+          <a-form-item :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <span slot="label">
+              分配方案
+              <a-tooltip placement="bottom">
+                <template slot="title">
+                  <div>全部分配：查找方案找出来的所有用户，都会分配该待办任务</div>
+                  <div>随机分配：在查找方案找出来的用户集合中，随机选一个用户进行分配</div>
+                  <div>饱和度分配：在查找方案找出来的用户集合中，选出该流程待办任务最少的用户进行分配</div>
+                </template>
+                <a-icon type="question-circle" />
+              </a-tooltip>
+            </span>
+            <a-radio-group v-model="handleData.distribute">
+              <a-radio value="allDistribute">全部分配</a-radio>
+              <a-radio value="randomDistribute">随机分配</a-radio>
+              <a-radio value="saturationDistribute">饱和度分配</a-radio>
+            </a-radio-group>
+          </a-form-item>
+        </a-form>
+      </a-tab-pane>
+      <a-tab-pane v-if="currentSelect.type === 'user_transition'" key="tplview" :tab="$t('表单应用')">
+        <a-form>
+          <a-form-item :label="$t('表单视图')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+            <a-select v-model="currentSelect.templateId" allowClear>
+              <a-select-option v-for="(value, key) in tplviewData" :key="key" :value="value.uid" :record="value">
+                {{ value.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-divider orientation="left">{{ $t('操作权限') }}</a-divider>
+          <flow-attr-transition-field-priv
+            ref="flowAttrTransitionFieldPriv"
+            :params="{ fieldPrivData: currentSelect.fieldPrivData, flowData: flowData }"
+            @change="fieldPrivData = $event"
+            @ok="handleOk"
+          />
+        </a-form>
+      </a-tab-pane>
+      <a-tab-pane key="timeLimit" :tab="$t('变迁时限')">
+        <a-space style="margin-bottom: 10px">
+          <a-button @click="addTimeLimit()">{{ $t('新增变迁时限设置') }}</a-button>
+          <a-button @click="handleTimeSort">{{ $t('排序') }}</a-button>
+        </a-space>
+        <a-collapse v-if="timeLimitData.length" v-model="activeKey">
+          <a-collapse-panel v-for="(item, key) in timeLimitData" :key="item.id">
+            <div slot="header">
+              <a-row type="flex">
+                <a-col flex="400px">
+                  <a-input v-model="item.name" size="small" @click.stop="" />
+                </a-col>
+                <a-col flex="auto" style="text-align: right">
+                  <a-icon
+                    :style="{ fontSize: '24px', color: '#52c41a', 'padding-left': '10px' }"
+                    type="plus-square"
+                    theme="filled"
+                    @click.stop="addTimeLimit(key)"
+                  />
+                  <a-icon
+                    :style="{ fontSize: '24px', color: '#ff4d4f', 'padding-left': '10px' }"
+                    type="minus-square"
+                    theme="filled"
+                    @click.stop="handleDelete(key)"
+                  />
+                </a-col>
+              </a-row>
+            </div>
+            <a-divider orientation="left">{{ $t('条件：当') }}</a-divider>
+            <a-card size="small">
+              <a-row type="flex" align="middle">
+                <a-col :span="22">
+                  <a-row
+                    v-for="(simpleItem, simpleIndex) in item.conditionVisual"
+                    :key="simpleIndex"
+                    type="flex"
+                    align="middle"
+                    :gutter="10"
+                    style="padding: 5px 0"
+                  >
+                    <a-col :span="4">
+                      <a-select
+                        v-model="simpleItem.type"
+                        size="small"
+                        style="width: 100%"
+                        @change="
+                          (value) => {
+                            if (value === 'field') {
+                              simpleItem.condition = [
+                                {
+                                  include: '',
+                                  value: ''
+                                }
+                              ]
+                            } else if (value.includes('current')) {
+                              simpleItem.condition = [
+                                {
+                                  include: '',
+                                  value: []
+                                }
+                              ]
+                              $set(simpleItem, 'include', 'bl')
+                            }
+                          }
+                        "
+                      >
+                        <a-select-option value="notSet">{{ $t('无条件') }}</a-select-option>
+                        <a-select-option value="field">{{ $t('字段') }}</a-select-option>
+                        <a-select-option value="currentUser">{{ $t('创建人') }}</a-select-option>
+                        <a-select-option value="currentDepartment">{{ $t('创建人部门') }}</a-select-option>
+                        <a-select-option value="currentRole">{{ $t('创建人角色') }}</a-select-option>
+                        <a-select-option value="transitionFrom">{{ $t('来自于变迁') }}</a-select-option>
+                        <a-select-option value="custom">{{ $t('自定义') }}</a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col v-if="simpleItem.type === 'custom'" :span="18">
+                      <a-row type="flex" align="middle">
+                        <a-col :span="24">
+                          <querier-codemirror-input ref="querierCodemirrorInput" :params.sync="simpleItem.customCode" />
+                        </a-col>
+                        <div
+                          style="position: absolute; right: 15px; cursor: pointer; z-index: 10"
+                          size="small"
+                          @click="
+                            () => {
+                              showKey = simpleIndex
+                              $refs['customCodemirrors' + showKey][0].show({
+                                title: $t('公式编辑器'),
+                                item: simpleItem,
+                                tableId: mydata.tableId
+                              })
+                            }
+                          "
+                        >
+                          fx
+                        </div>
+                        <custom-codemirror
+                          :ref="'customCodemirrors' + simpleIndex"
+                          @ok="
+                            (val) => {
+                              $set(item.conditionVisual[showKey], 'customCode', val)
+                            }
+                          "
+                        />
+                      </a-row>
+                    </a-col>
+                    <a-col v-if="simpleItem.type === 'notSet'" :span="18"></a-col>
+                    <a-col v-if="simpleItem.type === 'transitionFrom'" :span="18">
+                      <a-row type="flex" align="middle">
+                        <a-col flex="auto">
+                          <a-row
+                            v-for="(includeItem, includeIndex) in simpleItem.condition"
+                            :key="includeIndex"
+                            :gutter="[8, 8]"
+                            type="flex"
+                            align="middle"
+                          >
+                            <a-col :span="12">
+                              <a-select
+                                v-model="includeItem.transitionFromVal"
+                                style="width: 100%"
+                                :placeholder="$t('请选择变迁')"
+                                size="small"
+                                @change="
+                                  (e) => {
+                                    includeItem.transitionFromWay = undefined
+                                    for (const i in allWayData) {
+                                      if (i.includes(e)) {
+                                        includeItem.showWay = allWayData[i]
+                                      }
+                                    }
+                                  }
+                                "
+                              >
+                                <a-select-option
+                                  v-for="value in transition"
+                                  :key="value.transitionId"
+                                  :value="value.transitionId"
+                                >
+                                  {{ value.transitionName }}
+                                </a-select-option>
+                              </a-select>
+                            </a-col>
+                            <a-col flex="70px">{{ $t('办理方式 :') }}</a-col>
+                            <a-col flex="auto">
+                              <a-select
+                                v-model="includeItem.transitionFromWay"
+                                style="width: 100%"
+                                allowClear
+                                :placeholder="$t('请选择办理方式')"
+                                size="small"
+                                @change="
+                                  (e) => {
+                                    $forceUpdate()
+                                  }
+                                "
+                              >
+                                <a-select-option
+                                  v-for="value in includeItem.showWay"
+                                  :key="value.alias"
+                                  :value="value.alias"
+                                >
+                                  {{ value.way }}
+                                </a-select-option>
+                              </a-select>
+                            </a-col>
+                            <a-col flex="70px" style="display: flex; align-items: center">
+                              <a-icon
+                                :style="{ fontSize: '24px', color: '#52c41a' }"
+                                type="plus-square"
+                                theme="filled"
+                                @click="
+                                  simpleItem.type === 'field'
+                                    ? simpleItem.condition.splice(includeIndex + 1, 0, {
+                                        include: '',
+                                        value: undefined
+                                      })
+                                    : simpleItem.condition.splice(includeIndex + 1, 0, { include: '', value: [] })
+                                "
+                              />
+                              <a-icon
+                                :style="{
+                                  fontSize: '24px',
+                                  color: simpleItem.condition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                                  'padding-left': '8px'
+                                }"
+                                type="minus-square"
+                                theme="filled"
+                                @click="
+                                  simpleItem.condition.length === 1 ? '' : simpleItem.condition.splice(includeIndex, 1)
+                                "
+                              />
+                            </a-col>
+                          </a-row>
+                        </a-col>
+                        <a-col flex="80px">
+                          <a-select v-model="simpleItem.logic" style="width: 100%" size="small">
+                            <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+                            <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+                          </a-select>
+                        </a-col>
+                      </a-row>
+                    </a-col>
+                    <a-col
+                      v-if="
+                        simpleItem.type === 'field' &&
+                        simpleItem.type !== 'custom' &&
+                        simpleItem.type !== 'notSet' &&
+                        simpleItem.type !== 'transitionFrom'
+                      "
+                      :span="4"
+                    >
+                      <a-select
+                        v-if="simpleItem.type === 'field'"
+                        v-model="simpleItem.field"
+                        size="small"
+                        style="width: 100%"
+                        show-search
+                        :allowClear="true"
+                        option-filter-prop="children"
+                        @change="
+                          (value) => {
+                            simpleItem.condition = [
+                              {
+                                include: '',
+                                value: undefined
+                              }
+                            ]
+                            fieldArr.forEach((item1) => {
+                              if (item1.alias === value) {
+                                item1.settings = JSON.parse(item1.setting)
+                                // 判断是否有数据字典
+                                simpleItem.src = item1.settings.form.src ? item1.settings.form.src : ''
+                                simpleItem.formType = item1.formType
+                                simpleItem.fieldId = item1.fieldId
+                                simpleItem.fieldType = item1.fieldType
+                                simpleItem.alias = item1.alias
+                                if (simpleItem.src && item1.formType === 'treeselect') {
+                                  getTreeOption(simpleItem, item1)
+                                } else if (item1.formType === 'tag' && !tagOption.length) {
+                                  getTagOption(item1.settings.form.tagSetting.rnumber)
+                                  simpleItem.condition = [
+                                    {
+                                      include: '',
+                                      value: []
+                                    }
+                                  ]
+                                } else if (item1.formType === 'tag') {
+                                  simpleItem.condition = [
+                                    {
+                                      include: '',
+                                      value: []
+                                    }
+                                  ]
+                                } else if (simpleItem.src) {
+                                  getOption(simpleItem)
+                                } else if (item1.formType === 'treeselect') {
+                                  simpleItem.dataSource = item1.settings.attribute.dataSource
+                                  getTreeOption(simpleItem, item1)
+                                } else {
+                                  simpleItem.option = []
+                                }
+                                simpleItem.form = item1.settings.form
+                                // 根据字段，给出相应条件
+                                if (['text', 'textarea'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.condiArr = [
+                                    { enName: 'eq', cnName: $t('等于') },
+                                    { enName: 'ne', cnName: $t('不等于') },
+                                    { enName: 'cn', cnName: $t('包含') },
+                                    { enName: 'nc', cnName: $t('不包含') },
+                                    { enName: 'bw', cnName: $t('开始于') },
+                                    { enName: 'ew', cnName: $t('结束于') },
+                                    { enName: 'em', cnName: $t('为空') },
+                                    { enName: 'nem', cnName: $t('不为空') }
+                                  ]
+                                } else if (['radio', 'switch', 'checkbox', 'combobox'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.condiArr = [
+                                    { enName: 'eq', cnName: $t('等于') },
+                                    { enName: 'ne', cnName: $t('不等于') },
+                                    { enName: 'em', cnName: $t('为空') },
+                                    { enName: 'nem', cnName: $t('不为空') }
+                                  ]
+                                } else if (['number', 'datetime'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.condiArr = [
+                                    { enName: 'eq', cnName: $t('等于') },
+                                    { enName: 'ne', cnName: $t('不等于') },
+                                    { enName: 'gt', cnName: $t('大于') },
+                                    { enName: 'ge', cnName: $t('大于等于') },
+                                    { enName: 'lt', cnName: $t('小于') },
+                                    { enName: 'le', cnName: $t('小于等于') },
+                                    { enName: 'em', cnName: $t('为空') },
+                                    { enName: 'nem', cnName: $t('不为空') }
+                                  ]
+                                } else if (
+                                  ['cascader', 'address', 'treeselect', 'tag'].indexOf(item1.formType) !== -1
+                                ) {
+                                  simpleItem.condiArr = [
+                                    { enName: 'cn', cnName: $t('包含') },
+                                    { enName: 'nc', cnName: $t('不包含') },
+                                    { enName: 'em', cnName: $t('为空') },
+                                    { enName: 'nem', cnName: $t('不为空') }
+                                  ]
+                                } else if (['associated'].indexOf(item1.formType) !== -1) {
+                                  simpleItem.condiArr = [
+                                    { enName: 'eq', cnName: $t('等于') },
+                                    { enName: 'ne', cnName: $t('不等于') },
+                                    { enName: 'cn', cnName: $t('包含') },
+                                    { enName: 'nc', cnName: $t('不包含') },
+                                    { enName: 'bw', cnName: $t('开始于') },
+                                    { enName: 'ew', cnName: $t('结束于') },
+                                    { enName: 'em', cnName: $t('为空') },
+                                    { enName: 'nem', cnName: $t('不为空') }
+                                  ]
+                                }
+                              }
+                            })
+                          }
+                        "
+                      >
+                        <a-select-option
+                          v-for="(fieldItem, fieldIndex) in fieldArr"
+                          :key="fieldIndex"
+                          :value="fieldItem.alias"
+                        >
+                          {{ fieldItem.name }}
+                        </a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col
+                      v-if="
+                        simpleItem.type !== 'field' &&
+                        simpleItem.type !== 'custom' &&
+                        simpleItem.type !== 'notSet' &&
+                        simpleItem.type !== 'transitionFrom'
+                      "
+                      :span="4"
+                    >
+                      <a-select v-model="simpleItem.include" size="small" style="width: 100%">
+                        <a-select-option value="bl">{{ $t('属于') }}</a-select-option>
+                        <a-select-option value="nbl">{{ $t('不属于') }}</a-select-option>
+                      </a-select>
+                    </a-col>
+                    <a-col
+                      v-if="
+                        simpleItem.type !== 'custom' &&
+                        simpleItem.type !== 'notSet' &&
+                        simpleItem.type !== 'transitionFrom'
+                      "
+                      :span="14"
+                      style="border: 1px solid #e8e8e8; margin-bottom: 4px"
+                    >
+                      <a-row type="flex" align="middle" :gutter="10">
+                        <a-col :span="20">
+                          <a-row
+                            v-for="(includeItem, includeIndex) in simpleItem.condition"
+                            :key="includeIndex"
+                            type="flex"
+                            align="middle"
+                            :gutter="10"
+                            style="padding: 5px 0"
+                          >
+                            <a-col v-if="simpleItem.type === 'field'" :span="6">
+                              <a-select
+                                v-model="includeItem.include"
+                                style="width: 100%"
+                                size="small"
+                                :dropdownMatchSelectWidth="false"
+                                @change="
+                                  (value) => {
+                                    choiceInclude(value, includeItem)
+                                  }
+                                "
+                              >
+                                <a-select-option
+                                  v-for="(crItem, crIndex) in simpleItem.condiArr"
+                                  :key="crIndex"
+                                  option-filter-prop="children"
+                                  :value="crItem.enName"
+                                >
+                                  {{ crItem.cnName }}
+                                </a-select-option>
+                              </a-select>
+                            </a-col>
+                            <a-col v-if="simpleItem.type === 'field' && includeItem.include !== 'em'" :span="15">
+                              <template v-if="!includeItem.type">
+                                <!-- 日期 -->
+                                <a-date-picker
+                                  v-if="simpleItem.formType === 'datetime' && simpleItem.fieldType === 'DATETIME'"
+                                  size="small"
+                                  style="width: 100%"
+                                  :defaultValue="
+                                    includeItem.value && includeItem.value !== '0000-00-00 00:00:00'
+                                      ? moment(includeItem.value, 'YYYY-MM-DD HH:mm:ss')
+                                      : null
+                                  "
+                                  format="YYYY-MM-DD HH:mm:ss"
+                                  @change="
+                                    (dates, dateStrings) => {
+                                      includeItem.value = dateStrings
+                                    }
+                                  "
+                                ></a-date-picker>
+                                <a-date-picker
+                                  v-else-if="simpleItem.formType === 'datetime' && simpleItem.fieldType === 'DATE'"
+                                  size="small"
+                                  style="width: 100%"
+                                  :defaultValue="
+                                    includeItem.value && includeItem.value !== '0000-00-00'
+                                      ? moment(includeItem.value, 'YYYY-MM-DD')
+                                      : null
+                                  "
+                                  format="YYYY-MM-DD"
+                                  @change="
+                                    (dates, dateStrings) => {
+                                      includeItem.value = dateStrings
+                                    }
+                                  "
+                                ></a-date-picker>
+                                <a-time-picker
+                                  v-else-if="simpleItem.formType === 'datetime' && simpleItem.fieldType === 'TIME'"
+                                  size="small"
+                                  style="width: 100%"
+                                  :defaultValue="
+                                    includeItem.value && includeItem.value !== '00:00:00'
+                                      ? moment(includeItem.value, 'HH:mm:ss')
+                                      : null
+                                  "
+                                  format="HH:mm:ss"
+                                  @change="
+                                    (dates, dateStrings) => {
+                                      includeItem.value = dateStrings
+                                    }
+                                  "
+                                ></a-time-picker>
+                                <!-- 树选择 -->
+                                <div v-else-if="simpleItem.formType === 'treeselect'">
+                                  <a-tree-select
+                                    v-if="simpleItem.dataSource && simpleItem.dataSource === 'addressBook'"
+                                    v-model="includeItem.value"
+                                    style="width: 100%"
+                                    size="small"
+                                    :placeholder="$t('请选择')"
+                                    :treeDefaultExpandedKeys="includeItem.value ? includeItem.value.split(',') : []"
+                                    :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                                    :tree-data="simpleItem.option"
+                                    :load-data="
+                                      (data) => {
+                                        return onLoadData(data, simpleItem, includeItem)
+                                      }
+                                    "
+                                  ></a-tree-select>
+                                  <a-tree-select
+                                    v-else
+                                    v-model="includeItem.value"
+                                    style="width: 100%"
+                                    size="small"
+                                    :placeholder="$t('请选择')"
+                                    :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
+                                    :tree-data="simpleItem.option"
+                                    :load-data="
+                                      (data) => {
+                                        return onLoadData(data, simpleItem, includeItem)
+                                      }
+                                    "
+                                    :treeDefaultExpandedKeys="includeItem.value ? includeItem.value.split(',') : []"
+                                  ></a-tree-select>
+                                </div>
+                                <div v-else-if="simpleItem.formType === 'address'">
+                                  <address-select
+                                    size="small"
+                                    :defaultValue="includeItem.value"
+                                    fieldType="field"
+                                    :series="simpleItem.form.showSeries"
+                                    @send="
+                                      (display, val, alias, allValue) => {
+                                        includeItem.value = val
+                                        includeItem.allValue = allValue
+                                      }
+                                    "
+                                  />
+                                </div>
+                                <!-- 标签 -->
+                                <a-cascader
+                                  v-else-if="simpleItem.formType === 'tag'"
+                                  v-model="includeItem.value"
+                                  size="small"
+                                  style="width: 100%"
+                                  :options="tagOption"
+                                  :placeholder="$t('请选择')"
+                                />
+                                <a-input v-else-if="!simpleItem.src" v-model="includeItem.value" size="small" />
+                                <a-select
+                                  v-else-if="simpleItem.src && simpleItem.formType === 'combobox'"
+                                  size="small"
+                                  style="width: 100%"
+                                  :placeholder="$t('请选择')"
+                                  :defaultValue="includeItem.value ? includeItem.value : undefined"
+                                  changeOnSelect
+                                  @change="
+                                    (value) => {
+                                      includeItem.value = value
+                                    }
+                                  "
+                                >
+                                  <a-select-option
+                                    v-for="(fieldItem, fieldKey) in simpleItem.option"
+                                    :key="fieldKey"
+                                    :value="fieldItem.value"
+                                  >
+                                    {{ fieldItem.label }}
+                                  </a-select-option>
+                                </a-select>
+                                <div v-else>
+                                  <tabs-select
+                                    :defaultValue="includeItem.value"
+                                    :valueKey="simpleItem.form.src || ''"
+                                    action="edit"
+                                    size="small"
+                                    :display="includeItem.display"
+                                    :field="includeItem"
+                                    :writeBack="simpleItem.form.writeBack"
+                                    fieldType="search"
+                                    @send="
+                                      (val, alias, display, status, allValue) => {
+                                        includeItem.value = val
+                                        includeItem.display = display
+                                        includeItem.allValue = allValue
+                                      }
+                                    "
+                                  />
+                                </div>
+                              </template>
+                              <template v-else>
+                                <a-input style="width: 100%" type="text" disabled size="small" />
+                              </template>
+                            </a-col>
+                            <a-col v-else-if="simpleItem.type === 'currentUser'" :span="21" style="padding-right: 14px">
+                              <a-row type="flex" align="middle">
+                                <a-col :span="23">
+                                  <a-select
+                                    v-model="includeItem.value"
+                                    style="width: 100%"
+                                    size="small"
+                                    mode="multiple"
+                                    :open="false"
+                                    :placeholder="$t('请选择')"
+                                    :showSearch="false"
+                                    allowClear
+                                    changeOnSelect
+                                    @change="
+                                      (value) => {
+                                        includeItem.value = value
+                                      }
+                                    "
+                                  >
+                                    <a-select-option
+                                      v-for="(userItem, userKey) in includeItem.userArr"
+                                      :key="userKey"
+                                      :value="userItem.username"
+                                    >
+                                      {{ userItem.username }}
+                                    </a-select-option>
+                                  </a-select>
+                                </a-col>
+                                <a-col :span="1">
+                                  <a-button
+                                    style="margin-left: -1px"
+                                    size="small"
+                                    icon="user"
+                                    @click="
+                                      () => {
+                                        recordKey.index = key
+                                        recordKey.simpleIndex = simpleIndex
+                                        recordKey.includeIndex = includeIndex
+                                        recordKey.type = 'user'
+                                        $refs.getUser.show({
+                                          fieldId: '',
+                                          selectValue: includeItem.value,
+                                          mode: 'multiple'
+                                        })
+                                      }
+                                    "
+                                  />
+                                </a-col>
+                              </a-row>
+                            </a-col>
+                            <a-col
+                              v-else-if="simpleItem.type === 'currentDepartment'"
+                              :span="21"
+                              style="padding-right: 14px"
+                            >
+                              <a-row type="flex" align="middle">
+                                <a-col :span="23">
+                                  <a-select
+                                    v-model="includeItem.value"
+                                    size="small"
+                                    style="width: 100%"
+                                    mode="multiple"
+                                    :open="false"
+                                    allowClear
+                                    :placeholder="$t('请选择部门')"
+                                    :showSearch="false"
+                                    changeOnSelect
+                                    @change="
+                                      (value) => {
+                                        includeItem.value = value
+                                      }
+                                    "
+                                  >
+                                    <a-select-option
+                                      v-for="(depItem, depKey) in includeItem.department"
+                                      :key="depKey"
+                                      :value="depItem.departmentId"
+                                    >
+                                      {{ depItem.name }}
+                                    </a-select-option>
+                                  </a-select>
+                                </a-col>
+                                <a-col :span="1">
+                                  <a-button
+                                    style="margin-left: -1px"
+                                    size="small"
+                                    icon="apartment"
+                                    @click="
+                                      () => {
+                                        recordKey.index = key
+                                        recordKey.simpleIndex = simpleIndex
+                                        recordKey.includeIndex = includeIndex
+                                        recordKey.type = 'department'
+                                        $refs.selectDepartment.show({
+                                          optionCustom: [],
+                                          option: includeItem.department || [],
+                                          optionType: 'department',
+                                          selectValue: includeItem.value,
+                                          mode: 'multiple'
+                                        })
+                                      }
+                                    "
+                                  />
+                                </a-col>
+                              </a-row>
+                            </a-col>
+                            <a-col v-else-if="simpleItem.type === 'currentRole'" :span="21" style="padding-right: 14px">
+                              <a-row type="flex" align="middle">
+                                <a-col :span="23">
+                                  <a-select
+                                    v-model="includeItem.value"
+                                    size="small"
+                                    style="width: 100%"
+                                    allowClear
+                                    :placeholder="$t('请选择角色')"
+                                    :open="false"
+                                    mode="multiple"
+                                    changeOnSelect
+                                    @change="
+                                      (value) => {
+                                        includeItem.value = value
+                                      }
+                                    "
+                                  >
+                                    <a-select-option
+                                      v-for="(value, roleKey) in includeItem.role"
+                                      :key="roleKey"
+                                      :value="value.roleId"
+                                    >
+                                      {{ value.name }}
+                                    </a-select-option>
+                                  </a-select>
+                                </a-col>
+                                <a-col :span="1">
+                                  <a-button
+                                    style="margin-left: -1px"
+                                    size="small"
+                                    icon="team"
+                                    @click="
+                                      () => {
+                                        recordKey.index = key
+                                        recordKey.simpleIndex = simpleIndex
+                                        recordKey.includeIndex = includeIndex
+                                        recordKey.type = 'role'
+                                        $refs.selectDepartment.show({
+                                          optionCustom: [],
+                                          option: includeItem.role || [],
+                                          optionType: 'role',
+                                          selectValue: includeItem.value,
+                                          mode: 'multiple',
+                                          url: '/admin/role/getRoleData'
+                                        })
+                                      }
+                                    "
+                                  />
+                                </a-col>
+                              </a-row>
+                            </a-col>
+                            <a-col :span="3" style="display: flex; align-items: center; justify-content: center">
+                              <a-icon
+                                :style="{ fontSize: '24px', color: '#52c41a' }"
+                                type="plus-square"
+                                theme="filled"
+                                @click="
+                                  simpleItem.type === 'field'
+                                    ? simpleItem.condition.splice(includeIndex + 1, 0, {
+                                        include: '',
+                                        value: undefined
+                                      })
+                                    : simpleItem.condition.splice(includeIndex + 1, 0, { include: '', value: [] })
+                                "
+                              />
+                              <a-icon
+                                :style="{
+                                  fontSize: '24px',
+                                  color: simpleItem.condition.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                                  'padding-left': '5px'
+                                }"
+                                type="minus-square"
+                                theme="filled"
+                                @click="
+                                  simpleItem.condition.length === 1 ? '' : simpleItem.condition.splice(includeIndex, 1)
+                                "
+                              />
+                            </a-col>
+                          </a-row>
+                        </a-col>
+                        <a-col :span="4">
+                          <a-select v-model="simpleItem.logic" style="width: 80px" size="small">
+                            <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+                            <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+                          </a-select>
+                        </a-col>
+                      </a-row>
+                    </a-col>
+                    <a-col :span="2" style="display: flex; align-items: center; justify-content: center">
+                      <a-icon
+                        :style="{ fontSize: '24px', color: '#52c41a' }"
+                        type="plus-square"
+                        theme="filled"
+                        @click="
+                          item.conditionVisual.splice(simpleIndex + 1, 0, {
+                            type: 'field',
+                            alias: '',
+                            src: '',
+                            condiArr: [],
+                            customCode: {
+                              html: '',
+                              value: ''
+                            },
+                            condition: [
+                              {
+                                include: '',
+                                value: ''
+                              }
+                            ],
+                            logic: 'and'
+                          })
+                        "
+                      />
+                      <a-icon
+                        :style="{
+                          fontSize: '24px',
+                          color: item.conditionVisual.length === 1 ? '#bfbfbf' : '#ff4d4f',
+                          'padding-left': '5px'
+                        }"
+                        type="minus-square"
+                        theme="filled"
+                        @click="item.conditionVisual.length === 1 ? '' : item.conditionVisual.splice(simpleIndex, 1)"
+                      />
+                    </a-col>
+                  </a-row>
+                </a-col>
+                <a-col :span="2">
+                  <a-select
+                    v-if="item.conditionVisual.length > 0"
+                    v-model="item.logic"
+                    style="width: 80px"
+                    size="small"
+                  >
+                    <a-select-option value="and">{{ $t('且(and)') }}</a-select-option>
+                    <a-select-option value="or">{{ $t('或(or)') }}</a-select-option>
+                  </a-select>
+                </a-col>
+              </a-row>
+            </a-card>
+            <a-divider orientation="left">{{ $t('变迁时限：那么') }}</a-divider>
+            <a-form-item :label="$t('工作日历')" :labelCol="{ span: 2 }" :wrapperCol="{ span: 22 }">
+              <a-row>
+                <a-col :span="26">
+                  <a-select v-model="item.workCalendar" style="width: 100%">
+                    <a-select-option value="0">{{ $t('继承流程全局设置') }}</a-select-option>
+                    <a-select-option v-for="(calItem, calIndex) in calendar" :key="calIndex" :value="calItem.value">
+                      {{ calItem.label }}
+                    </a-select-option>
+                    <a-select-option value="1">{{ $t('不设置') }}</a-select-option>
+                  </a-select>
+                </a-col>
+              </a-row>
+            </a-form-item>
+            <a-form-item
+              :label="$t('变迁时限')"
+              :labelCol="{ span: 2 }"
+              :wrapperCol="{ span: 22 }"
+              :required="true"
+              style="flex-direction: column"
+            >
+              <a-row :gutter="5">
+                <a-col :span="24">
+                  <a-radio-group v-model="item.restrictType">
+                    <a-radio value="0">{{ $t('自定义') }}</a-radio>
+                    <a-radio value="1">{{ $t('继承自来源变迁') }}</a-radio>
+                  </a-radio-group>
+                </a-col>
+              </a-row>
+              <div v-if="item.restrictType === '0'">
+                <a-row :gutter="5">
+                  <a-col :span="1">以</a-col>
+                  <a-col :span="10">
+                    <a-select v-model="item.baseTime" style="width: 100%">
+                      <a-select-option value="0">{{ $t('当前变迁的启动时间') }}</a-select-option>
+                      <a-select-option value="1">{{ $t('其他变迁的启动时间') }}</a-select-option>
+                      <a-select-option value="2">{{ $t('字段值时间') }}</a-select-option>
+                      <a-select-option value="3">{{ $t('自定义') }}</a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col :span="10">
+                    <a-select
+                      v-if="item.baseTime === '2'"
+                      v-model="item.fieldValue"
+                      style="width: 100%"
+                      :placeholder="$t('请选择日期时间')"
+                    >
+                      <a-select-option v-for="field in fieldDate" :key="field.fieldId" :value="field.alias">
+                        {{ field.name }}
+                      </a-select-option>
+                    </a-select>
+                    <a-button
+                      v-if="item.baseTime === '3'"
+                      @click="$refs['condition' + key][0].show({ title: $t('变迁时限') })"
+                    >
+                      {{ $t('通过业务数据计算') }}
+                    </a-button>
+                    <condition
+                      :ref="'condition' + key"
+                      :params="{ data: item.customComputeSetting, tableId: mydata.tableId }"
+                      @ok="
+                        (val) => {
+                          item.customComputeSetting = val.data
+                        }
+                      "
+                    />
+                    <a-select
+                      v-if="item.baseTime === '1'"
+                      v-model="item.changesField"
+                      style="width: 100%"
+                      :placeholder="$t('请选择变迁')"
+                    >
+                      <a-select-option
+                        v-for="value in transition"
+                        :key="value.transitionId"
+                        :value="value.transitionId"
+                      >
+                        {{ value.transitionName }}
+                      </a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col :span="3">{{ $t('为基准时间') }}</a-col>
+                </a-row>
+                <a-row :gutter="5">
+                  <a-col :span="1">{{ $t('从') }}</a-col>
+                  <a-col :span="10">
+                    <a-select v-model="item.timeStarts" style="width: 100%">
+                      <a-select-option value="0">{{ $t('基准时间') }}</a-select-option>
+                      <a-select-option value="1">{{ $t('基准时间所属日期的零点') }}</a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col :span="10"></a-col>
+                  <a-col :span="3">{{ $t('开始计时') }}</a-col>
+                </a-row>
+                <a-row :gutter="5">
+                  <a-col :span="1">{{ $t('按') }}</a-col>
+                  <a-col :span="3">
+                    <a-select v-model="item.calculationTime" style="width: 100%">
+                      <a-select-option value="0">{{ $t('手动输入') }}</a-select-option>
+                      <a-select-option value="1">{{ $t('以字段值数值') }}</a-select-option>
+                      <a-select-option value="2">{{ $t('自定义') }}</a-select-option>
+                    </a-select>
+                  </a-col>
+                  <a-col v-if="item.calculationTime === '0'" :span="17">
+                    <a-input-number v-model="item.customTimeDay" :min="0" />
+                    <span style="padding: 0 5px 0 5px">{{ $t('天') }}</span>
+                    <a-input-number v-model="item.customTimeHour" :min="0" :max="23" />
+                    <span style="padding: 0 5px 0 5px">{{ $t('小时') }}</span>
+                    <a-input-number
+                      v-model="item.customTimeMinute"
+                      :min="
+                        item.customTimeDay === 0 && item.customTimeHour === 0 && item.customTimeMinute === 0 ? 1 : 0
+                      "
+                      :max="59"
+                    />
+                    <span style="padding-left: 5px">{{ $t('分钟') }}</span>
+                  </a-col>
+                  <a-col v-if="item.calculationTime === '1'" :span="17">
+                    <a-row :gutter="10">
+                      <a-col :span="10">
+                        <a-select v-model="item.fieldAlias" style="width: 100%">
+                          <a-select-option v-for="field in fieldNumber" :key="field.fieldId" :value="field.alias">
+                            {{ field.name }}
+                          </a-select-option>
+                        </a-select>
+                      </a-col>
+                    </a-row>
+                  </a-col>
+                  <a-col v-if="item.calculationTime === '2'" :span="17">
+                    <a-button @click="$refs['conditions' + key][0].show({ title: $t('变迁时限: 计算时长') })">
+                      {{ $t('通过业务数据计算') }}
+                    </a-button>
+                  </a-col>
+                  <a-col :span="3">{{ $t('计算时长') }}</a-col>
+                  <condition
+                    :ref="'conditions' + key"
+                    :params="{ data: item.calculationSetting, tableId: mydata.tableId }"
+                    @ok="
+                      (val) => {
+                        item.calculationSetting = val.data
+                      }
+                    "
+                  />
+                </a-row>
+              </div>
+            </a-form-item>
+            <a-form-item
+              v-if="item.restrictType !== '1'"
+              :label="$t('预警时限')"
+              :labelCol="{ span: 2 }"
+              :wrapperCol="{ span: 22 }"
+            >
+              <a-row :gutter="5">
+                <a-col :span="7">
+                  <a-select v-model="item.workflowWarnRestrict" style="width: 100%">
+                    <a-select-option value="warnNotSet">{{ $t('不设置') }}</a-select-option>
+                    <a-select-option value="warnPercent">{{ $t('时限百分比') }}</a-select-option>
+                    <a-select-option value="warnCustom">{{ $t('自定义') }}</a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col v-if="item.workflowWarnRestrict === 'warnPercent'" :span="17">
+                  <span style="padding-right: 10px">{{ $t('变迁时限 *') }}</span>
+                  <a-input-number
+                    v-model="item.warnPercentSetting"
+                    :min="1"
+                    :max="99"
+                    :formatter="(value) => `${value}%`"
+                    :parser="(value) => value.replace('%', '')"
+                  />
+                </a-col>
+                <a-col v-if="item.workflowWarnRestrict === 'warnCustom'" :span="17">
+                  <span style="padding-right: 5px">{{ $t('变迁时限到达前') }}</span>
+                  <a-input-number v-model="item.warnCustomDay" :min="0" />
+                  <span style="padding: 0 5px 0 5px">{{ $t('天') }}</span>
+                  <a-input-number v-model="item.warnCustomHour" :min="0" :max="23" />
+                  <span style="padding: 0 5px 0 5px">{{ $t('小时') }}</span>
+                  <a-input-number v-model="item.warnCustomMinute" :min="0" :max="59" />
+                  <span style="padding-left: 5px">{{ $t('分钟') }}</span>
+                </a-col>
+              </a-row>
+            </a-form-item>
+            <a-form-item
+              v-if="item.restrictType !== '1'"
+              :label="$t('超时时限')"
+              :labelCol="{ span: 2 }"
+              :wrapperCol="{ span: 22 }"
+            >
+              <a-row :gutter="5">
+                <a-col :span="7">
+                  <a-select v-model="item.workflowSeriousRestrict" style="width: 100%">
+                    <a-select-option value="seriousNotSet">{{ $t('不设置') }}</a-select-option>
+                    <a-select-option value="seriousPercent">{{ $t('时限百分比') }}</a-select-option>
+                    <a-select-option value="seriousCustom">{{ $t('自定义') }}</a-select-option>
+                  </a-select>
+                </a-col>
+                <a-col v-if="item.workflowSeriousRestrict === 'seriousPercent'" :span="17">
+                  <span style="padding-right: 10px">{{ $t('变迁时限 *') }}</span>
+                  <a-input-number
+                    v-model="item.seriousPercentSetting"
+                    :min="100"
+                    :formatter="(value) => `${value}%`"
+                    :parser="(value) => value.replace('%', '')"
+                  />
+                </a-col>
+                <a-col v-if="item.workflowSeriousRestrict === 'seriousCustom'" :span="17">
+                  <span style="padding-right: 5px">{{ $t('变迁时限到达后') }}</span>
+                  <a-input-number v-model="item.seriousCustomDay" :min="0" />
+                  <span style="padding: 0 5px 0 5px">{{ $t('天') }}</span>
+                  <a-input-number v-model="item.seriousCustomHour" :min="0" :max="23" />
+                  <span style="padding: 0 5px 0 5px">{{ $t('小时') }}</span>
+                  <a-input-number v-model="item.seriousCustomMinute" :min="0" :max="59" />
+                  <span style="padding-left: 5px">{{ $t('分钟') }}</span>
+                </a-col>
+              </a-row>
+            </a-form-item>
+          </a-collapse-panel>
+        </a-collapse>
+      </a-tab-pane>
+      <a-tab-pane key="sla" tab="SLA">
+        <workflow-form-sla
+          ref="workflowFormSla"
+          :workflowtype="'flow'"
+          :handleMethods="handleMethods"
+          :slaData="slaData"
+          :fieldArr="fieldArr"
+          :allWayData="allWayData"
+          :department="department"
+          :tableId="mydata.tableId"
+          :role="role"
+          :userArr="userArr"
+          :workflowId="workflowId"
+          @ok="getSla"
+        />
+      </a-tab-pane>
+    </a-tabs>
+    <!-- 表单规则 -->
+    <flow-attr-transition-form-rule
+      ref="flowAttrTransitionFormRule"
+      :key="refreshKey"
+      :params="{ handleMethods: handleMethods }"
+      @ok="getFormRule"
+    />
+    <!-- 办理按钮 -->
+    <flow-attr-transition-menu-form ref="flowAttrTransitionMenuForm" @ok="getMenu" />
+    <!-- 办理方式排序 -->
+    <drag-sort ref="dragSort" @ok="getSort" />
+    <!-- 办理方式 -->
+    <flow-attr-transition-way-form
+      ref="flowAttrTransitionWayForm"
+      :params="{ handleMethods: handleMethods }"
+      @ok="getWay"
+    />
+    <!-- 办理人 -->
+    <!-- <flow-attr-transition-user
+      ref="flowAttrTransitionUser"
+      :params="currentSelect"
+      @change="currentSelect.transitionUser = $event"
+    /> -->
+    <!-- 地址簿范围 -->
+    <select-user-form ref="selectUserForm" @ok="getUser" />
+    <select-user-form ref="getUser" @ok="getUserData" />
+    <select-department ref="selectDepartment" @ok="getDepartment" />
+    <tool-button-choose ref="toolButtonChoose" @ok="getButtonData" />
+  </div>
+</template>
+<script>
+import { menuAllData } from '@/views/admin/Table/DefaultButton'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    Codemirror: () => import('@/views/admin/Formula/Codemirror'),
+    Condition: () => import('@/views/admin/Table/Condition'),
+    FlowAttrTransitionMenuForm: () => import('./FlowAttrTransitionMenuForm'),
+    FlowAttrTransitionWayForm: () => import('./FlowAttrTransitionWayForm'),
+    FlowAttrTransitionWayRule: () => import('./FlowAttrTransitionWayRule'),
+    FlowAttrTransitionFieldPriv: () => import('./FlowAttrTransitionFieldPriv'),
+    FlowAttrTransitionFormRule: () => import('./FlowAttrTransitionFormRule'),
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    // FlowAttrTransitionUser: () => import('./FlowAttrTransitionUser'),
+    WorkflowFormSla: () => import('@/views/admin/WorkflowFormSla'),
+    QuerierCodemirrorInput: () => import('@/views/admin/Table/QuerierCodemirrorInput'),
+    CustomCodemirror: () => import('@/views/admin/Flow/modules/CustomCodemirror'),
+    TabsSelect: () => import('@/views/admin/Field/TabsSelect'),
+    AddressSelect: () => import('@/views/admin/Field/AddressSelect'),
+    SelectUserForm: () => import('@/views/admin/UserTable/SelectUserForm'),
+    SelectDepartment: () => import('@/views/admin/UserTable/SelectDepartment'),
+    ToolButtonChoose: () => import('@/views/admin/Table/ToolButtonChoose'),
+    SetLang: () => import('@/components/SetLang')
+
+  },
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      refreshKey: 0,
+      config: {},
+      labelCol: { span: 5 },
+      wrapperCol: { span: 19 },
+      form: this.$form.createForm(this),
+      activeKey: [],
+      partuserRemarks: '',
+      processStatusData: [], // 流程状态
+      fieldArr: [],
+      transition: [],
+      fieldDate: [],
+      fieldNumber: [],
+      userArr: [],
+      role: {},
+      department: [],
+      handleFormRules: [],
+      sortData: '',
+      tagOption: [],
+      // 工作日历
+      calendar: [],
+      timeLimitData: [],
+      slaData: [],
+      // 办理按钮表头
+      columnsMenu: [{
+        title: '#',
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('按钮名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('按钮类型'),
+        dataIndex: 'buttonType',
+        scopedSlots: { customRender: 'buttonType' }
+      }, {
+        title: this.$t('按钮样式'),
+        dataIndex: 'style'
+      }, {
+        title: this.$t('显示'),
+        dataIndex: 'visible',
+        scopedSlots: { customRender: 'visible' }
+      }, {
+        title: this.$t('附加属性'),
+        dataIndex: 'attribute',
+        scopedSlots: { customRender: 'attribute' }
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 200,
+        scopedSlots: { customRender: 'action' }
+      }],
+      // 办理方式表头
+      columnsWay: [{
+        title: '#',
+        dataIndex: 'listOrder',
+        width: 40
+      }, {
+        title: this.$t('办理方式显示名'),
+        dataIndex: 'way',
+        scopedSlots: { customRender: 'way' },
+        width: 200
+      }, {
+        title: this.$t('办理方式系统名'),
+        dataIndex: 'alias',
+        scopedSlots: { customRender: 'alias' },
+        width: 200
+      }, {
+        title: this.$t('启用'),
+        dataIndex: 'onOff',
+        scopedSlots: { customRender: 'onOff' },
+        width: 50
+      }, {
+        title: this.$t('默认'),
+        dataIndex: 'checked',
+        scopedSlots: { customRender: 'checked' },
+        width: 140
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks',
+        scopedSlots: { customRender: 'remarks' }
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 100,
+        scopedSlots: { customRender: 'action' }
+      }],
+      recordKey: {},
+      tplviewData: [],
+      formViewButtons: [],
+      showKey: null,
+      handleMethods: [],
+      allWayData: {},
+      showWay: [],
+      fieldPrivData: [],
+      flowData: {},
+      currentSelect: {},
+      remarksRule: '',
+      remarksMinRows: '',
+      remarksMaxRows: '',
+      triggerTimeType: '',
+      timedata: {},
+      customComputeSetting: '',
+      triggerTimeAbsolute: '',
+      triggerTimeCompute: {
+        data: {}
+      },
+      // 办理人
+      handleData: {
+        type: 'user',
+        program: 'fixedUser',
+        distribute: 'allDistribute'
+      },
+      programList: [
+        { label: '固定用户', value: 'fixedUser' },
+        { label: '来自数据表', value: 'fromTable' },
+        { label: '与流程创建人相关', value: 'flowAttrUser' },
+        { label: '与上个任务办理人相关', value: 'taskUp' },
+        { label: '与指定变迁办理人相关', value: 'taskUpHandle' },
+        { label: '查询规则表', value: 'selectRuleTable' },
+        { label: '自定义', value: 'customHandle' },
+        { label: '由上一变迁指定', value: 'taskUpSpecify' }
+      ],
+      fieldArrHandle: [],
+      associatedList: [
+        { label: '流程创建人', value: 'creator' },
+        { label: '流程创建人的部门主管', value: 'creatorDepartment' }
+      ],
+      specifyAssociatedList: [],
+      tableFieldsHandleList: [],
+      scope: this
+    }
+  },
+  watch: {
+    params: {
+      handler (val) {
+        this.workflowId = val.workflowId
+        this.flowData = val.flowData
+        this.axios({
+          url: '/admin/dict/initData',
+          data: {
+            dictCategoryNumber: 'process-status-' + this.workflowId
+          }
+        }).then(res => {
+          this.processStatusData = res.result
+        })
+        this.currentSelect = JSON.parse(JSON.stringify(val.currentSelect))
+        if (this.currentSelect.id.length === 36) {
+          this.currentSelect.gid = this.currentSelect.type + '-' + this.currentSelect.id
+        } else {
+          this.currentSelect.gid = this.currentSelect.id
+        }
+        if (this.flowData.params && this.flowData.params.flow) {
+          var nodeList = []
+          if (this.flowData.nodeList?.length) {
+            nodeList = this.flowData.nodeList
+          }
+          nodeList.forEach(item => {
+            if (item.handleMethods) {
+              this.allWayData[item.id] = item.handleMethods
+            }
+          })
+        }
+        this.remarksRule = val.currentSelect.remarksRule || 'show_no_allow'
+        this.remarksMinRows = val.currentSelect.remarksMinRows || 1
+        this.remarksMaxRows = val.currentSelect.remarksMaxRows || 4
+        this.triggerTimeType = val.currentSelect.triggerTimeType || ''
+        this.currentSelect.triggerTimeType = this.triggerTimeType
+        this.timedata = val.currentSelect.triggerTimeRelative || { timeDay: 0, timeHour: 0, timeMinute: 0 }
+        this.triggerTimeAbsolute = val.currentSelect.triggerTimeAbsolute || ''
+        this.triggerTimeCompute.data = val.currentSelect.triggerTimeCompute || { tableId: val.flowData.params.tableId, data: { value: '' } }
+        this.triggerTimeCompute.tableId = val.flowData.params.tableId
+        if (!val.currentSelect.formViewButtons) {
+          this.formViewButtons = menuAllData
+        } else {
+          this.formViewButtons = val.currentSelect.formViewButtons
+        }
+        this.handleMethods = val.currentSelect.handleMethods ? val.currentSelect.handleMethods : []
+        this.handleMethods.forEach(item => {
+          if (!item.alias) {
+            this.getName(item, item.way)
+          }
+        })
+        this.handleMethods.sort(this.compare('listOrder'))
+        this.fieldPrivData = val.currentSelect.fieldPrivData ? val.currentSelect.fieldPrivData : []
+        this.partuserRemarks = val.currentSelect.partuserRemarks
+        this.mydata = {
+          tableId: val.flowData.params.tableId,
+          data: val.currentSelect.transitionUser ? val.currentSelect.transitionUser : {},
+          currentSelect: val.currentSelect,
+          flowData: val.flowData
+        }
+        this.slaData = val.currentSelect.slaData
+        if (val.currentSelect.handleFormRules) {
+          this.handleFormRules = val.currentSelect.handleFormRules
+        }
+        if (val.currentSelect.limitedTime && val.currentSelect.limitedTime instanceof Array) {
+          this.timeLimitData = val.currentSelect.limitedTime
+          if (this.timeLimitData.length) {
+            this.activeKey = this.timeLimitData.map(item => item.id)
+          }
+        }
+        // 办理人
+        const transitionArr = []
+        for (const k in nodeList) {
+          if (nodeList[k].data && !nodeList[k].data.quoteId && nodeList[k].data.id.indexOf('transition') > -1) {
+            // transitionArr.push({ transition_id: nodeList[k].data.id.split('-')[1], transition_name: nodeList[k].data.nodeName })
+            const transitionId = nodeList[k].data.id.split('user_transition')
+            transitionArr.push({ transition_id: transitionId && transitionId[1] ? transitionId[1].replace(/-/g, '') : '', transition_name: nodeList[k].data.nodeName })
+          }
+        }
+        this.specifyAssociatedList = transitionArr
+        if (val.currentSelect.transitionUser && !val.currentSelect.transitionUser.hasOwnProperty('html')) {
+          this.handleData = val.currentSelect.transitionUser
+          if (this.handleData.options) {
+            this.handleData.optionArr = this.handleData.options
+          }
+        }
+      },
+      immediate: true
+      // deep: true
+    }
+  },
+  mounted () {
+    // 办理人
+    if (this.handleData && !this.handleData.html) {
+      this.changeAssociatedList(this.handleData.type, 'init')
+    }
+  },
+  methods: {
+    getConditionArrRule () {
+      if (this.handleData && this.handleData.selectRuleTable && this.handleData.selectRuleTable.condition) {
+        this.handleData.selectRuleTable.condition.forEach((includeItem, includeIndex) => {
+          if (!includeItem.ruleAlias) {
+            includeItem.conditionArr = [{ enName: 'eq', cnName: '等于' }]
+          } else {
+            this.handleData.selectRuleTable.ruleFieldList.forEach(item1 => {
+              if (includeItem.ruleAlias === item1.alias) {
+                // 根据字段，给出相应条件
+                if (['text', 'textarea', 'serialnumber'].indexOf(item1.formType) !== -1) {
+                  includeItem.conditionArr = [{ enName: 'eq', cnName: '等于' },
+                  { enName: 'ne', cnName: '不等于' },
+                  { enName: 'cn', cnName: '包含' },
+                  { enName: 'nc', cnName: '不包含' },
+                  { enName: 'bw', cnName: '开始于' },
+                  { enName: 'ew', cnName: '结束于' },
+                  { enName: 'em', cnName: '为空' },
+                  { enName: 'nem', cnName: '不为空' }]
+                } else if (['radio', 'switch', 'checkbox', 'combobox'].indexOf(item1.formType) !== -1) {
+                  includeItem.conditionArr = [{ enName: 'eq', cnName: '等于' },
+                  { enName: 'ne', cnName: '不等于' },
+                  { enName: 'em', cnName: '为空' },
+                  { enName: 'nem', cnName: '不为空' }]
+                } else if (['number', 'datetime'].indexOf(item1.formType) !== -1) {
+                  includeItem.conditionArr = [{ enName: 'eq', cnName: '等于' },
+                  { enName: 'ne', cnName: '不等于' },
+                  { enName: 'gt', cnName: '大于' },
+                  { enName: 'ge', cnName: '大于等于' },
+                  { enName: 'lt', cnName: '小于' },
+                  { enName: 'le', cnName: '小于等于' },
+                  { enName: 'em', cnName: '为空' },
+                  { enName: 'nem', cnName: '不为空' }]
+                } else if (['associated'].indexOf(item1.formType) !== -1) {
+                  includeItem.conditionArr = [{ enName: 'eq', cnName: '等于' },
+                  { enName: 'ne', cnName: '不等于' },
+                  { enName: 'cn', cnName: '包含' },
+                  { enName: 'nc', cnName: '不包含' },
+                  { enName: 'bw', cnName: '开始于' },
+                  { enName: 'ew', cnName: '结束于' },
+                  { enName: 'em', cnName: '为空' },
+                  { enName: 'nem', cnName: '不为空' }]
+                } else if (['address', 'treeselect', 'tag'].indexOf(item1.formType) !== -1) {
+                  includeItem.conditionArr = [{ enName: 'cn', cnName: '包含' },
+                  { enName: 'nc', cnName: '不包含' },
+                  { enName: 'em', cnName: '为空' },
+                  { enName: 'nem', cnName: '不为空' }]
+                } else if (['cascader'].indexOf(item1.formType) !== -1) {
+                  includeItem.conditionArr = [{ enName: 'eq', cnName: '等于' },
+                  { enName: 'ne', cnName: '不等于' },
+                  { enName: 'cn', cnName: '包含' },
+                  { enName: 'nc', cnName: '不包含' },
+                  { enName: 'em', cnName: '为空' },
+                  { enName: 'nem', cnName: '不为空' }]
+                }
+              }
+            })
+          }
+        })
+      }
+    },
+    // 获取办理人 来自数据表字段
+    getFromTableField () {
+      this.axios({
+        url: '/admin/field/init',
+        data: {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'ascend',
+          tableId: this.mydata.tableId
+        }
+      }).then(res => {
+        this.fieldArrHandle = res.result.data.filter(item => {
+          return ['text', 'textarea', 'radio', 'switch', 'checkbox', 'combobox', 'number', 'datetime', 'cascader', 'associated', 'address', 'treeselect', 'tag'].indexOf(item.formType) !== -1
+        })
+      })
+    },
+    getTableFieldsHandleList () {
+      this.axios({
+        url: '/admin/field/add',
+        data: Object.assign({ tableId: this.mydata.tableId, parentNumber: [], fieldId: 0 })
+      }).then(res => {
+        this.tableFieldsHandleList = res.result.tableField
+      })
+    },
+    tableFieldsHandleChange (e, item, type) {
+      const tableId = e[e.length - 1]
+      this.axios({
+        url: '/admin/field/init',
+        data: {
+          pageNo: 1,
+          pageSize: 1000,
+          sortField: 'id',
+          sortOrder: 'ascend',
+          tableId: tableId
+        }
+      }).then(res => {
+        this.$set(item, 'ruleFieldList', res.result.data)
+        if (type === 'click') {
+          item.condition.forEach(sitem => {
+            sitem.ruleAlias = undefined
+            sitem.setType = 'field' // 本表字段、自定义
+            sitem.type = undefined // 判断比较方式显示条件
+            sitem.conditionArr = []
+          })
+        }
+        if (type === 'init') {
+          // 显示比较方式列表
+          this.getConditionArrRule()
+        }
+        this.$forceUpdate()
+      })
+    },
+    changeAssociatedList (type, methods) {
+      if (methods === 'change') {
+        this.handleData.associateValue = undefined
+        this.handleData.customCode = undefined
+        this.handleData.specifyAssociated = undefined
+      }
+      if (type === 'user') {
+        switch (this.handleData.program) {
+          case 'fixedUser':
+            this.programList[0].value = 'fixedUser'
+            this.programList[0].label = '固定用户'
+            break
+          case 'flowAttrUser':
+            this.associatedList = [
+              { label: '流程创建人', value: 'creator' },
+              { label: '流程创建人的部门主管', value: 'creatorDepartment' }
+            ]
+            break
+          case 'taskUp':
+            this.associatedList = [
+              { label: '上个变迁办理人', value: 'taskUpHandle' },
+              { label: '上个变迁办理人的部门主管', value: 'taskUpHandleDepartmentLeader' }
+            ]
+            break
+          case 'taskUpHandle':
+            this.associatedList = [
+              { label: '指定变迁办理人', value: 'specifyHandle' },
+              { label: '指定变迁办理人的部门主管', value: 'specifyHandleDepartmentHead' }
+            ]
+            break
+        }
+      } else if (type === 'department') {
+        switch (this.handleData.program) {
+          case 'fixedDepartment':
+            this.programList[0].value = 'fixedDepartment'
+            this.programList[0].label = '固定部门'
+            break
+          case 'flowAttrUser':
+            this.associatedList = [
+              { label: '流程创建人所在部门', value: 'creatorDepartment' },
+              { label: '流程创建人所在的上级部门', value: 'creatorUpDepartment' }
+            ]
+            break
+          case 'taskUp':
+            this.associatedList = [
+              { label: '上个变迁办理人所属部门', value: 'taskUpHandleDepartment' },
+              { label: '上个变迁办理人所属上级部门', value: 'taskUpHandleDepartmentUp' }
+            ]
+            break
+          case 'taskUpHandle':
+            this.associatedList = [
+              { label: '指定变迁办理人所属部门', value: 'specifyHandleBelongDepartment' },
+              { label: '指定变迁办理人所属上级部门', value: 'specifyHandleBelongDepartmentUp' }
+            ]
+            break
+        }
+      } else {
+        switch (this.handleData.program) {
+          case 'fixedRole':
+            this.programList[0].value = 'fixedRole'
+            this.programList[0].label = '固定角色'
+            break
+          case 'flowAttrUser':
+            this.associatedList = [
+              { label: '流程创建人所属角色', value: 'creatorRole' }
+            ]
+            break
+          case 'taskUp':
+            this.associatedList = [
+              { label: '上个变迁办理人所属角色', value: 'taskUpHandleDepartmentRole' }
+            ]
+            break
+        }
+      }
+      // chang切换数据
+      if (methods === 'change') {
+        if (['flowAttrUser', 'taskUp', 'taskUpHandle'].includes(this.handleData.program)) {
+          this.$set(this.handleData, 'associateValue', this.associatedList[0].value)
+        }
+        if (this.handleData.program === 'taskUpHandle' && this.specifyAssociatedList.length > 0) {
+          this.$set(this.handleData, 'specifyAssociated', this.specifyAssociatedList[0].transition_id)
+        }
+        if (this.handleData.program === 'selectRuleTable') {
+          this.$set(this.handleData, 'selectRuleTable', {
+            condition: [{
+              include: '',
+              value: ''
+            }]
+          })
+          this.$set(this.handleData.selectRuleTable, 'logic', 'and')
+          this.$forceUpdate()
+        } else {
+          this.handleData.selectRuleTable = undefined
+        }
+        if (this.handleData.program === 'customHandle' && !this.handleData.customCode) {
+          this.$set(this.handleData, 'customCode', {})
+        }
+      }
+      // 加载数据
+      if (methods === 'init') {
+        if (this.handleData.program === 'fromTable' && this.fieldArrHandle.length === 0) {
+          this.getFromTableField()
+        }
+        if (this.handleData.program === 'selectRuleTable' && this.tableFieldsHandleList.length === 0) {
+          // 获取 规则表数据表
+          this.getTableFieldsHandleList()
+          // 获取本表字段列表
+          this.getFromTableField()
+          // 获取 选中的规则表对应字段列表
+          this.tableFieldsHandleChange(this.handleData.selectRuleTable.targetTable, this.handleData.selectRuleTable, 'init')
+        }
+      }
+    },
+    //
+    transitionChange (value) {
+      const type = value.split(/[_]/)[0]
+      const label = type === 'user' ? this.$t('人工变迁') : type === 'time' ? this.$t('时间变迁') : this.$t('自动变迁')
+      this.currentSelect.gid = this.currentSelect.id.split(/[_]/)[1]
+      const newId = type + '_' + this.currentSelect.gid
+      this.currentSelect.gid = newId
+      this.currentSelect.nodeName = label
+      if (type === 'time') {
+        this.triggerTimeType = this.currentSelect.triggerTimeType ? this.currentSelect.triggerTimeType : 'relative'
+        this.currentSelect.triggerTimeType = this.triggerTimeType
+        this.timedata = this.currentSelect.triggerTimeRelative || { timeDay: 0, timeHour: 0, timeMinute: 0 }
+      }
+    },
+    getSla (data) {
+      this.slaData = data
+    },
+    getTagOption (rnumber) {
+      this.axios({
+        url: '/admin/tag/tagOption',
+        data: { tagCategoryNumber: rnumber }
+      }).then(res => {
+        this.tagOption = res.result.option.map(item => {
+          const obj = item
+          if (!item.children.length) {
+            item.disabled = true
+          }
+          return obj
+        })
+      })
+    },
+    tabChange (e) {
+      if (e === 'timeLimit') {
+        this.axios({
+          url: '/admin/field/init',
+          data: {
+            pageNo: 1,
+            pageSize: 1000,
+            sortField: 'id',
+            sortOrder: 'ascend',
+            tableId: this.mydata.tableId
+          }
+        }).then(res => {
+          this.fieldArr = res.result.data.filter(item => {
+            return ['text', 'textarea', 'radio', 'switch', 'checkbox', 'combobox', 'number', 'datetime', 'cascader', 'associated', 'address', 'treeselect', 'tag'].indexOf(item.formType) !== -1
+          })
+          this.fieldDate = res.result.data.filter(item => item.formType === 'datetime')
+          this.fieldNumber = res.result.data.filter(item => item.formType === 'number')
+          if (this.currentSelect.limitedTime && !this.currentSelect.limitedTime.workflowRestrict) {
+            // 遍历规则
+            this.currentSelect.limitedTime.forEach((dataItem, dataIndex) => {
+              dataItem.conditionVisual.forEach((simpleItem, simpleIndex) => {
+                if (simpleItem.alias) {
+                  this.fieldArr.forEach((fieldItem, fieldIndex) => {
+                    if (simpleItem.alias === fieldItem.alias) {
+                      fieldItem.settings = JSON.parse(fieldItem.setting)
+                      simpleItem.src = fieldItem.settings.form.src ? fieldItem.settings.form.src : ''
+                      simpleItem.formType = fieldItem.formType
+                      simpleItem.fieldId = fieldItem.fieldId
+                      simpleItem.form = fieldItem.settings.form
+                      if (simpleItem.src && fieldItem.formType === 'treeselect') {
+                        this.getTreeOption(simpleItem, fieldItem)
+                      } else if (fieldItem.formType === 'tag' && !this.tagOption.length) {
+                        this.getTagOption(fieldItem.settings.form.tagSetting.rnumber)
+                      } else if (simpleItem.src) {
+                        this.getOption(simpleItem)
+                      } else if (fieldItem.formType === 'treeselect') {
+                        simpleItem.dataSource = fieldItem.settings.attribute.dataSource
+                        this.getTreeOption(simpleItem, fieldItem)
+                      } else {
+                        simpleItem.option = []
+                      }
+                      // 根据字段，给出相应条件
+                      if (['text', 'textarea'].indexOf(fieldItem.formType) !== -1) {
+                        simpleItem.condiArr = [
+                          { enName: 'eq', cnName: this.$t('等于') },
+                          { enName: 'ne', cnName: this.$t('不等于') },
+                          { enName: 'cn', cnName: this.$t('包含') },
+                          { enName: 'nc', cnName: this.$t('不包含') },
+                          { enName: 'bw', cnName: this.$t('开始于') },
+                          { enName: 'ew', cnName: this.$t('结束于') },
+                          { enName: 'em', cnName: this.$t('为空') },
+                          { enName: 'nem', cnName: this.$t('不为空') }]
+                      } else if (['radio', 'switch', 'checkbox', 'combobox'].indexOf(fieldItem.formType) !== -1) {
+                        simpleItem.condiArr = [
+                          { enName: 'eq', cnName: this.$t('等于') },
+                          { enName: 'ne', cnName: this.$t('不等于') },
+                          { enName: 'em', cnName: this.$t('为空') },
+                          { enName: 'nem', cnName: this.$t('不为空') }]
+                      } else if (['number', 'datetime'].indexOf(fieldItem.formType) !== -1) {
+                        simpleItem.condiArr = [
+                          { enName: 'eq', cnName: this.$t('等于') },
+                          { enName: 'ne', cnName: this.$t('不等于') },
+                          { enName: 'gt', cnName: this.$t('大于') },
+                          { enName: 'ge', cnName: this.$t('大于等于') },
+                          { enName: 'lt', cnName: this.$t('小于') },
+                          { enName: 'le', cnName: this.$t('小于等于') },
+                          { enName: 'em', cnName: this.$t('为空') },
+                          { enName: 'nem', cnName: this.$t('不为空') }]
+                      } else if (['cascader', 'address', 'treeselect', 'tag'].indexOf(fieldItem.formType) !== -1) {
+                        simpleItem.condiArr = [
+                          { enName: 'cn', cnName: this.$t('包含') },
+                          { enName: 'nc', cnName: this.$t('不包含') },
+                          { enName: 'em', cnName: this.$t('为空') },
+                          { enName: 'nem', cnName: this.$t('不为空') }]
+                      }
+                    }
+                  })
+                } else if (simpleItem.condition && simpleItem.condition.some(item => item.transitionFromVal)) {
+                  simpleItem.condition.forEach(item => {
+                    for (const i in this.allWayData) { if (i.includes(item.transitionFromVal)) { item.showWay = this.allWayData[i] } }
+                  })
+                }
+              })
+            })
+            this.timeLimitData = this.currentSelect.limitedTime
+          }
+        })
+        // 请求所有的部门，角色，用户列表
+        this.axios({
+          url: '/admin/user/init',
+          data: {
+            pageNo: 1,
+            pageSize: 100,
+            sortField: 'id',
+            sortOrder: 'descend',
+            init: 'true'
+          }
+        }).then(res => {
+          this.department = res.result.option.department
+          this.role = res.result.option.role
+          this.userArr = res.result.data
+        })
+        this.axios({
+          url: '/admin/workflow/getTransition',
+          data: { workflowId: this.workflowId }
+        }).then(res => {
+          this.transition = res.result.data
+        })
+        this.axios({
+          url: '/admin/calendar/getCalendar'
+        }).then(res => {
+          this.calendar = res.result.option
+        })
+      } else if (e === 'sla') {
+        this.axios({
+          url: '/admin/field/init',
+          data: {
+            pageNo: 1,
+            pageSize: 1000,
+            sortField: 'id',
+            sortOrder: 'ascend',
+            tableId: this.mydata.tableId
+          }
+        }).then(res => {
+          this.fieldArr = res.result.data.filter(item => {
+            return ['text', 'textarea', 'radio', 'switch', 'checkbox', 'combobox', 'number', 'datetime', 'cascader', 'associated', 'address', 'treeselect', 'tag'].indexOf(item.formType) !== -1
+          })
+        })
+      } else if (e === 'tplview') {
+        this.axios({
+          url: '/admin/userTable/tableTplviews',
+          data: { tableId: this.flowData.params.tableId, type: 'tableFormView' }
+        }).then((res) => {
+          this.tplviewData = res.result
+        })
+      }
+    },
+    getUserData (data, index, conIndex, modeCheck) {
+      this.timeLimitData[this.recordKey.index].conditionVisual[this.recordKey.simpleIndex].condition[this.recordKey.includeIndex]['userArr'] = data.map(item => { const obj = { username: item, text: item }; return obj })
+      this.timeLimitData[this.recordKey.index].conditionVisual[this.recordKey.simpleIndex].condition[this.recordKey.includeIndex]['value'] = data
+    },
+    getDepartment (data, index, conIndex, option) {
+      if (this.recordKey.type === 'role') {
+        this.timeLimitData[this.recordKey.index].conditionVisual[this.recordKey.simpleIndex].condition[this.recordKey.includeIndex]['role'] = option
+        this.timeLimitData[this.recordKey.index].conditionVisual[this.recordKey.simpleIndex].condition[this.recordKey.includeIndex]['value'] = data
+      } else {
+        this.timeLimitData[this.recordKey.index].conditionVisual[this.recordKey.simpleIndex].condition[this.recordKey.includeIndex]['department'] = option
+        this.timeLimitData[this.recordKey.index].conditionVisual[this.recordKey.simpleIndex].condition[this.recordKey.includeIndex]['value'] = data
+      }
+    },
+    // 根据显示名称赋值系统名称
+    handleChangeName (e, record) {
+      const pinyin = require('js-pinyin')
+      const reg = new RegExp(/^(?![0-9]|_)[a-zA-Z0-9_]+$/)
+      const reg2 = new RegExp(/^[a-zA-Z0-9_]+$/)
+      const string = e.target.value
+      let val = ''
+      if (string.length <= 1) {
+        val = pinyin.getFullChars(string).toLowerCase()
+      } else {
+        const str1 = pinyin.getFullChars(string.substring(0, 1)).toLowerCase()
+        const latterStr = string.substring(1, string.length)
+        const str2Arr = latterStr.split('').map(item => {
+          const itemPinyin = pinyin.getFullChars(item).toLowerCase()
+          return itemPinyin[0].toUpperCase() + itemPinyin.substring(1, itemPinyin.length)
+        })
+        const str2 = str2Arr.join('')
+        val = str1 + str2
+      }
+      val = val.split('')
+      this.getVal(val, reg)
+      if (val[0]) {
+        val[0] = val[0].toLowerCase()
+      }
+      val = val.filter(item => {
+        return reg2.test(item)
+      })
+      if (!record.aliasEditabled) {
+        record.alias = val.join('')
+      }
+    },
+    addTimeLimit (index) {
+      const id = String(new Date().valueOf())
+      this.timeLimitData.splice(index > -1 ? (index + 1) : this.timeLimitData.length, 0, {
+        workCalendar: '0',
+        name: '变迁时限' + (this.timeLimitData.length + 1),
+        id: id,
+        conditionCustom: {
+          html: '',
+          value: ''
+        },
+        logic: 'and',
+        conditionVisual: [{
+          type: 'notSet',
+          alias: '',
+          src: '',
+          condiArr: [],
+          customCode: {
+            html: '',
+            value: ''
+          },
+          condition: [{
+            include: '',
+            value: ''
+          }],
+          logic: 'and'
+        }],
+        baseTime: '0', // 基准时间  '0': 流程创建时间; '1': 字段值时间 , '2' : 自定义
+        timeStarts: '0', // 开始计时 '0'：基准时间; '1': 基准时间所属日期零点
+        customComputeSetting: { // 基准时间自定义存放
+          html: '',
+          value: ''
+        },
+        restrictType: '0',
+        calculationTime: '0', // 计算时长  '0': 手动输入   '1': 以字段值数值  '2': 自定义
+        customTimeDay: '', // 手动输入时分秒
+        customTimeHour: '',
+        customTimeMinute: '',
+        fieldAlias: '', // 字段值数值 选择字段
+        calculationSetting: { // 计算时长自定义
+          html: '',
+          value: ''
+        },
+        workflowWarnRestrict: 'warnNotSet', // 预警时限
+        warnPercentSetting: 50,
+        warnCustomDay: null,
+        warnCustomHour: null,
+        warnCustomMinute: null,
+        workflowSeriousRestrict: 'seriousNotSet', // 超时时限
+        seriousPercentSetting: 120,
+        seriousCustomDay: null,
+        seriousCustomHour: null,
+        seriousCustomMinute: null
+      })
+      this.activeKey.push(id)
+    },
+    handleDelete (key, index) {
+      event.stopPropagation()
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.timeLimitData.splice(key, 1)
+        }
+      })
+    },
+    getUUID: function () {
+      const s = []
+      const hexDigits = '0123456789abcdef'
+      for (let i = 0; i < 36; i++) {
+        s[i] = hexDigits.substr(Math.floor(Math.random() * 0x10), 1)
+      }
+      s[14] = '4'
+      s[19] = hexDigits.substr((s[19] & 0x3) | 0x8, 1)
+      s[8] = s[13] = s[18] = s[23] = '-'
+      const uuid = s.join('')
+      return uuid.replace(/-/g, '')
+    },
+    handleAddMenu () {
+      this.$refs.flowAttrTransitionMenuForm.show({
+        action: 'add',
+        title: this.$t('添加'),
+        record: {
+          id: (new Date()).valueOf(),
+          name: '',
+          usage: 'bar_' + (new Date()).valueOf(),
+          buttonType: 0,
+          style: 'default',
+          visible: 1,
+          attribute: '',
+          remarks: ''
+        }
+      })
+    },
+    handleDefaultMenu () {
+      this.$refs.toolButtonChoose.show({
+        listArray: menuAllData,
+        unCheckBar: menuAllData.filter(item => this.formViewButtons.findIndex(barItem => barItem.usage === item.usage) === -1)
+      })
+    },
+    getButtonData (data) {
+      this.formViewButtons = [...this.formViewButtons, ...data]
+      this.handleOk()
+    },
+    handleEditMenu (record, index) {
+      this.$refs.flowAttrTransitionMenuForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}：${record.name}`,
+        record: record,
+        index: index
+      })
+    },
+    handleAddressScope (record, index) {
+      this.$refs.selectUserForm.show({
+        transition: 'transition',
+        modeCheck: record.bookScope && record.bookScope.mode ? record.bookScope.mode : 'multiple',
+        mode: 'multiple',
+        selectValue: record.bookScope && record.bookScope.priv ? record.bookScope.priv : '',
+        index: index
+      })
+    },
+    getUser (data, index, index2, mode) {
+      let array = []
+      if (typeof (data) === 'string') {
+        array.push(data)
+      } else {
+        array = data
+      }
+      const obj = {
+        priv: array,
+        mode: mode
+      }
+      this.$set(this.formViewButtons[index], 'bookScope', obj)
+      this.handleOk()
+    },
+    handleDeleteMenu (record) {
+      const dataSource = [...this.formViewButtons]
+      this.formViewButtons = dataSource.filter(item => item.id !== record.id)
+      this.handleOk()
+    },
+    handleAddWay () {
+      this.handleMethods.push({
+        id: (new Date()).valueOf(),
+        listOrder: this.handleMethods.length + 1,
+        way: '',
+        checked: '0',
+        rule: '',
+        alias: '',
+        onOff: true,
+        remarks: '',
+        editabled: true
+      })
+    },
+    handleSort () {
+      this.changeData = 'handleMethods'
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        placement: 'right',
+        width: 600,
+        sortName: 'way',
+        sortData: this.handleMethods
+      })
+    },
+    // 排序
+    handleTimeSort () {
+      this.changeData = 'timeLimitData'
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        sortData: this.timeLimitData
+      })
+    },
+    getSort (data) {
+      this[this.changeData] = data
+      this.handleOk()
+    },
+    handleMenuSort () {
+      this.changeData = 'formViewButtons'
+      this.$refs.dragSort.show({
+        title: this.$t('排序'),
+        placement: 'right',
+        width: 600,
+        sortData: this.formViewButtons
+      })
+    },
+    // 选择关系
+    choiceInclude (value, includeItem) {
+      includeItem.value = undefined
+    },
+    handleEditWay (record, index) {
+      this.$refs.flowAttrTransitionWayForm.show({
+        action: 'edit',
+        title: `${this.$t('编辑')}：${record.way}`,
+        record: record,
+        index: index
+      })
+    },
+    wayDataSubmit (record) {
+      const reg = new RegExp('[A-Za-z0-9]+')
+      if (!record.alias) {
+        this.$message.warning('请输入办理方式系统名')
+      } else if (!record.way) {
+        this.$message.warning('请输入办理方式显示名')
+      } else if (!reg.test(record.alias)) {
+        this.$message.warning('请输入办理方式系统名为字母或数字')
+      } else {
+        this.$set(record, 'editabled', false)
+      }
+    },
+    handleEditRule (record, index) {
+      this.refreshKey = this.refreshKey ? 0 : 1
+      this.$nextTick(() => {
+        this.$refs.flowAttrTransitionFormRule.show({
+          action: 'edit',
+          title: this.$t('表单规则'),
+          flowData: this.flowData,
+          handleFormRules: this.handleFormRules || []
+        }, this.handleMethods)
+      })
+    },
+    handleDeleteWay (index) {
+      this.handleMethods.sort(this.compare('listOrder'))
+      this.handleMethods.splice(index, 1)
+      this.handleOk()
+    },
+    handleOk () {
+      this.currentSelect.formViewButtons = this.formViewButtons
+      this.currentSelect.handleMethods = this.handleMethods
+      this.currentSelect.fieldPrivData = this.fieldPrivData
+    },
+    getFormRule (data) {
+      this.handleFormRules = data
+      this.currentSelect.handleFormRules = data
+    },
+    getMenu (action, values, index) {
+      if (action !== 'edit') {
+        this.formViewButtons.push(values)
+      } else {
+        this.formViewButtons.splice(index, 1, values)
+      }
+      this.handleOk()
+    },
+    compare (listOrder) {
+      return function (a, b) {
+        const value1 = a[listOrder]
+        const value2 = b[listOrder]
+        return value1 - value2
+      }
+    },
+    getWay (action, values, index) {
+      if (parseInt(values.checked) === 1) {
+        this.handleMethods.forEach(item => {
+          item.checked = '0'
+        })
+      }
+      this.handleMethods.sort(this.compare('listOrder'))
+      if (action !== 'edit') {
+        this.handleMethods.push(values)
+      } else {
+        this.handleMethods.splice(index, 1, values)
+      }
+      this.handleOk()
+    },
+
+    // 根据显示名称赋值系统名称
+    getName (record, e) {
+      const pinyin = require('js-pinyin')
+      const reg = new RegExp(/^(?![0-9]|_)[a-z0-9_]+$/)
+      const reg2 = new RegExp(/^[a-z0-9_]+$/)
+      let val = pinyin.getCamelChars(e)
+      val = val.toLowerCase()
+      val = val.split('')
+      this.getVal(val, reg)
+      val = val.filter(item => {
+        return reg2.test(item)
+      })
+      this.$set(record, 'alias', val.join(''))
+    },
+    // 递归判断是否首字不是数字
+    getVal (val, reg) {
+      if (!reg.test(val[0])) {
+        val.shift()
+        this.getVal(val, reg)
+      }
+    },
+    getRemarksrule (e) {
+      this.remarksRule = e.target.value
+      this.currentSelect.remarksRule = e.target.value
+    },
+    getTriggerTime (e) {
+      this.triggerTimeType = e
+      if (e === 'compute') {
+        this.triggerTimeCompute = {
+          tableId: this.mydata.tableId,
+          data: {
+            value: ''
+          }
+        }
+      }
+      this.currentSelect.triggerTimeType = e
+    },
+    onClose () {
+      this.$emit('cancel')
+    },
+    handleCondition () {
+      this.$refs.condition2.show({ title: this.$t('变迁时限') })
+    },
+    handleConditionTime () {
+      this.$refs.conditionTime.show({ title: this.$t('时间设置') })
+    },
+    getCondition (val) {
+      this.customComputeSetting = val
+    },
+    getConditionTime (val) {
+      this.triggerTimeCompute = val
+      this.currentSelect.triggerTimeCompute = val.data
+    },
+    getOption (item) {
+      this.axios({
+        url: '/admin/search/dictSearch',
+        data: { dictCategoryNumber: item.src }
+      }).then(res => {
+        this.$set(item, 'option', res.result)
+      })
+    },
+    onLoadData (treeNode, item, includeItem) {
+      const { value } = treeNode.dataRef
+      if (item.dataSource === 'addressBook') {
+        return new Promise((resolve) => {
+          this.axios({
+            url: '/admin/address/getAddressChildren',
+            data: { parentNumber: value }
+          }).then(res => {
+            item.option.forEach(item => {
+              if (item.value === value && !item.children) {
+                const arr = []
+                res.result.forEach(arrItem => {
+                  const obj = { label: arrItem.name, value: arrItem.number }
+                  arr.push(obj)
+                })
+                this.$set(item, 'children', arr)
+              } else if (item.children) {
+                item.children.forEach(childItem => {
+                  if (childItem.value === value && !childItem.children) {
+                    const arr = []
+                    res.result.forEach(arrItem => {
+                      const obj = { label: arrItem.name, value: arrItem.number }
+                      arr.push(obj)
+                    })
+                    this.$set(childItem, 'children', arr)
+                  } else if (childItem.children) {
+                    childItem.children.forEach(childrenItem => {
+                      if (childrenItem.value === value && !childrenItem.children) {
+                        const arr = []
+                        res.result.forEach(arrItem => {
+                          const obj = { label: arrItem.name, value: arrItem.number, isLeaf: true }
+                          arr.push(obj)
+                        })
+                        this.$set(childrenItem, 'children', arr)
+                      }
+                    })
+                  }
+                })
+              }
+            })
+          })
+          resolve()
+        })
+      } else {
+        return new Promise((resolve) => {
+          this.axios({
+            url: '/admin/userTable/getFieldForm',
+            data: { fieldId: item.fieldId, value: includeItem.value }
+          }).then(res => {
+            this.$set(item, 'option', res.result.option)
+          })
+          resolve()
+        })
+      }
+    },
+    getTreeOption (simpleItem, item) {
+      this.axios({
+        url: '/admin/userTable/getFieldForm',
+        data: { fieldId: item.fieldId, value: simpleItem.value }
+      }).then(res => {
+        this.$set(simpleItem, 'option', res.result.option)
+      })
+    },
+    handleSubmit () {
+      const { validateFields } = this.form
+      validateFields((errors, values) => {
+        if (!errors) {
+          const arr = this.handleMethods.map(item => item.editabled)
+          if (arr.some(item => item)) {
+            this.$message.warning('请先保存处于编辑状态的办理方式')
+            return
+          }
+          this.currentSelect.handleMethods = this.handleMethods
+          // 办理人数据
+          if (this.handleData.selectRuleTable) {
+            if (this.handleData.selectRuleTable && this.handleData.selectRuleTable.condition.length > 0) {
+              this.handleData.selectRuleTable.ruleFieldList = undefined
+              this.handleData.selectRuleTable.condition.forEach(item => {
+                item.conditionArr = undefined
+              })
+            }
+          }
+          this.currentSelect.formViewButtons = this.formViewButtons
+          this.currentSelect.transitionUser = this.handleData
+          this.currentSelect.partuserRemarks = this.partuserRemarks || this.currentSelect.partuserRemarks
+          this.currentSelect.fieldPrivData = this.$refs.flowAttrTransitionFieldPriv ? this.$refs.flowAttrTransitionFieldPriv.fieldPrivData : this.currentSelect.fieldPrivData
+          this.currentSelect.slaData = this.slaData
+          this.currentSelect.handleFormRules = this.handleFormRules
+          this.timeLimitData.forEach(item => {
+            if (item.conditionVisual.length > 0 && item.conditionVisual.every(visItem => visItem.type === 'notSet')) {
+              const obj = item.conditionVisual[0]
+              item.conditionVisual = []
+              item.conditionVisual.push(obj)
+            } else if (item.conditionVisual.length > 1) {
+              item.conditionVisual = item.conditionVisual.filter((visItem, index) => visItem.type !== 'notSet')
+            }
+            item.conditionVisual.forEach(condItem => {
+              delete condItem.condiArr
+              delete condItem.src
+              if (condItem.type === 'field') {
+                delete condItem.form
+                delete condItem.customCode
+                delete condItem.option
+                delete condItem.fieldType
+                delete condItem.fieldId
+              } else if (condItem.type === 'custom') {
+                delete condItem.alias
+                delete condItem.condition
+              } else if (condItem.type !== 'custom' && condItem.type !== 'field') {
+                delete condItem.alias
+                delete condItem.customCode
+                if (condItem.type === 'transitionFrom') {
+                  condItem.condition.forEach(tranItem => {
+                    delete tranItem.showWay
+                  })
+                }
+              }
+            })
+          })
+          this.currentSelect.limitedTime = this.timeLimitData
+          // 新的提交数据方式
+          this.params.currentSelect = { ...this.currentSelect }
+          // const params = JSON.stringify(this.params)
+          this.axios({
+            url: '/admin/workflow/saveNode',
+            data: { setting: JSON.stringify(this.currentSelect), nodeId: this.currentSelect.id, workflowId: this.workflowId, nodeType: this.currentSelect.type }
+          }).then(res => {
+            if (!res.code) {
+              this.$message.success(this.$t(res.message))
+            } else {
+              this.$message.warning(this.$t(res.message))
+            }
+          })
+          this.$emit('ok', this.params)
+        } else {
+          this.$message.warning(this.$t('表单填写不符合要求，请参考页面内具体提示修改 '))
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,53 @@
+<template>
+  <div>
+    <h1>动态加载组件实例：</h1>
+    <a-space>
+      <a-button type="primary" icon="plus" @click="getRemoteTemplate()">点击加载</a-button>
+      <a-button v-action:add>{{ $t('添加') }}</a-button>
+      <a-button v-action:import>{{ $t('导入') }}</a-button>
+      <a-button v-action:export>{{ $t('导出') }}</a-button>
+    </a-space>
+    <component :is="remoteComponent" />
+  </div>
+</template>
+<script>
+export default {
+  data: () => {
+    return {
+      mymsg: 'dddmypmypdd',
+      remoteComponent: null
+    }
+  },
+
+  created: () => {
+    // this.getRemoteTemplate()
+  },
+  methods: {
+    getRemoteTemplate () {
+      this.axios({
+        url: '/admin/api/remoteComponent'
+      }).then(res => {
+        this.remoteComponent = {
+          template: res.result,
+          data: () => {
+            return {
+              mymsg: '模板中调用该变量1'
+            }
+          },
+          methods: {
+            mytest () {
+              alert('模板中调用该方法2')
+            }
+          },
+          props: {
+            msg: {
+              type: String,
+              default: ''
+            }
+          }
+        }
+      })
+    }
+  }
+}
+</script>

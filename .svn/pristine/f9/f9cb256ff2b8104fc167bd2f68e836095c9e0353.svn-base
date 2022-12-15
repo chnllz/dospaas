@@ -1,0 +1,189 @@
+<template>
+  <a-drawer :title="config.title" :width="700" :visible="visible" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <div>
+        <a-alert
+          :message="$t('客户画像从客户信息表中读取所有客户数据，从当前表单视图归属的数据表中获取{客户编号}。')"
+          type="warning"
+        />
+        <a-form :form="form">
+          <a-divider orientation="left">{{ $t('指定客户信息表及{客户编号}') }}</a-divider>
+          <a-form-item :label="$t('客户信息表')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-model="data.tableInfo"
+              show-search
+              option-filter-prop="children"
+              :placeholder="$t('请选择客户信息表')"
+              @change="(value) => handleChange(value)"
+            >
+              <a-select-option v-for="(value, key) in params.tableList" :key="key" :value="value.tableId">
+                {{ value.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item :label="$t('客户编号字段')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-model="data.tableFields"
+              show-search
+              option-filter-prop="children"
+              :placeholder="$t('请选择客户编号字段')"
+            >
+              <a-select-option v-for="(value, key) in field" :key="key" :value="value.alias">
+                {{ value.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-divider orientation="left">{{ $t('获取当前表的关联客户编号') }}</a-divider>
+          <a-form-item :label="$t('当前数据表的')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-select
+              v-model="data.currentFields"
+              show-search
+              option-filter-prop="children"
+              :placeholder="$t('请选择当前数据表的字段')"
+            >
+              <a-select-option v-for="(value, key) in params.fieldDataList" :key="key" :value="value.alias">
+                {{ value.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-divider orientation="left">{{ $t('设置客户信息存储到当前表的映射关系') }}</a-divider>
+          <a-button
+            style="margin-bottom: 10px"
+            @click="
+              () => {
+                data.conditions.splice(0, 0, { id: conditions.length + 1, sourceField: undefined, field: undefined })
+              }
+            "
+          >
+            {{ $t('添加') }}
+          </a-button>
+          <a-table
+            ref="table"
+            rowKey="id"
+            :columns="columns"
+            :dataSource="data.conditions"
+            size="small"
+            :pagination="false"
+          >
+            <span slot="action" slot-scope="text, record, index">
+              <a-popconfirm
+                :title="$t('您确定要删除该记录吗？')"
+                :ok-text="$t('是')"
+                :cancel-text="$t('否')"
+                @confirm="
+                  () => {
+                    data.conditions.splice(index, 1)
+                  }
+                "
+              >
+                <a href="#">{{ $t('删除') }}</a>
+              </a-popconfirm>
+            </span>
+            <span slot="sourceField" slot-scope="text, record">
+              <a-select
+                v-model="record.sourceField"
+                size="small"
+                show-search
+                option-filter-prop="children"
+                allowClear
+                :defaultValue="text"
+              >
+                <a-select-option v-for="(value, key) in field" :key="key" :value="value.alias">
+                  {{ value.name }}
+                </a-select-option>
+              </a-select>
+            </span>
+            <span slot="field" slot-scope="text, record">
+              <a-select
+                v-model="record.field"
+                size="small"
+                show-search
+                option-filter-prop="children"
+                allowClear
+                :defaultValue="text"
+              >
+                <a-select-option v-for="(value, key) in params.fieldDataList" :key="key" :value="value.alias">
+                  {{ value.name }}
+                </a-select-option>
+              </a-select>
+            </span>
+          </a-table>
+        </a-form>
+      </div>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  props: {
+    params: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    }
+  },
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      visible: false,
+      loading: false,
+      conditions: [],
+      field: [],
+      data: {
+        conditions: []
+      },
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 60,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('客户信息表字段'),
+        dataIndex: 'sourceField',
+        width: 300,
+        scopedSlots: { customRender: 'sourceField' }
+      }, {
+        title: this.$t('当前表字段'),
+        dataIndex: 'field',
+        width: 300,
+        scopedSlots: { customRender: 'field' }
+      }],
+      form: this.$form.createForm(this)
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.visible = true
+      this.data = config.data || { conditions: [] }
+      if (this.data.tableInfo) {
+        this.handleChange(this.data.tableInfo)
+      }
+    },
+    handleChange (value) {
+      return this.axios({
+        url: '/admin/tplview/fieldIdTplidArr',
+        data: { tableId: value }
+      }).then(res => {
+        this.field = res.result.field
+      })
+    },
+    handleSubmit () {
+      this.data.conditions = this.conditions
+      this.visible = false
+      this.$emit('ok', this.data)
+      this.$message.success(this.$t('操作成功'))
+    }
+  }
+}
+</script>

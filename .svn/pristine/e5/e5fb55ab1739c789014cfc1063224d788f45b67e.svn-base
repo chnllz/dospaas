@@ -1,0 +1,266 @@
+<template>
+  <a-drawer
+    :title="$t(config.title)"
+    :width="1440"
+    :destroyOnClose="true"
+    :visible="visible"
+    @close="visible = !visible"
+  >
+    <div class="page">
+      <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+        <a-card :title="$t('搜索')" size="small">
+          <a-space slot="extra">
+            <a-button
+              htmlType="submit"
+              type="primary"
+              @click="$refs.table.refresh(true)"
+              @keydown.enter="$refs.table.refresh(true)"
+            >
+              {{ $t('搜索') }}
+            </a-button>
+            <a-button
+              @click="
+                () => {
+                  searchTime = []
+                  queryParam = {}
+                  $refs.table.refresh(true)
+                }
+              "
+            >
+              {{ $t('重置') }}
+            </a-button>
+            <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+          </a-space>
+          <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+            <a-col :span="6">
+              <a-form-item :label="$t('质检状态')">
+                <a-select v-model.trim="queryParam.qualityStatus" :allowClear="true" show-search>
+                  <a-select-option value="0">{{ $t('未质检') }}</a-select-option>
+                  <a-select-option value="1">{{ $t('已质检') }}</a-select-option>
+                  <a-select-option value="2">{{ $t('无效数据') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('质检员')">
+                <a-select v-model.trim="queryParam.qualityUser" :allowClear="true" show-search>
+                  <a-select-option v-for="item in userList" :key="item.id" :value="item.name">
+                    {{ item.name }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('坐席姓名')">
+                <a-select v-model.trim="queryParam.agentRealName" :allowClear="true" show-search>
+                  <a-select-option v-for="item in userList" :key="item.id" :value="item.name">
+                    {{ item.name }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('主叫号码')">
+                <a-input v-model.trim="queryParam.src" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('被叫号码')">
+                <a-input v-model.trim="queryParam.dst" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="6">
+              <a-form-item :label="$t('呼叫时间')">
+                <a-range-picker
+                  v-model="searchTime"
+                  :ranges="{
+                    [$t('昨天')]: [
+                      moment().startOf('day').subtract('day', 1),
+                      moment().endOf('day').subtract('day', 1)
+                    ],
+                    [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                    [$t('本周')]: [moment().startOf('day').startOf('week'), moment().endOf('week')],
+                    [$t('最近七天')]: [moment().startOf('day').subtract(7, 'days'), moment().endOf('day')],
+                    [$t('本月')]: [moment().startOf('month'), moment().endOf('month')],
+                    [$t('最近31天')]: [moment().startOf('day').subtract(31, 'days'), moment().endOf('day')]
+                  }"
+                  format="YYYY-MM-DD HH:mm:ss"
+                  :showTime="{ defaultValue: [moment('00:00:00', 'HH:mm:ss'), moment('23:59:59', 'HH:mm:ss')] }"
+                  style="width: 100%"
+                  @change="getInputTime"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-card>
+      </a-form>
+      <a-space>
+        <a-button icon="retweet" type="primary" :disabled="selectedRowKeys.length == 0" @click="handleAllot">
+          {{ $t('重新分配') }}
+        </a-button>
+        <a-button icon="delete" type="danger" :disabled="selectedRowKeys.length == 0" @click="handleDetele">
+          {{ $t('批量删除') }}
+        </a-button>
+        <a-button icon="download" @click="handleExport">{{ $t('导出') }}</a-button>
+      </a-space>
+      <s-table
+        ref="table"
+        class="table-fill"
+        size="small"
+        rowKey="id"
+        :scroll="{ y: true }"
+        :columns="columns"
+        :data="loadDataTable"
+        :rowSelection="rowSelection"
+        :sorter="{ field: 'id', order: 'descend' }"
+      >
+        <div slot="action" slot-scope="text, record">
+          <a @click="handleDetele(record)">{{ $t('删除') }}</a>
+        </div>
+      </s-table>
+      <div class="bbar">
+        <a-button @click="visible = false">{{ $t('关闭') }}</a-button>
+      </div>
+    </div>
+    <general-export ref="generalExport" />
+    <task-allot ref="taskAllot" @ok="$refs.table.refresh(true)" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  components: {
+    GeneralExport: () => import('@/views/admin/Table/GeneralExport'),
+    TaskAllot: () => import('./TaskAllot')
+  },
+  data () {
+    return {
+      config: {},
+      visible: false,
+      advanced: true,
+      searchTime: [],
+      userList: [],
+      parameter: {},
+      queryParam: {},
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('ID'),
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: this.$t('坐席姓名'),
+        dataIndex: 'agentRealName'
+      }, {
+        title: this.$t('主叫号码'),
+        dataIndex: 'source'
+      }, {
+        title: this.$t('被叫号码'),
+        dataIndex: 'destination'
+      }, {
+        title: this.$t('呼叫时间'),
+        dataIndex: 'callTime',
+        width: 150
+      }, {
+        title: this.$t('通话时长'),
+        dataIndex: 'ringTime'
+      }, {
+        title: this.$t('质检状态'),
+        dataIndex: 'qualityStatus'
+      }, {
+        title: this.$t('质检员'),
+        dataIndex: 'qualityUser'
+      }, {
+        title: this.$t('分配人'),
+        dataIndex: 'distributeUser'
+      }, {
+        title: this.$t('分配时间'),
+        dataIndex: 'distributeTime',
+        width: 140
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      }
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.getUserName()
+    },
+    loadDataTable (parameter) {
+      const { url, id } = this.config
+      this.parameter = parameter
+      return this.axios({
+        url: url,
+        data: Object.assign(parameter, this.queryParam, { taskId: id })
+      }).then(res => {
+        return res.result
+      })
+    },
+    getUserName () {
+      return this.axios({
+        url: '/quality/data/getUserArr'
+      }).then(res => {
+        const obj = res.result
+        const userList = []
+        for (const key in obj) {
+          userList.push({
+            id: key,
+            name: obj[key]
+          })
+        }
+        this.userList = userList
+      })
+    },
+    getInputTime (date, dateString) {
+      this.queryParam.callBeginTime = dateString[0]
+      this.queryParam.callEndTime = dateString[1]
+    },
+    handleExport () {
+      this.$refs.generalExport.show({
+        title: this.$t('导出'),
+        className: 'ExportTaskManagerDetailed',
+        setMenuName: true,
+        parameter: {
+          condition: Object.assign(this.parameter, this.queryParam)
+        }
+      })
+    },
+    handleDetele (record) {
+      const id = record ? record && record.id : this.selectedRowKeys.join(',')
+      this.$confirm({
+        title: record ? '您确认要删除该记录吗？' : '您确认要删除选中的记录吗？',
+        onOk: () => {
+          this.axios({
+            url: '/quality/task/deleteDetails',
+            params: { ids: id }
+          }).then(res => {
+            if (res.code === 0) {
+              this.$message.success(this.$t('删除成功'))
+              this.$refs.table.refresh()
+            } else {
+              this.$message.error(res.message)
+            }
+          })
+        }
+      })
+    },
+    handleAllot () {
+      this.$refs.taskAllot.show({
+        title: this.$t('重新分配'),
+        userList: this.userList,
+        selectedRowKeys: this.selectedRowKeys
+      })
+    }
+  }
+}
+</script>

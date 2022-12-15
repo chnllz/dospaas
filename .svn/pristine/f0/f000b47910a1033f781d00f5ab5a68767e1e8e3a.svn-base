@@ -1,0 +1,1041 @@
+/*
+ * author kcz
+ * date 2019-11-20
+ * description 表单控件项
+ */
+// 基础控件
+export const basicsList = [{
+  type: 'input', // 表单类型
+  label: '输入框', // 标题文字
+  icon: 'icon-write',
+  options: {
+    type: 'text',
+    width: '100%', // 宽度
+    defaultValue: '', // 默认值
+    placeholder: '请输入', // 没有输入时，提示文字
+    clearable: false,
+    maxLength: null,
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    disabled: false // 是否禁用，false不禁用，true禁用
+  },
+  model: '', // 数据字段
+  key: '',
+  rules: [
+    // 验证规则
+    {
+      required: false, // 必须填写
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'textarea', // 表单类型
+  label: '文本框', // 标题文字
+  icon: 'icon-edit',
+  options: {
+    width: '100%', // 宽度
+    minRows: 4,
+    maxRows: 6,
+    maxLength: null,
+    defaultValue: '',
+    clearable: false,
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    disabled: false,
+    placeholder: '请输入'
+  },
+  model: '', // 数据字段
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'number', // 表单类型
+  label: '数字输入框', // 标题文字
+  icon: 'icon-number',
+  options: {
+    width: '100%', // 宽度
+    defaultValue: 0, // 默认值
+    min: null, // 可输入最小值
+    max: null, // 可输入最大值
+    precision: null,
+    step: 1, // 步长，点击加减按钮时候，加减多少
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    disabled: false, // 是否禁用
+    placeholder: '请输入'
+  },
+  model: '', // 数据字段
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'select', // 表单类型
+  label: '下拉选择器', // 标题文字
+  icon: 'icon-xiala',
+  options: {
+    width: '100%', // 宽度
+    defaultValue: undefined, // 下拉选框请使用undefined为默认值
+    multiple: false, // 是否允许多选
+    disabled: false, // 是否禁用
+    clearable: false, // 是否显示清除按钮
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    placeholder: '请选择', // 默认提示文字
+    dynamicKey: '',
+    dynamic: false,
+    options: [
+      // 下拉选择项配置
+      {
+        value: '1',
+        label: '下拉框1'
+      },
+      {
+        value: '2',
+        label: '下拉框2'
+      }
+    ],
+    showSearch: false // 是否显示搜索框，搜索选择的项的值，而不是文字
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'checkbox',
+  label: '多选框',
+  icon: 'icon-duoxuan1',
+  options: {
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    defaultValue: [],
+    dynamicKey: '',
+    dynamic: false,
+    options: [
+      {
+        value: '1',
+        label: '选项1'
+      },
+      {
+        value: '2',
+        label: '选项2'
+      },
+      {
+        value: '3',
+        label: '选项3'
+      }
+    ]
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'radio', // 表单类型
+  label: '单选框', // 标题文字
+  icon: 'icon-danxuan-cuxiantiao',
+  options: {
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    defaultValue: '', // 默认值
+    dynamicKey: '',
+    dynamic: false,
+    options: [
+      {
+        value: '1',
+        label: '选项1'
+      },
+      {
+        value: '2',
+        label: '选项2'
+      },
+      {
+        value: '3',
+        label: '选项3'
+      }
+    ]
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'date', // 表单类型
+  label: '日期选择框', // 标题文字
+  icon: 'icon-calendar',
+  options: {
+    width: '100%', // 宽度
+    defaultValue: '', // 默认值，字符串 12:00:00
+    rangeDefaultValue: [], // 默认值，字符串 12:00:00
+    range: false, // 范围日期选择，为true则会显示两个时间选择框（同时defaultValue和placeholder要改成数组），
+    showTime: false, // 是否显示时间选择器
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    clearable: false, // 是否显示清除按钮
+    placeholder: '请选择',
+    rangePlaceholder: ['开始时间', '结束时间'],
+    format: 'YYYY-MM-DD' // 展示格式  （请按照这个规则写 YYYY-MM-DD HH:mm:ss，区分大小写）
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'time', // 表单类型
+  label: '时间选择框', // 标题文字
+  icon: 'icon-time',
+  options: {
+    width: '100%', // 宽度
+    defaultValue: '', // 默认值，字符串 12:00:00
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    clearable: false, // 是否显示清除按钮
+    placeholder: '请选择',
+    format: 'HH:mm:ss' // 展示格式
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'rate', // 表单类型
+  label: '评分', // 标题文字
+  icon: 'icon-pingfen_moren',
+  options: {
+    defaultValue: 0,
+    max: 5, // 最大值
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    allowHalf: false // 是否允许半选
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'slider', // 表单类型
+  label: '滑动输入条', // 标题文字
+  icon: 'icon-menu',
+  options: {
+    width: '100%', // 宽度
+    defaultValue: 0, // 默认值， 如果range为true的时候，则需要改成数组,如：[12,15]
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    min: 0, // 最小值
+    max: 100, // 最大值
+    step: 1, // 步长，取值必须大于 0，并且可被 (max - min) 整除
+    showInput: false // 是否显示输入框，range为true时，请勿开启
+    // range: false // 双滑块模式
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'uploadFile', // 表单类型
+  label: '上传文件', // 标题文字
+  icon: 'icon-upload',
+  options: {
+    defaultValue: '[]',
+    multiple: false,
+    disabled: false,
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    drag: false,
+    downloadWay: 'a',
+    dynamicFun: '',
+    width: '100%',
+    limit: 3,
+    data: '{}',
+    fileName: 'file',
+    headers: {},
+    action: 'http://cdn.kcz66.com/uploadFile.txt',
+    placeholder: '上传'
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+},
+// {
+//   type: 'uploadImg',
+//   label: '上传图片',
+//   icon: 'icon-image',
+//   options: {
+//     defaultValue: '[]',
+//     multiple: false,
+//     hidden: false, // 是否隐藏，false显示，true隐藏
+//     disabled: false,
+//     width: '100%',
+//     data: '{}',
+//     limit: 3,
+//     placeholder: '上传',
+//     fileName: 'image',
+//     headers: {},
+//     action: 'http://cdn.kcz66.com/upload-img.txt',
+//     listType: 'picture-card'
+//   },
+//   model: '',
+//   key: '',
+//   rules: [
+//     {
+//       required: false,
+//       message: '必填项'
+//     }
+//   ]
+// },
+{
+  type: 'treeSelect', // 表单类型
+  label: '树选择器', // 标题文字
+  icon: 'icon-tree',
+  options: {
+    disabled: false, // 是否禁用
+    defaultValue: undefined, // 默认值
+    multiple: false,
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    clearable: false, // 是否显示清除按钮
+    showSearch: false, // 是否显示搜索框，搜索选择的项的值，而不是文字
+    treeCheckable: false,
+    placeholder: '请选择',
+    dynamicKey: '',
+    dynamic: true,
+    options: [
+      {
+        value: '1',
+        label: '选项1',
+        children: [
+          {
+            value: '11',
+            label: '选项11'
+          }
+        ]
+      },
+      {
+        value: '2',
+        label: '选项2',
+        children: [
+          {
+            value: '22',
+            label: '选项22'
+          }
+        ]
+      }
+    ]
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'cascader', // 表单类型
+  label: '级联选择器', // 标题文字
+  icon: 'icon-guanlian',
+  options: {
+    disabled: false, // 是否禁用
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    defaultValue: undefined, // 默认值
+    showSearch: false, // 是否显示搜索框，搜索选择的项的值，而不是文字
+    placeholder: '请选择',
+    clearable: false, // 是否显示清除按钮
+    dynamicKey: '',
+    dynamic: true,
+    options: [
+      {
+        value: '1',
+        label: '选项1',
+        children: [
+          {
+            value: '11',
+            label: '选项11'
+          }
+        ]
+      },
+      {
+        value: '2',
+        label: '选项2',
+        children: [
+          {
+            value: '22',
+            label: '选项22'
+          }
+        ]
+      }
+    ]
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'batch',
+  label: '动态表格',
+  icon: 'icon-biaoge',
+  list: [],
+  options: {
+    scrollY: 0,
+    disabled: false,
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    showLabel: false,
+    hideSequence: false,
+    width: '100%'
+  },
+  model: '',
+  key: ''
+}, {
+  type: 'editor',
+  formType: 'editor',
+  label: '富文本',
+  icon: 'icon-LC_icon_edit_line_1',
+  list: [],
+  options: {
+    height: 300,
+    placeholder: '请输入',
+    defaultValue: '',
+    chinesization: true,
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    disabled: false,
+    showLabel: false,
+    width: '100%'
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'switch', // 表单类型
+  label: '开关', // 标题文字
+  icon: 'icon-kaiguan3',
+  options: {
+    defaultValue: false, // 默认值 Boolean 类型
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    disabled: false // 是否禁用
+  },
+  model: '',
+  key: '',
+  rules: [
+    {
+      required: false,
+      message: '必填项'
+    }
+  ]
+}, {
+  type: 'web_sub_data_window',
+  label: '数据窗口',
+  relationSetting: {
+    enable: '1'
+  },
+  icon: 'icon-biaoge',
+  key: ''
+}, {
+  type: 'flowlog',
+  label: '流程日志',
+  associatedList: {
+    enable: '1'
+  },
+  screenList: [{
+    label: '全部',
+    value: '',
+    checked: true
+  }, {
+    label: '备注',
+    value: 'log',
+    checked: false
+  }, {
+    label: '催办',
+    value: 'urge',
+    checked: false
+  }, {
+    label: '办理',
+    value: 'handle',
+    checked: false
+  }],
+  screenDefault: '',
+  showType: 'card',
+  icon: 'icon-menu',
+  key: ''
+}, {
+  type: 'urgelog',
+  label: '催办日志',
+  associatedList: {
+    enable: '1'
+  },
+  icon: 'icon-calendar',
+  key: ''
+}, {
+  type: 'button', // 表单类型
+  label: '按钮', // 标题文字
+  icon: 'icon-button-remove',
+  options: {
+    text: '按钮',
+    type: 'primary',
+    size: 'default', // default medium  mini
+    shape: 'square', // square circle
+    plain: true, // 镂空
+    ripple: true, // 水波纹
+    hairLine: true, // 细边框
+    buttonEvent: 'specific', // specific selfDef
+    systemFunc: '',
+    specificFunc: 0, // 1复制  2地址位置  3电话
+    selfDefFunc: '',
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    dynamicFun: '',
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    disabled: false // 是否禁用，false不禁用，true禁用
+  },
+  key: ''
+}, {
+  type: 'alert',
+  label: '警告提示',
+  icon: 'icon-zu',
+  options: {
+    type: 'success',
+    title: '标题',
+    description: '',
+    showIcon: false,
+    icon: '',
+    closeAble: false, // 关闭按钮
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  },
+  key: ''
+}, {
+  type: 'formmark',
+  label: '表单留痕',
+  icon: 'icon-folder',
+  model: '', // 数据字段
+  key: ''
+}, {
+  type: 'text',
+  label: '文字',
+  icon: 'icon-zihao',
+  options: {
+    textAlign: 'left',
+    description: '',
+    size: 'default', // default(16)  h1 h2 h3 h4 h5 tip(14)
+    color: '#000000', //
+    backgroundColor: '#ffffff',
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  },
+  key: ''
+}, {
+  type: 'placeholder',
+  label: '占位符',
+  icon: 'icon-zihao',
+  options: {
+    textAlign: 'left',
+    hidden: false, // 是否隐藏，false显示，true隐藏
+    showRequiredMark: false
+  },
+  key: ''
+}, {
+  type: 'portrait',
+  label: '客户画像',
+  icon: 'icon-qiapian',
+  key: ''
+}, {
+  type: 'html',
+  label: 'HTML',
+  icon: 'icon-ai-code',
+  options: {
+    defaultValue: '<strong>HTML</strong>',
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  },
+  key: ''
+}, {
+  column: '24',
+  fieldRule: '',
+  formType: '',
+  key: '',
+  name: '流程办理方式',
+  icon: 'icon-danxuan-cuxiantiao',
+  label: '流程办理方式',
+  type: 'work',
+  typename: '流程办理方式',
+  value: '',
+  workDivider: '1'
+}, {
+  column: '24',
+  fieldRule: '',
+  formType: '',
+  key: '',
+  name: '流程办理备注',
+  label: '流程办理备注',
+  icon: 'icon-edit',
+  type: 'workRemark',
+  typename: '流程办理备注',
+  value: ''
+}, {
+  attribute: '',
+  componentName: '',
+  label: '自定义组件',
+  dividerDirection: '',
+  dividerText: '',
+  fieldRule: 'allow',
+  formType: 'text',
+  name: '',
+  placeholder: '组件',
+  type: 'component',
+  icon: 'icon-juxingkaobei',
+  validity: [],
+  validationType: '',
+  value: '',
+  workDivider: '0',
+  options: {
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  }
+}, {
+  column: '24',
+  fieldRule: '',
+  formType: '',
+  key: '',
+  name: '生命周期',
+  label: '生命周期',
+  icon: 'icon-tree',
+  type: 'lifeCycle',
+  value: ''
+}, {
+  column: '24',
+  fieldRule: '',
+  formType: '',
+  key: '',
+  name: '虚拟字段',
+  label: '虚拟字段',
+  icon: 'icon-tree',
+  type: 'virtualField',
+  value: {
+
+  },
+  options: {
+    styleType: 'label', // label noLabel tag
+    labelVal: 'label值',
+    labelFontSize: 'default',
+    labelColor: '#000000',
+    labelBkColor: '#FFFFFF',
+    value: '',
+    size: 'default', // 字段样式为标签，标签大小 default mini
+    type: 'success', // success / info / warning / error 标签主题
+    shape: 'square', // circle / circleLeft / circleRight 标签形状
+    mode: 'light', // light/ dark / plain 标签模式
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  }
+  // }, {
+  //   // uni-app的uni-fab组件
+  //   key: '',
+  //   name: '悬浮按钮',
+  //   label: '悬浮按钮',
+  //   icon: 'icon-tree',
+  //   type: 'floatButton',
+  //   options: {
+  //     icon: 'uicon-home',
+  //     direction: 'horizontal', // 展开方向
+  //     popMenu: false, // 是否使用弹出菜单（组合按钮）
+  //     horizontal: 'left', // 水平对齐方式 left right
+  //     vertical: 'bottom', // 垂直对齐方式 bottom top
+  //     buttonType: undefined
+  //   },
+  //   list: [
+  //     {
+  //       text: '按钮名称',
+  //       active: false,
+  //       icon: 'uicon-home',
+  //       buttonEvent: 'system', // system  specific selfDef
+  //       systemFunc: 0,
+  //       specificFunc: 0, // 1复制  2地址位置  3电话
+  //       selfDefFunc: 0
+  //     }
+  //   ]
+}, {
+  key: '',
+  name: '外部页面',
+  label: '外部页面',
+  icon: 'icon-tree',
+  type: 'externalPage',
+  options: {
+    url: '',
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  }
+}, {
+  type: 'groupSearch',
+  label: '搜索模板组',
+  icon: 'icon-fengexian',
+  options: {
+    groupSearchName: '',
+    groupSearch: [{
+      searchTemplateName: '',
+      searchConditionSet: []
+    }]
+  }
+}, {
+  type: 'groupBtn',
+  label: '排序按钮组',
+  icon: 'icon-fengexian',
+  options: {
+    groupBtnName: '',
+    groupBtn: [{
+      btnName: '',
+      sortFiled: '',
+      sortRule: 1
+    }]
+  }
+}, {
+  type: 'line',
+  label: '线条',
+  icon: 'icon-fengexian',
+  options: {
+    color: '#e4e7ed',
+    length: 100,
+    direction: 'row', // col
+    hairLine: true, // 是否为细线
+    borderStyle: 'solid', // dashed / dotted
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  }
+}]
+
+// 自定义组件
+export const customComponents = {
+  title: '自定义组件',
+  list: [
+    // {
+    //   attribute: '',
+    //   componentName: '',
+    //   label: '自定义组件',
+    //   dividerDirection: '',
+    //   dividerText: '',
+    //   fieldRule: 'allow',
+    //   formType: 'text',
+    //   name: '',
+    //   placeholder: '组件',
+    //   type: 'component',
+    //   validity: [],
+    //   validationType: '',
+    //   value: new Date().getTime(),
+    //   workDivider: '0'
+    // }
+  ]
+}
+window.$customComponentList = customComponents.list
+
+// 布局控件
+export const layoutList = [{
+  type: 'divider',
+  label: '分割线',
+  icon: 'icon-fengexian',
+  options: {
+    title: '分割线',
+    halfWidth: 50, // 单边线宽
+    color: '#000000', // 文字颜色
+    borderColor: '#dcdfe6',
+    fontSize: 13,
+    margin: {
+      top: 0,
+      bottom: 0
+    }
+  },
+  key: '',
+  model: ''
+}, {
+  type: 'card',
+  label: '卡片布局',
+  icon: 'icon-qiapian',
+  options: {
+    title: '',
+    titleSize: 16,
+    titleColor: '#303133',
+    border: true, // 是否显示边框
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  },
+  list: [],
+  key: '',
+  model: ''
+}, {
+  type: 'tabs',
+  label: '标签页布局',
+  icon: 'icon-tabs',
+  options: {
+    height: 40, // 单位px
+    activeColor: '#2979ff'
+  },
+  columns: [
+    {
+      value: '1',
+      label: '选项1',
+      list: []
+    },
+    {
+      value: '2',
+      label: '选项2',
+      list: []
+    }
+  ],
+  key: '',
+  model: ''
+}, {
+  type: 'grid',
+  label: '栅格布局',
+  icon: 'icon-zhage',
+  columns: [
+    {
+      span: 6,
+      list: []
+    },
+    {
+      span: 6,
+      list: []
+    },
+    {
+      span: 6,
+      list: []
+    },
+    {
+      span: 6,
+      list: []
+    }
+  ],
+  options: {
+    gutter: 0
+  },
+  key: '',
+  model: ''
+}, {
+  type: 'gap',
+  label: '间隔槽',
+  icon: 'icon-fengexian',
+  options: {
+    margin: {
+      top: 0,
+      bottom: 0
+    },
+    bgColor: '#F3F4F6',
+    height: 15
+  }
+}, {
+  type: 'steps',
+  label: '步骤条',
+  icon: 'icon-fengexian',
+  options: {
+    mode: 'dot',
+    direction: 'row',
+    useIcon: false,
+    icon: '',
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  },
+  columns: [{
+    name: '我是步骤条标题'
+  }]
+}, {
+  type: 'square',
+  label: '宫格',
+  icon: 'icon-fengexian',
+  options: {
+    col: 3, // 宫格列数
+    margin: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    },
+    padding: {
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0
+    }
+  },
+  columns: [{
+    name: '',
+    icon: '',
+    pageList: [],
+    customPageUrl: '',
+    button: '',
+    type: ''
+    // list: []
+  }]
+}, {
+  type: 'swiper',
+  label: '轮播图',
+  icon: 'icon-fengexian',
+  options: {
+    title: false, // 是否开启标题
+    mode: 'round', // 指示器
+    indicatorPos: 'bottomCenter', // 指示器位置
+    effect3d: false, // 开启3D效果
+    autoplay: true, // 自动播放
+    interval: 2500, // 轮播时间间隔ms
+    duration: 500, // 切换一张轮播图所需的时间ms
+    height: 125 // px
+  },
+  list: [{
+    image: [],
+    title: '',
+    page: ''
+  }]
+}, {
+  type: 'collapse',
+  label: '折叠面板',
+  icon: 'icon-fengexian',
+  options: {
+    frame: true, // true 带边框  false 简洁
+    notAccordion: false, // 同时展开多个面板
+    margin: {
+      top: 10,
+      left: 20,
+      bottom: 10,
+      right: 20
+    },
+    padding: {
+      top: 0,
+      left: 10,
+      bottom: 0,
+      right: 10
+    }
+  },
+  columns: [{
+    open: false, // 手风琴模式下，只有一个open为true
+    title: '折叠面板',
+    key: 1,
+    list: []
+  }]
+}]

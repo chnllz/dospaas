@@ -1,0 +1,120 @@
+import storage from '@/utils/storage'
+import store from '@/store'
+import request from '@/utils/request'
+import vueThis from '@/main'
+const user = {
+  state: {
+    token: '',
+    roles: [],
+    info: {}
+  },
+
+  mutations: {
+    SET_TOKEN: (state, token) => {
+      state.token = token
+    },
+    SET_ROLES: (state, roles) => {
+      state.roles = roles
+    },
+    SET_INFO: (state, info) => {
+      state.info = info
+    }
+  },
+
+  actions: {
+    // 登录
+    Login ({ commit }, userInfo) {
+      return new Promise((resolve, reject) => {
+        request({
+          url: '/admin/index/login',
+          data: userInfo
+        }).then(response => {
+          const result = response.result
+          storage.set('Access-Token', result.token, 7 * 24 * 60 * 60 * 1000)
+          commit('SET_TOKEN', result.token)
+          resolve(response)
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    },
+
+    // 获取用户信息
+    GetInfo ({ commit }) {
+      return new Promise((resolve, reject) => {
+        request({
+          url: '/admin/index/init',
+          data: {
+            redirectPath: '',
+            language: storage.get('lang')
+          }
+        }).then(response => {
+          const result = Object.assign(response.result.userinfo, response.result.userExtendInfo ? response.result.userExtendInfo : {})
+          if (result && result.role) {
+            const role = result.role
+            role.permissions = result.role.permissions
+            role.permissions.map(per => {
+              if (per.actionEntitySet != null && per.actionEntitySet.length > 0) {
+                const action = per.actionEntitySet.map(action => { return action.action })
+                per.actionList = action
+              }
+            })
+            role.permissionList = role.permissions.map(permission => { return permission.permissionId })
+            commit('SET_ROLES', result.role)
+            commit('SET_INFO', result)
+          } else {
+            reject(response)
+          }
+          commit('SET_SETTING', response.result.setting)
+          vueThis.$i18n.mergeLocaleMessage('en_US', response.result.languageLibrary)
+          resolve(response)
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    },
+
+    // 登出
+    Logout ({ commit, state }) {
+      return new Promise((resolve) => {
+        const basePath = location.href
+        request({
+          url: '/admin/index/logout',
+          headers: {
+            clientId: store.getters.setting ? store.getters.setting.clientId : null
+          },
+          data: {
+            redirectPath: basePath
+          }
+        }).then((res) => {
+          commit('SET_TOKEN', '')
+          commit('SET_ROLES', { permissions: [] })
+          storage.remove('Access-Token')
+          if (res.result.logoutRedirectUrl) {
+            location.href = res.result.logoutRedirectUrl
+          }
+          resolve(res)
+        }).catch((res) => {
+          resolve(res)
+        })
+      })
+    },
+
+    // 编辑个人信息
+    UserInfo ({ commit }, data) {
+      return new Promise((resolve, reject) => {
+        request({
+          url: '/admin/user/info',
+          data: data
+        }).then(response => {
+          resolve(response)
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    }
+
+  }
+}
+
+export default user

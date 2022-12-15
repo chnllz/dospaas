@@ -1,0 +1,134 @@
+<template>
+  <div class="page" style="height: 100%">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search">
+      <a-card size="small" :title="$t('搜索')">
+        <a-space slot="extra">
+          <a-button htmlType="submit" type="primary" @click="$refs.table.refresh(true)">{{ $t('搜索') }}</a-button>
+          <a-button @click="reset()">{{ $t('重置') }}</a-button>
+        </a-space>
+        <a-row class="form normal">
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('最后来访时间')" style="padding: 0 8px">
+              <a-range-picker
+                v-model="showTime"
+                :allowClear="false"
+                :ranges="{
+                  [$t('昨天')]: [moment().subtract(1, 'day').startOf('day'), moment().subtract(1, 'day').endOf('day')],
+                  [$t('今天')]: [moment().startOf('day'), moment().endOf('day')],
+                  [$t('本周')]: [moment().startOf('week'), moment().endOf('week')],
+                  [$t('本月')]: [moment().startOf('month'), moment().endOf('month')]
+                }"
+                format="YYYY-MM-DD HH:mm:ss"
+                @change="onChange"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('访客ID')" style="padding-right: 8px">
+              <a-input v-model="queryParam.visitorId" />
+            </a-form-item>
+          </a-col>
+          <a-col v-bind="colLayout">
+            <a-form-item :label="$t('访客名称')" style="padding-right: 8px">
+              <a-input v-model="queryParam.visitorName" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <s-table
+      ref="table"
+      class="table-fill"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      :scroll="{ y: true }"
+      :data="loadDataTable"
+      :sorter="sorter"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="handleEdit(record)">{{ $t('编辑') }}</a>
+      </div>
+    </s-table>
+    <history-visitor-form ref="historyVisitorForm" @ok="handleOK()" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    HistoryVisitorForm: () => import('./HistoryVisitorForm')
+  },
+  data () {
+    return {
+      form: this.$form.createForm(this),
+      queryParam: {
+        startTime: this.moment().startOf('day').format('YYYY-MM-DD HH:mm:ss'),
+        endTime: this.moment().endOf('day').format('YYYY-MM-DD HH:mm:ss')
+      },
+      showTime: [this.moment('00:00:00', 'HH:mm:ss'), this.moment('23:59:59', 'HH:mm:ss')],
+      columns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        width: 100,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('最后来访时间'),
+        width: 160,
+        dataIndex: 'lastTime',
+        sorter: true
+      }, {
+        title: this.$t('访客ID'),
+        dataIndex: 'visitorId',
+        width: 160
+      }, {
+        title: this.$t('访客名称'),
+        dataIndex: 'visitorName',
+        width: 160
+      }, {
+        title: this.$t('备注'),
+        dataIndex: 'remarks'
+
+      }],
+      colLayout: { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 },
+      sorter: { field: 'lastTime', order: 'descend' }
+    }
+  },
+  methods: {
+    loadDataTable (parameter) {
+      const params = Object.assign(parameter, this.queryParam)
+      return this.axios({
+        url: '/chat/historyVisitor/init',
+        data: params
+      }).then(res => {
+        return res.result
+      })
+    },
+    reset () {
+      this.queryParam = {
+        startTime: this.moment().startOf('day').format('YYYY-MM-DD HH:mm:ss'),
+        endTime: this.moment().endOf('day').format('YYYY-MM-DD HH:mm:ss'),
+        visitorName: ''
+      }
+      this.showTime = [this.moment('00:00:00', 'HH:mm:ss'), this.moment('23:59:59', 'HH:mm:ss')]
+      this.$refs.table.refresh(true)
+    },
+    handleOK () {
+      this.$refs.table.refresh()
+    },
+    onChange (dates, dateStrings) {
+      this.showTime = dates
+      this.queryParam.startTime = dateStrings[0]
+      this.queryParam.endTime = dateStrings[1]
+    },
+    handleEdit (record) {
+      this.$refs.historyVisitorForm.show({
+        title: this.$t('编辑') + '：' + record.visitorId,
+        url: '/chat/historyVisitor/edit',
+        record: record
+      })
+    }
+  }
+}
+</script>

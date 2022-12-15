@@ -1,0 +1,47 @@
+<template>
+  <a-card size="small">
+    <a-tabs>
+      <a-tab-pane key="1" :tab="$t('进行中')">
+        <centerflow-init :actionTab="actionTab" :flowCondition="flowCondition" />
+      </a-tab-pane>
+      <a-tab-pane key="2" :tab="$t('已结束')">
+        <centerflow-history :finish="finish" />
+      </a-tab-pane>
+      <a-tab-pane key="5" :tab="$t('发起流程')">
+        <workflow-main />
+      </a-tab-pane>
+    </a-tabs>
+  </a-card>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    CenterflowInit: () => import('./CenterflowInit'),
+    CenterflowHistory: () => import('./CenterflowHistory'),
+    WorkflowMain: () => import('../WorkflowMain')
+  },
+  data () {
+    return {
+      actionTab: [],
+      finish: [],
+      flowCondition: ''
+    }
+  },
+  created () {
+    this.axios({
+      url: '/admin/centerflow/centerPriv'
+    }).then(res => {
+      if (res.result && res.result) {
+        this.actionTab = res.result.actionTab
+        this.finish = res.result.finish
+        if (this.actionTab.length > 0 && this.actionTab.filter(item => item.priv === 'visit')[0]) {
+          this.flowCondition = this.actionTab.filter(item => item.priv === 'visit')[0].value
+        }
+      } else if (res.result && !res.result.searchPriv) {
+        this.$message.error('未配置流程管理->参数设置，快捷筛选无法加载')
+      }
+    })
+  }
+}
+</script>

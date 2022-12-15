@@ -1,0 +1,4542 @@
+<template>
+  <div style="height: 100%" @click="clickTable">
+    <a-spin :spinning="loading" style="height: 100%">
+      <div v-if="judgeService == 'open'" size="small" style="height: 100%; background: #ffffff" :bordered="false">
+        <a-row style="height: 100%">
+          <a-col :span="6" style="height: 100%">
+            <a-tabs v-model="activeKey" class="tabs-flex" default-active-key="chat" @change="changeTab">
+              <a-tab-pane key="chat">
+                <span slot="tab">
+                  <div>
+                    {{ $t('会话') }}
+                    <span style="color: #fb0808">({{ groupTotal }})</span>
+                  </div>
+                </span>
+                <a-row ref="nowRef" type="flex" align="middle" :gutter="8" style="margin: 14px 8px">
+                  <a-col flex="1">
+                    <a-input
+                      v-model="queryParamNow.name"
+                      :placeholder="$t('请输入访客名称搜索')"
+                      allowClear
+                      @pressEnter="eventGetChatList"
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-icon style="font-size: 14px" type="search" @click="eventGetChatList" />
+                  </a-col>
+                  <a-col>
+                    <a-icon
+                      style="font-size: 14px"
+                      type="reload"
+                      @click="
+                        () => {
+                          queryParamNow = { sortField: queryParamNow.sortField }
+                          eventGetChatList()
+                        }
+                      "
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-popover v-model="nowFilterVisible" trigger="click" placement="bottom" :title="$t('排序方案')">
+                      <div slot="content" style="width: 240px">
+                        <a-radio-group v-model="queryParamNow.sortField">
+                          <a-radio value="entrySequence">
+                            {{ $t('按会话进入顺序') }}
+                            <a-tooltip :title="$t('按会话进入时间由近到远')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                          <a-radio value="messageUpdate">
+                            {{ $t('按会话中新消息时间') }}
+                            <a-tooltip :title="$t('按会话中最后一条消息的产生时间，由近到远')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                          <a-radio value="waitReply">
+                            {{ $t('按访客等待回复时长') }}
+                            <a-tooltip
+                              :title="
+                                $t(
+                                  '按会话中访客发言后，等待回复时长由长到短。如果最后一次发言的不是访客的，则按会话进入顺序由近到远。'
+                                )
+                              "
+                            >
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                        </a-radio-group>
+                        <div style="text-align: right; margin-top: 8px">
+                          <a-space>
+                            <a-button size="small" @click="nowFilterVisible = !nowFilterVisible">关闭</a-button>
+                            <a-button
+                              type="primary"
+                              size="small"
+                              @click="
+                                () => {
+                                  savaSortField(queryParamNow.sortField, 'Now')
+                                  nowFilterVisible = false
+                                  eventGetChatList()
+                                }
+                              "
+                            >
+                              {{ $t('确定') }}
+                            </a-button>
+                          </a-space>
+                        </div>
+                      </div>
+                      <div>
+                        <a-icon style="font-size: 14px" type="filter" @click.stop="nowFilterVisible = true" />
+                      </div>
+                    </a-popover>
+                  </a-col>
+                </a-row>
+                <a-list
+                  ref="group"
+                  item-layout="horizontal"
+                  :dataSource="groupData"
+                  :loading="groupLoading"
+                  class="tabsFlexList"
+                >
+                  <a-list-item
+                    slot="renderItem"
+                    slot-scope="item, index"
+                    :class="item.id == currentVisitor ? 'chatListActive' : !item.state ? '' : 'tagCheck'"
+                    class="chatListHover"
+                    style="padding: 8px 16px; padding-top: 0px"
+                    :style="{ borderBottom: '1px solid #f0f0f0' }"
+                    @click="getChat(item, index)"
+                  >
+                    <a-list-item-meta>
+                      <a-row slot="title" type="flex" align="middle" style="padding-top: 8px">
+                        <a-col v-if="item.topTime !== 0 && !item.state">
+                          <a-icon type="pushpin" style="padding-right: 5px" theme="twoTone" two-tone-color="#52c41a" />
+                        </a-col>
+                        <a-col :span="18" style="display: flex; align-items: center">
+                          <a-badge :count="!item.state ? item.unreadMessage : 0" :offset="[9, 3]">
+                            <span
+                              class="visitorName"
+                              style="font-size: 16px; color: #262626; line-height: normal"
+                              :style="{ fontWeight: !item.state ? 500 : 400 }"
+                            >
+                              {{ item.visitorName }}
+                            </span>
+                          </a-badge>
+                          <span style="padding-left: 16px">
+                            <a-tag>{{ channelLists[item.lastChannel] || $t('未知') }}</a-tag>
+                          </span>
+                        </a-col>
+                        <a-col flex="auto" style="text-align: right">
+                          <span v-if="!item.state" v-dompurify-html="item.checkTime"></span>
+                          <span v-else class="tagShow">
+                            <a-tag
+                              v-show="item.state"
+                              color="red"
+                              style="text-align: center; cursor: pointer; margin-right: 0px"
+                              @click.stop="clearChat(item)"
+                            >
+                              {{ $t('清 除') }}
+                            </a-tag>
+                          </span>
+                        </a-col>
+                      </a-row>
+                      <a-row slot="description" type="flex" align="middle" style="margin-top: 12px">
+                        <a-col :span="15" class="content" style="color: #595959">
+                          <span v-if="item.state" style="color: #fa8c16">{{ $t('[已结束]') }}</span>
+                          {{ item.lastMessageContent }}
+                        </a-col>
+                        <a-col :span="9" style="text-align: right">
+                          <span style="color: #8c8c8c">{{ item.formatTime }}</span>
+                        </a-col>
+                      </a-row>
+                    </a-list-item-meta>
+                  </a-list-item>
+                </a-list>
+              </a-tab-pane>
+              <a-tab-pane key="queue">
+                <span slot="tab">
+                  <div>
+                    {{ $t('排队') }}
+                    <span style="color: #fb0808">({{ waitTotal }})</span>
+                  </div>
+                </span>
+                <a-row type="flex" align="middle" :gutter="8" style="margin: 14px 8px">
+                  <a-col flex="1">
+                    <a-input
+                      v-model="queryParamWait.name"
+                      :placeholder="$t('请输入访客名称搜索')"
+                      allowClear
+                      @pressEnter="eventGetQueueList"
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-icon style="font-size: 14px" type="search" @click="eventGetQueueList" />
+                  </a-col>
+                  <a-col>
+                    <a-icon
+                      style="font-size: 14px"
+                      type="reload"
+                      @click="
+                        () => {
+                          queryParamWait = { sortField: queryParamWait.sortField }
+                          eventGetQueueList()
+                        }
+                      "
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-popover v-model="queueFilterVisible" trigger="click" placement="bottom" :title="$t('排序方案')">
+                      <div slot="content" style="width: 240px">
+                        <a-radio-group v-model="queryParamWait.sortField">
+                          <a-radio value="waitTimeDesc">
+                            {{ $t('按排队时长由长到短') }}
+                            <a-tooltip :title="$t('按进入排队的等待时长由长到短')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                          <a-radio value="waitTimeAsc">
+                            {{ $t('按排队时长由短到长') }}
+                            <a-tooltip :title="$t('按进入排队的等待时长由短到长')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                        </a-radio-group>
+                        <div style="text-align: right; margin-top: 8px">
+                          <a-space>
+                            <a-button size="small" @click="queueFilterVisible = !queueFilterVisible">关闭</a-button>
+                            <a-button
+                              type="primary"
+                              size="small"
+                              @click="
+                                () => {
+                                  savaSortField(queryParamWait.sortField, 'Wait')
+                                  queueFilterVisible = false
+                                  eventGetQueueList()
+                                }
+                              "
+                            >
+                              {{ $t('确定') }}
+                            </a-button>
+                          </a-space>
+                        </div>
+                      </div>
+                      <div>
+                        <a-icon style="font-size: 14px" type="filter" @click.stop="queueFilterVisible = true" />
+                      </div>
+                    </a-popover>
+                  </a-col>
+                </a-row>
+                <a-list
+                  ref="wait"
+                  item-layout="horizontal"
+                  :dataSource="waitData"
+                  :loading="waitLoading"
+                  class="tabsFlexList"
+                >
+                  <a-list-item
+                    slot="renderItem"
+                    slot-scope="item"
+                    style="padding: 8px 16px"
+                    :class="item.visitorId == queueVisitor ? 'chatListActive' : 'chatListHover'"
+                    :style="{ borderBottom: '1px solid #f0f0f0' }"
+                    @click="settingControl.waitPreview ? getWaitChat(item) : ''"
+                  >
+                    <a-list-item-meta>
+                      <a-row slot="title" type="flex" align="middle">
+                        <a-col :span="18" style="display: flex; align-items: center">
+                          <a-badge>
+                            <span
+                              class="visitorName"
+                              style="font-size: 16px; color: #26262; font-weight: 500; line-height: normal"
+                            >
+                              {{ item.visitorName }}
+                            </span>
+                          </a-badge>
+                          <span style="padding-left: 8px">
+                            <a-tag>{{ channelLists[item.lastChannel] || $t('未知') }}</a-tag>
+                          </span>
+                        </a-col>
+                        <a-col :span="6" style="text-align: right">
+                          <a-tag color="blue" style="cursor: pointer; margin-right: 0px" @click="eventClaim(item)">
+                            {{ $t('抓 取') }}
+                          </a-tag>
+                        </a-col>
+                      </a-row>
+                      <a-row slot="description" type="flex" align="middle" style="margin-top: 12px">
+                        <a-col :span="19" class="content" style="color: #595959">{{ item.content || '--' }}</a-col>
+                        <a-col :span="5" style="text-align: right; color: #8c8c8c; font-weight: 400">
+                          {{ item.lastTime }}
+                        </a-col>
+                      </a-row>
+                    </a-list-item-meta>
+                  </a-list-item>
+                </a-list>
+                <a-pagination
+                  v-if="waitTotal > 0"
+                  :default-current="1"
+                  :total="waitTotal"
+                  :defaultPageSize="20"
+                  :showTotal="
+                    (total, range) =>
+                      $t('显示第 {0} 条到 {1} 条记录, 一共 {2} 条', { 0: range[0], 1: range[1], 2: total })
+                  "
+                  style="width: 100%; display: flex; justify-content: end; margin: 16px 0px; padding-right: 8px"
+                  size="small"
+                  @change="changeWait"
+                />
+              </a-tab-pane>
+              <a-tab-pane key="transfer">
+                <span slot="tab">
+                  <div>
+                    {{ $t('转接') }}
+                    <span style="color: #fb0808">({{ transferTotal }})</span>
+                  </div>
+                </span>
+                <a-row type="flex" align="middle" :gutter="8" style="margin: 14px 8px">
+                  <a-col flex="1">
+                    <a-input
+                      v-model="queryParamTransfer.name"
+                      :placeholder="$t('请输入访客名称搜索')"
+                      allowClear
+                      @pressEnter="eventGetTransferList"
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-icon style="font-size: 14px" type="search" @click="eventGetTransferList" />
+                  </a-col>
+                  <a-col>
+                    <a-icon
+                      style="font-size: 14px"
+                      type="reload"
+                      @click="
+                        () => {
+                          queryParamTransfer = { sortField: queryParamTransfer.sortField }
+                          eventGetTransferList()
+                        }
+                      "
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-popover
+                      v-model="transferFilterVisible"
+                      trigger="click"
+                      placement="bottom"
+                      :title="$t('排序方案')"
+                    >
+                      <div slot="content" style="width: 240px">
+                        <a-radio-group v-model="queryParamTransfer.sortField">
+                          <a-radio value="transferTime">
+                            {{ $t('按转接提交时间') }}
+                            <a-tooltip :title="$t('按转接提交时间由近到远')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                        </a-radio-group>
+                        <div style="text-align: right; margin-top: 8px">
+                          <a-space>
+                            <a-button size="small" @click="transferFilterVisible = !transferFilterVisible">
+                              {{ $t('关闭') }}
+                            </a-button>
+                            <a-button
+                              type="primary"
+                              size="small"
+                              @click="
+                                () => {
+                                  transferFilterVisible = false
+                                  eventGetTransferList()
+                                }
+                              "
+                            >
+                              {{ $t('确定') }}
+                            </a-button>
+                          </a-space>
+                        </div>
+                      </div>
+                      <div>
+                        <a-icon style="font-size: 14px" type="filter" @click.stop="transferFilterVisible = true" />
+                      </div>
+                    </a-popover>
+                  </a-col>
+                </a-row>
+                <a-list
+                  ref="transfer"
+                  item-layout="horizontal"
+                  :dataSource="transferData"
+                  :loading="transferLoading"
+                  class="tabsFlexList"
+                >
+                  <a-list-item
+                    slot="renderItem"
+                    slot-scope="item"
+                    style="padding: 8px 16px"
+                    class="chatListHover"
+                    :style="{ borderBottom: '1px solid #f0f0f0' }"
+                  >
+                    <a-list-item-meta>
+                      <a-row slot="title" type="flex" align="middle">
+                        <a-col :span="16" style="display: flex; align-items: center">
+                          {{ $t('转接自：') }}
+                          <a-badge>
+                            <span class="visitorName" style="font-size: 16px; color: #26262; font-weight: 500">
+                              {{ item.transferFrom }}
+                            </span>
+                          </a-badge>
+                          <span style="padding-left: 8px">
+                            <a-tag>{{ channelLists[item.lastChannel] || $t('未知') }}</a-tag>
+                          </span>
+                        </a-col>
+                        <a-col :span="8" style="text-align: right">
+                          <a-tag color="red" style="cursor: pointer" @click="grabTrasfer(item, 'cancel')">
+                            {{ $t('拒 绝') }}
+                          </a-tag>
+                          <a-tag
+                            color="green"
+                            style="cursor: pointer; margin-right: 0px"
+                            @click="grabTrasfer(item, 'receive')"
+                          >
+                            {{ $t('同 意') }}
+                          </a-tag>
+                        </a-col>
+                      </a-row>
+                      <a-row slot="description" type="flex" align="middle" style="margin-top: 12px">
+                        <a-col :span="16" class="content" style="color: #595959">
+                          {{ $t('备注') }}：{{ item.transferRemark || '--' }}
+                        </a-col>
+                        <a-col :span="8" style="text-align: right; color: #8c8c8c; font-weight: 400">
+                          {{ item.transferTime }}
+                        </a-col>
+                      </a-row>
+                    </a-list-item-meta>
+                  </a-list-item>
+                </a-list>
+                <a-pagination
+                  v-if="transferTotal > 0"
+                  :default-current="1"
+                  :total="transferTotal"
+                  :defaultPageSize="20"
+                  :showTotal="
+                    (total, range) =>
+                      $t('显示第 {0} 条到 {1} 条记录, 一共 {2} 条', { 0: range[0], 1: range[1], 2: total })
+                  "
+                  style="width: 100%; display: flex; justify-content: end; margin: 16px 0px; padding-right: 8px"
+                  size="small"
+                  @change="changeTransfer"
+                />
+              </a-tab-pane>
+              <a-tab-pane key="summarized">
+                <span slot="tab">
+                  <div>{{ $t('待小结') }}</div>
+                </span>
+                <a-row type="flex" align="middle" :gutter="8" style="margin: 14px 8px">
+                  <a-col flex="1">
+                    <a-input
+                      v-model="queryParamSummarized.name"
+                      :placeholder="$t('请输入访客名称搜索')"
+                      allowClear
+                      @pressEnter="eventGetSummarizedList"
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-icon style="font-size: 14px" type="search" @click="eventGetSummarizedList" />
+                  </a-col>
+                  <a-col>
+                    <a-icon
+                      style="font-size: 14px"
+                      type="reload"
+                      @click="
+                        () => {
+                          queryParamSummarized = {}
+                          eventGetSummarizedList()
+                        }
+                      "
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-popover
+                      v-model="summarizedFilterVisible"
+                      trigger="click"
+                      placement="bottom"
+                      :title="$t('排序方案')"
+                    >
+                      <div slot="content" style="width: 240px">
+                        <a-radio-group defaultValue="1">
+                          <a-radio value="1">
+                            {{ $t('按会话结束时间') }}
+                            <a-tooltip :title="$t('按会话结束时间由近到远')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                        </a-radio-group>
+                        <div style="text-align: right; margin-top: 8px">
+                          <a-space>
+                            <a-button size="small" @click="summarizedFilterVisible = !summarizedFilterVisible">
+                              {{ $t('关闭') }}
+                            </a-button>
+                            <a-button
+                              type="primary"
+                              size="small"
+                              @click="
+                                () => {
+                                  summarizedFilterVisible = false
+                                  eventGetSummarizedList()
+                                }
+                              "
+                            >
+                              {{ $t('确定') }}
+                            </a-button>
+                          </a-space>
+                        </div>
+                      </div>
+                      <div>
+                        <a-icon style="font-size: 14px" type="filter" @click.stop="summarizedFilterVisible = true" />
+                      </div>
+                    </a-popover>
+                  </a-col>
+                </a-row>
+                <a-list
+                  ref="summarized"
+                  item-layout="horizontal"
+                  :dataSource="summarizedData"
+                  :loading="summarizedLoading"
+                  class="tabsFlexList"
+                >
+                  <a-list-item
+                    slot="renderItem"
+                    slot-scope="item"
+                    class="chatListItem"
+                    style="padding: 8px 16px"
+                    :class="item.conversationId == summarizedVisitor ? 'chatListActive' : 'chatListHover'"
+                    :style="{ borderBottom: '1px solid #f0f0f0' }"
+                    @click="getChatSummarized(item)"
+                  >
+                    <a-list-item-meta>
+                      <a-row slot="title" type="flex" align="middle">
+                        <a-col :span="18" style="display: flex; align-items: center">
+                          <a-badge>
+                            <span
+                              class="visitorName"
+                              style="font-size: 16px; color: #26262; font-weight: 400; line-height: normal"
+                            >
+                              {{ item.visitorName }}
+                            </span>
+                          </a-badge>
+                          <span style="padding-left: 8px">
+                            <a-tag>{{ channelLists[item.lastChannel] || $t('未知') }}</a-tag>
+                          </span>
+                        </a-col>
+                      </a-row>
+                      <a-row slot="description" type="flex" align="middle" style="margin-top: 12px">
+                        <a-col :span="16" class="content" style="color: #595959">
+                          <span style="color: #fa8c16">{{ $t('[已结束]') }}</span>
+                          {{ item.endText || '--' }}
+                        </a-col>
+                        <a-col :span="8" style="text-align: right; color: #8c8c8c; font-weight: 400">
+                          {{ item.endTime }}
+                        </a-col>
+                      </a-row>
+                    </a-list-item-meta>
+                  </a-list-item>
+                </a-list>
+                <a-pagination
+                  v-if="summarizedTotal > 0"
+                  :default-current="1"
+                  :total="summarizedTotal"
+                  :defaultPageSize="20"
+                  :showTotal="
+                    (total, range) =>
+                      $t('显示第 {0} 条到 {1} 条记录, 一共 {2} 条', { 0: range[0], 1: range[1], 2: total })
+                  "
+                  style="width: 100%; display: flex; justify-content: end; margin: 16px 0px; padding-right: 8px"
+                  size="small"
+                  @change="changeSummarized"
+                />
+              </a-tab-pane>
+              <a-tab-pane key="history">
+                <span slot="tab">
+                  <div>{{ $t('历史') }}</div>
+                </span>
+                <a-row type="flex" align="middle" :gutter="8" style="margin: 14px 8px">
+                  <a-col flex="1">
+                    <a-input
+                      v-model="queryParamHistory.name"
+                      :placeholder="$t('请输入访客名称搜索')"
+                      allowClear
+                      @pressEnter="eventGetHistoryList"
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-icon style="font-size: 14px" type="search" @click="eventGetHistoryList" />
+                  </a-col>
+                  <a-col>
+                    <a-icon
+                      style="font-size: 14px"
+                      type="reload"
+                      @click="
+                        () => {
+                          queryParamHistory = {}
+                          eventGetHistoryList()
+                        }
+                      "
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-popover
+                      v-model="historyFilterVisible"
+                      trigger="click"
+                      placement="bottom"
+                      :title="$t('排序方案')"
+                    >
+                      <div slot="content" style="width: 240px">
+                        <a-radio-group defaultValue="1">
+                          <a-radio value="1">
+                            {{ $t('按会话结束时间') }}
+                            <a-tooltip :title="$t('按会话结束时间由近到远')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                        </a-radio-group>
+                        <div style="text-align: right; margin-top: 8px">
+                          <a-space>
+                            <a-button size="small" @click="historyFilterVisible = !historyFilterVisible">关闭</a-button>
+                            <a-button
+                              type="primary"
+                              size="small"
+                              @click="
+                                () => {
+                                  historyFilterVisible = false
+                                  eventGetHistoryList()
+                                }
+                              "
+                            >
+                              {{ $t('确定') }}
+                            </a-button>
+                          </a-space>
+                        </div>
+                      </div>
+                      <div>
+                        <a-icon style="font-size: 14px" type="filter" @click.stop="historyFilterVisible = true" />
+                      </div>
+                    </a-popover>
+                  </a-col>
+                </a-row>
+                <a-list
+                  ref="history"
+                  item-layout="horizontal"
+                  :dataSource="historyData"
+                  :loading="historyLoading"
+                  class="tabsFlexList"
+                >
+                  <a-list-item
+                    slot="renderItem"
+                    slot-scope="item"
+                    class="chatListItem"
+                    style="padding: 8px 16px"
+                    :style="{ borderBottom: '1px solid #f0f0f0' }"
+                    :class="item.visitorId == historyVisitor ? 'chatListActive' : 'chatListHover'"
+                    @click="getChatHistory(item)"
+                  >
+                    <a-list-item-meta>
+                      <a-row slot="title" type="flex" align="middle">
+                        <a-col :span="18" style="display: flex; align-items: center">
+                          <a-badge>
+                            <span
+                              class="visitorName"
+                              style="font-size: 16px; color: #26262; font-weight: 400; line-height: normal"
+                            >
+                              {{ item.visitorName }}
+                            </span>
+                          </a-badge>
+                          <span style="padding-left: 8px">
+                            <a-tag>{{ channelLists[item.lastChannel] || $t('未知') }}</a-tag>
+                          </span>
+                        </a-col>
+                      </a-row>
+                      <a-row slot="description" type="flex" align="middle" style="margin-top: 12px">
+                        <a-col :span="16" class="content" style="color: #595959">
+                          <span style="color: #fa8c16">{{ $t('[已结束]') }}</span>
+                          {{ item.endText || '--' }}
+                        </a-col>
+                        <a-col :span="8" style="text-align: right; color: #8c8c8c; font-weight: 400">
+                          {{ item.endTime }}
+                        </a-col>
+                      </a-row>
+                    </a-list-item-meta>
+                  </a-list-item>
+                </a-list>
+                <a-pagination
+                  v-if="historyTotal > 0"
+                  :default-current="1"
+                  :total="historyTotal"
+                  :defaultPageSize="20"
+                  :showTotal="
+                    (total, range) =>
+                      $t('显示第 {0} 条到 {1} 条记录, 一共 {2} 条', { 0: range[0], 1: range[1], 2: total })
+                  "
+                  style="width: 100%; display: flex; justify-content: end; margin: 16px 0px; padding-right: 8px"
+                  size="small"
+                  @change="changeHistory"
+                />
+              </a-tab-pane>
+              <a-tab-pane v-if="tabsPriv" key="monitor">
+                <span slot="tab">
+                  <div>{{ $t('所有') }}</div>
+                </span>
+                <a-row type="flex" align="middle" :gutter="8" style="margin: 14px 8px">
+                  <a-col flex="1">
+                    <a-input-group compact>
+                      <a-select v-model="queryParamMonitor.searchType" style="width: 30%">
+                        <a-select-option value="service">{{ $t('客服') }}</a-select-option>
+                        <a-select-option value="group">{{ $t('技能组') }}</a-select-option>
+                        <a-select-option value="visitor">{{ $t('访客名称') }}</a-select-option>
+                      </a-select>
+                      <a-input
+                        v-model="queryParamMonitor.name"
+                        style="width: 70%"
+                        :placeholder="`${$t('请输入')}${
+                          queryParamMonitor.searchType === 'service'
+                            ? $t('客服昵称')
+                            : queryParamMonitor.searchType === 'group'
+                            ? $t('技能组名称')
+                            : $t('访客名称')
+                        }${$t('名称搜索')}`"
+                        allowClear
+                        @pressEnter="eventGetMonitorList"
+                      />
+                    </a-input-group>
+                  </a-col>
+                  <a-col>
+                    <a-icon style="font-size: 14px" type="search" @click="eventGetMonitorList" />
+                  </a-col>
+                  <a-col>
+                    <a-icon
+                      style="font-size: 14px"
+                      type="reload"
+                      @click="
+                        () => {
+                          queryParamMonitor = { searchType: 'service', sortField: queryParamMonitor.sortField }
+                          eventGetMonitorList()
+                        }
+                      "
+                    />
+                  </a-col>
+                  <a-col>
+                    <a-popover
+                      v-model="monitorFilterVisible"
+                      trigger="click"
+                      placement="bottom"
+                      :title="$t('排序方案')"
+                    >
+                      <div slot="content" style="width: 240px">
+                        <a-radio-group v-model="queryParamMonitor.sortField">
+                          <a-radio value="entrySequence">
+                            {{ $t('按会话进入顺序') }}
+                            <a-tooltip :title="$t('按会话进入时间由近到远')">
+                              <a-icon type="question-circle" />
+                            </a-tooltip>
+                          </a-radio>
+                        </a-radio-group>
+                        <div style="text-align: right; margin-top: 8px">
+                          <a-space>
+                            <a-button size="small" @click="monitorFilterVisible = !monitorFilterVisible">
+                              {{ $t('关闭') }}
+                            </a-button>
+                            <a-button type="primary" size="small" @click="eventGetMonitorList">
+                              {{ $t('确定') }}
+                            </a-button>
+                          </a-space>
+                        </div>
+                      </div>
+                      <div>
+                        <a-icon style="font-size: 14px" type="filter" @click.stop="monitorFilterVisible = true" />
+                      </div>
+                    </a-popover>
+                  </a-col>
+                </a-row>
+                <a-list
+                  ref="monitor"
+                  item-layout="horizontal"
+                  :dataSource="monitorData"
+                  :loading="monitorLoading"
+                  class="tabsFlexList"
+                >
+                  <a-list-item
+                    slot="renderItem"
+                    slot-scope="item"
+                    class="chatListItem"
+                    style="padding: 8px 16px"
+                    :style="{ borderBottom: '1px solid #f0f0f0' }"
+                    :class="item.visitorId == monitorVisitor ? 'chatListActive' : 'chatListHover'"
+                    @click="getChatMonitor(item)"
+                  >
+                    <a-list-item-meta>
+                      <a-row slot="title" type="flex" align="middle">
+                        <a-col :span="16" style="display: flex; align-items: center">
+                          <a-badge>
+                            <span
+                              class="visitorName"
+                              style="font-size: 16px; color: #26262; font-weight: 500; line-height: normal"
+                            >
+                              {{ item.visitorName }}
+                            </span>
+                          </a-badge>
+                          <span style="padding-left: 8px">
+                            <a-tag>{{ channelLists[item.lastChannel] || $t('未知') }}</a-tag>
+                          </span>
+                        </a-col>
+                        <a-col :span="8" style="text-align: right">
+                          <a-tooltip
+                            v-if="item.serviceId !== userInfo.username"
+                            :title="
+                              $t('管理员强行插入会话。当前访客与客服的会话被强制结束，启动管理员与访客的新会话。')
+                            "
+                          >
+                            <a-tag color="orange" style="cursor: pointer" @click.stop="monitorClick('get', item)">
+                              {{ $t('强 插') }}
+                            </a-tag>
+                          </a-tooltip>
+                          <a-tooltip :title="$t('管理员强行结束会话。')">
+                            <a-tag
+                              color="red"
+                              style="cursor: pointer; margin-right: 0px"
+                              @click.stop="monitorClick('end', item)"
+                            >
+                              {{ $t('结 束') }}
+                            </a-tag>
+                          </a-tooltip>
+                        </a-col>
+                      </a-row>
+                      <a-row slot="description" type="flex" align="middle" style="margin-top: 12px">
+                        <a-col :span="16" class="content" style="color: #595959">{{ item.content || '--' }}</a-col>
+                        <a-col :span="8" style="text-align: right; color: #8c8c8c; font-weight: 400">
+                          {{ item.formatTime }}
+                        </a-col>
+                      </a-row>
+                    </a-list-item-meta>
+                  </a-list-item>
+                </a-list>
+                <a-pagination
+                  v-if="monitorTotal > 0"
+                  :default-current="1"
+                  :total="monitorTotal"
+                  :defaultPageSize="20"
+                  :showTotal="
+                    (total, range) =>
+                      $t('显示第 {0} 条到 {1} 条记录, 一共 {2} 条', { 0: range[0], 1: range[1], 2: total })
+                  "
+                  style="width: 100%; display: flex; justify-content: end; margin: 16px 0px; padding-right: 8px"
+                  size="small"
+                  @change="changeMonitor"
+                />
+              </a-tab-pane>
+            </a-tabs>
+          </a-col>
+          <a-col :span="12" style="border-left: 1px solid #f0f0f0; border-right: 1px solid #f0f0f0">
+            <div class="chatHead">
+              <a-space style="flex-flow: row wrap">
+                <span v-if="chatContent.visitorName">
+                  {{ changeSessionName == false ? $t('当前会话:') : $t('历史会话:') }}
+                </span>
+                <span class="currentName">{{ chatContent.visitorName }}</span>
+                <span v-if="sending" style="font-size: 12px">{{ $t('[ 对方正在输入中... ]') }}</span>
+              </a-space>
+              <div>
+                <a-space>
+                  <a-dropdown>
+                    <a-menu slot="overlay" style="width: 120px" @click="editServiceStatus">
+                      <a-menu-item :key="0">
+                        <a-icon type="check-circle" theme="twoTone" two-tone-color="#2FC25B" />
+                        {{ $t('就绪') }}
+                      </a-menu-item>
+                      <a-sub-menu v-if="settingControl.busyEnable" :key="2">
+                        <span slot="title">
+                          <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                          {{ $t('示忙') }}
+                        </span>
+                        <template>
+                          <a-menu-item
+                            v-for="busyItem in JSON.parse(settingControl.furtherStates)"
+                            v-show="busyItem.check"
+                            :key="busyItem.value"
+                          >
+                            <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                            {{ busyItem.label }}
+                          </a-menu-item>
+                        </template>
+                      </a-sub-menu>
+                      <a-menu-item v-else :key="2">
+                        <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                        {{ $t('示忙') }}
+                      </a-menu-item>
+                      <a-menu-item :key="1">
+                        <a-icon type="close-circle" theme="twoTone" two-tone-color="#F04864" />
+                        {{ $t('离开') }}
+                      </a-menu-item>
+                    </a-menu>
+                    <span v-if="serviceStatus == 0" style="cursor: pointer">
+                      <a-icon type="check-circle" theme="twoTone" two-tone-color="#2FC25B" />
+                      {{ $t('就绪') }}
+                    </span>
+                    <span v-else-if="serviceStatus == 1" style="cursor: pointer">
+                      <a-icon type="close-circle" theme="twoTone" two-tone-color="#F04864" />
+                      {{ $t('离开') }}
+                    </span>
+                    <span v-else-if="serviceStatus == 2" style="cursor: pointer">
+                      <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                      {{ $t('示忙') }}
+                    </span>
+                    <span v-else style="cursor: pointer">
+                      <a-icon type="pause-circle" theme="twoTone" two-tone-color="#FACC14" />
+                      {{
+                        settingControl.busyEnable &&
+                        JSON.parse(settingControl.furtherStates).find((item) => item.value === serviceStatus)
+                          ? JSON.parse(settingControl.furtherStates).find((item) => item.value === serviceStatus).label
+                          : '示忙'
+                      }}
+                    </span>
+                  </a-dropdown>
+                  <a :disabled="disableChat" @click="$message.info($t('功能暂未开放'))">{{ $t('创建工单') }}</a>
+                  <a :disabled="disableChat" @click="getTop(chatContent.visitorId, chatContent.topTime)">
+                    {{ topUserSet ? $t('置顶会话') : $t('取消置顶') }}
+                  </a>
+                  <a
+                    v-if="settingControl.endSessionManually"
+                    :disabled="disableChat"
+                    @click="eventClose(chatContent.visitorId)"
+                  >
+                    {{ $t('结束') }}
+                  </a>
+                </a-space>
+              </div>
+            </div>
+            <a-spin :spinning="loadingContent">
+              <div ref="chats" class="chatContentList" @scroll="popupScroll">
+                <a-spin
+                  v-if="
+                    (contentList.length != historyTotal && noMore) ||
+                    (contentList.length != historyContentTotal && noMore)
+                  "
+                  :spinning="loadingTop"
+                >
+                  <div style="margin: 0 auto; width: 100%; height: 20px"></div>
+                </a-spin>
+                <div v-if="noGet && !notGetChat" class="noMore" style="padding-top: 10px">
+                  {{ $t('--没有更多数据--') }}
+                </div>
+                <div v-for="(item, i) in contentList" :key="i">
+                  <!-- 历史消息分割线 -->
+                  <div v-if="['1046'].includes(item.code) && !notGetChat" class="systemReminder">
+                    <a-divider dashed style="margin: 4px 0px; font-size: 12px; color: #8c8c8c">
+                      {{ $t('以上为历史消息') }}
+                    </a-divider>
+                  </div>
+                  <!-- <div v-else-if="['1046'].includes(item.code) && notGetChat" class="systemReminder">
+                    <a-divider dashed style="margin: 4px 0px; font-size: 12px; color: #8c8c8c;"><a @click="getHisChat">加载历史消息</a></a-divider>
+                  </div> -->
+                  <!-- 系统消息 -->
+                  <div
+                    v-else-if="
+                      [
+                        '2011',
+                        '1027',
+                        '1028',
+                        '1030',
+                        '1044',
+                        '1002',
+                        '1031',
+                        '1049',
+                        '1050',
+                        '1051',
+                        '1054',
+                        '1055',
+                        '1056',
+                        '1057',
+                        '1059',
+                        '1061',
+                        '1003',
+                        '1018',
+                        '1062',
+                        '1063',
+                        '1064',
+                        '1065',
+                        '1066'
+                      ].includes(item.code) && item.content
+                    "
+                    class="systemReminder"
+                  >
+                    <span
+                      v-if="['1030', '1002'].includes(item.code)"
+                      style="
+                        padding: 14px 32px;
+                        background: #d9d9d9;
+                        border-radius: 5px;
+                        color: #595959;
+                        line-height: 40px;
+                      "
+                    >
+                      {{ item.content }}
+                    </span>
+                    <span v-else-if="['1018'].includes(item.code)">
+                      <span
+                        v-if="item.conversationId"
+                        style="padding: 2px 20px; background: #d0d1d6; border-radius: 10px; color: #f5f5f5"
+                      >
+                        {{ item.content }}
+                      </span>
+                    </span>
+                    <span v-else-if="['1003'].includes(item.code)">
+                      <span style="padding: 4px 16px; background: #d0d1d6; border-radius: 10px; color: #f5f5f5">
+                        {{ item.content }}
+                      </span>
+                    </span>
+                    <span v-else>{{ item.content }}</span>
+                  </div>
+                  <!-- 客服消息 -->
+                  <div
+                    v-else-if="['1009', '1011', '1013', '1023', '1019'].includes(item.code) && item.content"
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      align-items: flex-end;
+                      padding-bottom: 10px;
+                      margin-right: 16px;
+                    "
+                  >
+                    <div style="padding-bottom: 4px">
+                      <a-space style="color: #595959">
+                        <span>{{ item.nickName }}</span>
+                        <span>{{ item.inputTime }}</span>
+                      </a-space>
+                    </div>
+                    <div v-if="['1013'].includes(item.code)" style="max-width: 300px; width: 100vw">
+                      <a-card v-if="item.contentObj.status === '取件'" size="small" style="margin: 0">
+                        <div slot="title" style="display: flex; justify-content: space-between">
+                          <div>{{ item.contentObj.staffCompanyName }} {{ item.contentObj.expressid }}</div>
+                          <div style="color: rgba(0, 0, 0, 0.35)">{{ item.contentObj.pickType }}</div>
+                        </div>
+                        <div style="padding: 8px">
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">保管服务费：</span>
+                            <span>￥{{ item.contentObj.custodyMoney }}</span>
+                          </div>
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">收派员：</span>
+                            <span>{{ item.contentObj.staffMobile || '--' }}</span>
+                          </div>
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">柜机地址：</span>
+                            <span>{{ item.contentObj.edAdress || '--' }}</span>
+                          </div>
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">入柜时间：</span>
+                            <span>{{ item.contentObj.sendTm || '--' }}</span>
+                          </div>
+                          <div>
+                            <span style="color: rgba(0, 0, 0, 0.35)">取件时间：</span>
+                            <span>{{ item.contentObj.pickTm || '--' }}</span>
+                          </div>
+                        </div>
+                      </a-card>
+                      <a-card v-else-if="item.contentObj.status === '存包'" size="small" style="margin: 0">
+                        <div slot="title" style="display: flex; justify-content: space-between">
+                          <div>
+                            {{ item.contentObj.orderTypeName }}
+                          </div>
+                          <a-tag color="blue">{{ item.contentObj.orderStatusName }}</a-tag>
+                        </div>
+                        <div style="padding: 8px">
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">订单编号：</span>
+                            <span>{{ item.contentObj.orderId }}</span>
+                          </div>
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">到期时间：</span>
+                            <span>{{ item.contentObj.expiredTime || '--' }}</span>
+                          </div>
+                          <div style="margin-bottom: 8px">
+                            <span style="color: rgba(0, 0, 0, 0.35)">格口编号：</span>
+                            <span>{{ item.contentObj.boxId || '--' }}</span>
+                          </div>
+                          <div>
+                            <span style="color: rgba(0, 0, 0, 0.35)">柜机地址：</span>
+                            <span>{{ item.contentObj.cabinetAddress || '--' }}</span>
+                          </div>
+                        </div>
+                      </a-card>
+                      <a-card
+                        v-else-if="item.contentObj.status === '寄件'"
+                        size="small"
+                        :title="`${item.contentObj.expressCompanyName} ${item.contentObj.expressNo}`"
+                        style="margin: 0"
+                      >
+                        <div style="padding: 8px">
+                          <div style="display: flex; justify-content: space-between; margin-bottom: 8px">
+                            <div style="text-align: center">
+                              <div style="font-size: 18px; font-weight: 600">
+                                {{ item.contentObj.senderCityName }}
+                              </div>
+                              <div style="color: rgba(0, 0, 0, 0.35)">
+                                {{ item.contentObj.senderName }}
+                              </div>
+                            </div>
+                            <div style="display: inline-block; text-align: center">
+                              <img style="width: 100%; max-width: 120px" src="./visitorImg/right.png" mode="" />
+                              <div style="color: rgba(0, 0, 0, 0.35)">
+                                {{ sendStatus[item.contentObj.sendStatus] }}
+                              </div>
+                            </div>
+                            <div style="text-align: center">
+                              <div style="font-size: 18px; font-weight: 600">
+                                {{ item.contentObj.receiverCityName }}
+                              </div>
+                              <div style="color: rgba(0, 0, 0, 0.35)">
+                                {{ item.contentObj.receiverName }}
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <span style="color: rgba(0, 0, 0, 0.35)">寄出时间：</span>
+                            <span>{{ item.contentObj.orderCreateTime || '--' }}</span>
+                          </div>
+                        </div>
+                      </a-card>
+                    </div>
+                    <div v-else style="display: flex; align-items: center">
+                      <span v-if="!(item.content.includes('<img') || item.content.includes('<video'))">
+                        <a-icon v-if="item.loading === '1'" type="loading" style="margin-right: 8px" />
+                        <a-tooltip v-else-if="item.loading === '0'" :title="item.errorMessage">
+                          <a-icon
+                            type="exclamation-circle"
+                            theme="twoTone"
+                            two-tone-color="#f5222d"
+                            style="margin-right: 8px"
+                          />
+                        </a-tooltip>
+                      </span>
+                      <div class="replyBox" @contextmenu.prevent="rightClick($event, item)">
+                        <a-spin
+                          :spinning="
+                            !!item.loading && (item.content.includes('<img ') || item.content.includes('<video '))
+                          "
+                        >
+                          <a-icon v-if="item.loading === '1'" slot="indicator" type="loading" style="font-size: 24px" />
+                          <a-tooltip v-else-if="item.loading === '0'" slot="indicator" :title="item.errorMessage">
+                            <a-icon
+                              type="exclamation-circle"
+                              theme="twoTone"
+                              two-tone-color="#f5222d"
+                              style="margin-right: 8px"
+                            />
+                          </a-tooltip>
+                          <span class="replyContent">
+                            <!-- eslint-disable-next-line vue/no-v-html -->
+                            <span :ref="`replyContentRef${item.id}`" v-viewer v-html="item.content"></span>
+                          </span>
+                        </a-spin>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    v-else-if="['1008', '1010'].includes(item.code)"
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      align-items: flex-start;
+                      margin-left: 16px;
+                      padding-bottom: 10px;
+                    "
+                  >
+                    <div style="padding-bottom: 4px">
+                      <a-space style="color: #595959">
+                        <span>{{ visitorName }}</span>
+                        <span>{{ item.inputTime }}</span>
+                      </a-space>
+                    </div>
+                    <div class="chatBox">
+                      <template v-if="item.content.includes('<video ') || item.content.includes('<img ')">
+                        <!-- eslint-disable-next-line vue/no-v-html -->
+                        <span v-viewer class="chatContent" v-html="item.content"></span>
+                      </template>
+                      <span v-else v-viewer v-dompurify-html="item.content" class="chatContent"></span>
+                      <a-popover
+                        v-if="setting.transferMessageUrl && chatStatus === 'proceed'"
+                        placement="right"
+                        trigger="click"
+                        :visible="item.assistant"
+                      >
+                        <div slot="content" style="width: 300px">
+                          <a-spin :spinning="item.assistantLoading">
+                            <div v-show="item.assistantMessage">{{ item.assistantMessage }}</div>
+                            <div v-show="item.assistantTitle">{{ item.assistantTitle }}</div>
+                            <template v-if="!item.assistantMessage">
+                              <a-space>
+                                <a
+                                  @click="
+                                    () => {
+                                      content = item.assistantTitle
+                                      item.assistant = !item.assistant
+                                    }
+                                  "
+                                >
+                                  编辑
+                                </a>
+                                <a
+                                  @click="
+                                    () => {
+                                      sendNews(item.assistantTitle, '1011')
+                                      item.assistant = !item.assistant
+                                    }
+                                  "
+                                >
+                                  发送
+                                </a>
+                              </a-space>
+                            </template>
+                          </a-spin>
+                        </div>
+                        <a-icon
+                          style="position: relative; bottom: -8px; right: -8px"
+                          type="search"
+                          @click.stop="getAssistant(item)"
+                        />
+                      </a-popover>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </a-spin>
+            <div
+              v-if="rightClickShow"
+              ref="rightClickRef"
+              class="rightClickClass"
+              style="box-shadow: 0 2px 8px rgba(0, 0, 0, 15%)"
+            >
+              <div @click="reCall">{{ $t('撤回') }}</div>
+            </div>
+            <div
+              ref="popovertools"
+              :style="
+                'border-top: 1px solid #EAEAEA; padding: 8px; background-color: #fff;' +
+                (disableChat == false ? 'background-color: #fff;' : 'background-color: #f7f7f7;')
+              "
+            >
+              <a-space :size="6" style="margin-left: 6px; margin-bottom: -3px">
+                <a-popover
+                  v-if="!disableChat"
+                  v-model="visible"
+                  placement="topLeft"
+                  overlayClassName="popoverStyle"
+                  trigger="click"
+                  :getPopupContainer="() => $refs.popovertools"
+                >
+                  <template slot="content">
+                    <div style="width: 390px; height: 180px; overflow-y: scroll">
+                      <a
+                        v-for="(emojiItem, emojiIndex) in emojiList"
+                        :key="'emoji' + emojiIndex"
+                        style="font-size: 16px"
+                        class="emojiItem"
+                        @click="emojiInsert(emojiItem)"
+                      >
+                        <span v-dompurify-html="emojiItem"></span>
+                      </a>
+                    </div>
+                  </template>
+                  <a-button
+                    icon="smile"
+                    :title="$t('表情')"
+                    style="border: none; font-size: 18px"
+                    :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                    :disabled="disableChat"
+                  ></a-button>
+                </a-popover>
+                <a-button
+                  v-else
+                  icon="smile"
+                  :title="$t('表情')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat"
+                ></a-button>
+                <a-button
+                  icon="picture"
+                  :title="$t('图片')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat"
+                  @click="photo"
+                ></a-button>
+                <a-button
+                  icon="video-camera"
+                  :title="$t('视频')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat || chatContent.thirdParty"
+                  @click="video"
+                ></a-button>
+                <a-button
+                  icon="folder-add"
+                  :title="$t('附件')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat || chatContent.thirdParty"
+                  @click="file"
+                ></a-button>
+                <a-button
+                  icon="swap"
+                  :title="$t('转接')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat"
+                  @click="transfer"
+                ></a-button>
+                <a-button
+                  icon="user-delete"
+                  :title="$t('黑名单')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat"
+                  @click="checkBlacklist"
+                ></a-button>
+                <a-button
+                  v-if="settingControl.commentServiceInvite && !chatContent.thirdParty"
+                  icon="star"
+                  :title="$t('评价')"
+                  style="border: none; font-size: 18px"
+                  :style="{ color: !disableChat ? 'rgba(0, 0, 0, 0.65)' : '' }"
+                  :disabled="disableChat"
+                  @click="showConfirm"
+                ></a-button>
+              </a-space>
+              <div class="replyPopover">
+                <div
+                  v-if="selectReplyCheck"
+                  style="
+                    height: 235px;
+                    overflow-y: auto;
+                    width: 450px;
+                    position: absolute;
+                    z-index: 1;
+                    bottom: 195px;
+                    border-radius: 2px;
+                    background-color: #ffffff;
+                    border: 1px solid #d9d9d9;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 15%);
+                  "
+                  @click.stop=""
+                >
+                  <a-spin :spinning="replyLoading">
+                    <a-list
+                      v-if="replyContentList.length > 0"
+                      ref="reply"
+                      :data-source="replyContentList"
+                      size="small"
+                      class="replyClass"
+                      @scroll="popupReplyScroll"
+                    >
+                      <a-list-item
+                        slot="renderItem"
+                        slot-scope="item"
+                        style="padding: 8px; cursor: pointer; border-bottom: 1px solid #f0f0f0"
+                        class="replyHover"
+                        @click="selectReplyContent(item.value)"
+                      >
+                        <div class="content">
+                          <a-tag v-if="item.type === 'public'" color="#87d068">{{ $t('公') }}</a-tag>
+                          <a-tag v-else color="#2db7f5">{{ $t('私') }}</a-tag>
+                          <span>
+                            <span v-if="item.title.indexOf(replySearchValue) > -1" style="color: #262626">
+                              {{ item.title.substr(0, item.title.indexOf(replySearchValue)) }}
+                              <span style="color: #f5222d">{{ replySearchValue }}</span>
+                              {{ item.title.substr(item.title.indexOf(replySearchValue) + replySearchValue.length) }}
+                            </span>
+                            <span v-else>{{ item.title }}</span>
+                            <span style="margin: 0px 8px; color: #262626">|</span>
+                            <span v-if="item.value.indexOf(replySearchValue) > -1" style="color: #595959">
+                              <span v-if="replySearchValue.length < 12">
+                                <span v-if="item.value.indexOf(replySearchValue) > 12">…</span>
+                                {{
+                                  item.value.substring(
+                                    item.value.indexOf(replySearchValue) - (11 - replySearchValue.length),
+                                    item.value.indexOf(replySearchValue)
+                                  )
+                                }}
+                              </span>
+                              <span style="color: #f5222d">{{ replySearchValue }}</span>
+                              {{ item.value.substr(item.value.indexOf(replySearchValue) + replySearchValue.length) }}
+                            </span>
+                            <span v-else>{{ item.value }}</span>
+                          </span>
+                        </div>
+                      </a-list-item>
+                      <a-spin v-if="replyContentList.length != replyContentTotal" :spinning="loadingReply">
+                        <div style="margin: 0 auto; width: 100%; height: 20px"></div>
+                      </a-spin>
+                      <a-list-item v-if="replyContentList.length == replyContentTotal && noReplyMore" class="noMore">
+                        <div class="noMore" style="width: 100%">{{ $t('--没有更多数据--') }}</div>
+                      </a-list-item>
+                    </a-list>
+                    <div v-if="replyContentList.length === 0" class="noMore">{{ $t('--没有更多数据--') }}</div>
+                  </a-spin>
+                </div>
+                <a-form-item :selfUpdate="false">
+                  <a-textarea
+                    ref="textarea"
+                    v-model="content"
+                    :style="disableChat ? 'cursor: default;' : ''"
+                    style="margin-left: 6px"
+                    class="sendTextarea"
+                    :disabled="disableChat"
+                    @input="monitorTextarea"
+                    @keydown="preventE"
+                    @keydown.enter="enterSend"
+                    @paste="pasteImage"
+                  ></a-textarea>
+                </a-form-item>
+              </div>
+              <div class="sendNews">
+                <a-button-group>
+                  <a-popover
+                    v-if="!disableChat"
+                    :visible="sendVisible"
+                    trigger="click"
+                    :content="$t('不能发送空白消息')"
+                  >
+                    <a-button :loading="sendLoading" @click="send">{{ $t('发送消息') }}</a-button>
+                  </a-popover>
+                  <a-button
+                    v-else
+                    :disabled="disableChat"
+                    :style="disableChat == false ? '' : 'cursor: default;'"
+                    @click="send"
+                  >
+                    {{ $t('发送消息') }}
+                  </a-button>
+                  <a-dropdown
+                    :trigger="['click']"
+                    :disabled="disableChat"
+                    :style="disableChat == false ? '' : 'cursor: default;'"
+                  >
+                    <a-button icon="down"></a-button>
+                    <a-menu slot="overlay" @click="handleMenuClick">
+                      <a-menu-item key="0" style="display: flex; align-items: center">
+                        <a-icon v-if="selectSendCheck == 0" type="check" />
+                        <div v-else style="width: 20px"></div>
+                        <a>{{ $t('按Enter键发送消息') }}</a>
+                      </a-menu-item>
+                      <a-menu-item key="1" style="display: flex; align-items: center">
+                        <a-icon v-if="selectSendCheck != 0" type="check" />
+                        <div v-else style="width: 20px"></div>
+                        <a>{{ $t('按Ctrl+Enter键发送消息') }}</a>
+                      </a-menu-item>
+                    </a-menu>
+                  </a-dropdown>
+                </a-button-group>
+              </div>
+            </div>
+          </a-col>
+          <a-col :span="6" style="height: 100%">
+            <drag-sort ref="dragSort" @ok="getTabsList" />
+            <a-tabs class="tabs-flex" @change="tabSwitch">
+              <a-icon
+                slot="tabBarExtraContent"
+                type="setting"
+                style="padding-top: 18px; padding-right: 16px; font-size: 16px"
+                @click="
+                  $refs.dragSort.show({
+                    action: 'sort',
+                    title: $t('排序'),
+                    sortData: tabsList,
+                    width: 600,
+                    placement: 'right'
+                  })
+                "
+              />
+              <a-tab-pane v-for="tabsItem in tabsList" :key="tabsItem.key" :tab="tabsItem.name">
+                <div style="height: 100%">
+                  <template v-if="tabsItem.key === '1'">
+                    <a-spin :spinning="false" style="height: 100%">
+                      <span slot="indicator" />
+                      <div style="height: calc(100% - 50px); overflow-y: auto; padding: 8px">
+                        <a-card
+                          size="small"
+                          :title="$t('访客资料')"
+                          style="margin-bottom: 8px"
+                          :bodyStyle="{ padding: '10px' }"
+                        >
+                          <a-form :labelCol="{ span: 8 }" :wrapperCol="{ span: 16 }">
+                            <a-form-item :label="$t('业务类型')">{{ userMessage.type || '--' }}</a-form-item>
+                            <a-form-item :label="$t('存包订单编号')">
+                              {{ userMessage.storageNumber || '--' }}
+                            </a-form-item>
+                            <a-form-item :label="$t('三方订单编号')">
+                              {{ userMessage.thirdPartyNumber || '--' }}
+                            </a-form-item>
+                            <a-form-item :label="$t('运单号')">{{ userMessage.waybillNumber || '--' }}</a-form-item>
+                            <a-form-item :label="$t('角色')">{{ userMessage.role || '--' }}</a-form-item>
+                            <a-form-item :label="$t('柜机编码')">{{ userMessage.cabinetNumber || '--' }}</a-form-item>
+                            <a-form-item :label="$t('格口编码')">{{ userMessage.gridMouthNumber || '--' }}</a-form-item>
+                            <a-form-item :label="$t('手机号')">{{ userMessage.phone || '--' }}</a-form-item>
+                            <a-form-item :label="$t('访客IP')">{{ userMessage.ip || '--' }}</a-form-item>
+                          </a-form>
+                        </a-card>
+                        <template>
+                          <user-table-form-view
+                            ref="userTableFormView"
+                            class="userTable"
+                            :params="{
+                              tableName,
+                              template,
+                              fieldRule,
+                              remarksrule,
+                              wayDataRule,
+                              parentParams: params,
+                              handleWayData,
+                              remarkMaxRows,
+                              remarkMinRows,
+                              templateOther: template,
+                              action: 'edit',
+                              page: 'over'
+                            }"
+                            :formThis="formThis"
+                          />
+                        </template>
+                        <a-card size="small" :title="$t('客户信息')" :bodyStyle="{ padding: '10px' }">
+                          <a-form :form="form">
+                            <a-form-item :label="$t('用户昵称')" v-bind="formItemLayout">
+                              <a-input :placeholder="$t('请输入用户昵称')" />
+                            </a-form-item>
+                            <a-form-item :label="$t('用户姓名')" v-bind="formItemLayout">
+                              <a-input :placeholder="$t('请输入用户姓名')" />
+                            </a-form-item>
+                            <a-form-item :label="$t('用户性别')" v-bind="formItemLayout">
+                              <a-select
+                                :allowClear="true"
+                                showSearch
+                                option-filter-prop="children"
+                                :placeholder="$t('请输入用户性别')"
+                              >
+                                <a-select-option v-for="(item, index) in sex" :key="index">
+                                  {{ item.value }}
+                                </a-select-option>
+                              </a-select>
+                            </a-form-item>
+                            <a-form-item :label="$t('联系电话')" v-bind="formItemLayout">
+                              <a-input :placeholder="$t('请输入联系电话')" />
+                            </a-form-item>
+                            <a-form-item :label="$t('联系邮箱')" v-bind="formItemLayout">
+                              <a-input :placeholder="$t('请输入联系邮箱')" />
+                            </a-form-item>
+                            <a-form-item :label="$t('联系地址')" v-bind="formItemLayout">
+                              <a-input :placeholder="$t('请输入联系地址')" />
+                            </a-form-item>
+                            <a-form-item :label="$t('详细地址')" v-bind="formItemLayout">
+                              <a-textarea :placeholder="$t('请输入详细地址')" />
+                            </a-form-item>
+                            <a-row type="flex" justify="end">
+                              <a-col>
+                                <a-button type="primary" style="margin-right: 15px">{{ $t('保存') }}</a-button>
+                              </a-col>
+                            </a-row>
+                          </a-form>
+                        </a-card>
+                      </div>
+                    </a-spin>
+                  </template>
+                  <template v-else-if="tabsItem.key === '2'">
+                    <div class="page">
+                      <a-radio-group v-model="modeReply" style="width: 100%; margin: 4px 0px" @change="modeReplyChange">
+                        <a-row>
+                          <a-col :span="12">
+                            <a-radio-button value="private" style="width: 100%; text-align: center">
+                              {{ $t('个人库') }}
+                            </a-radio-button>
+                          </a-col>
+                          <a-col :span="12">
+                            <a-radio-button value="public" style="width: 100%; text-align: center">
+                              {{ $t('公共库') }}
+                            </a-radio-button>
+                          </a-col>
+                        </a-row>
+                      </a-radio-group>
+                      <a-row>
+                        <a-col :span="12" style="margin-right: -1px">
+                          <a-select
+                            v-model="replyCategory"
+                            showSearch
+                            option-filter-prop="children"
+                            :dropdownMatchSelectWidth="false"
+                            style="width: 100%"
+                            @change="replyContentChange"
+                          >
+                            <a-select-option
+                              v-for="item in replyCategoryList[modeReply]"
+                              :key="item.id"
+                              :value="item.id"
+                            >
+                              {{ item.name }}
+                            </a-select-option>
+                          </a-select>
+                        </a-col>
+                        <a-col :span="12">
+                          <a-input-search
+                            v-model="queryContentParam.content"
+                            :placeholder="$t('请输入快捷词或回复内容')"
+                            @search="$refs.replyTable[0].refresh(true)"
+                          />
+                        </a-col>
+                      </a-row>
+                      <s-table
+                        ref="replyTable"
+                        size="small"
+                        rowKey="id"
+                        :columns="columns"
+                        :data="replyContentData"
+                        :sorter="sorter"
+                        :pagination="{
+                          simple: true
+                        }"
+                        :scroll="{ y: 'calc(100vh - 380px)' }"
+                      >
+                        <div slot="action" slot-scope="text, record">
+                          <a
+                            :disabled="disableChat"
+                            @click="
+                              () => {
+                                replyContentClickObj[chatContent.id] = true
+                                replyContentClick = true
+                                sendNews(record.content, '1011')
+                              }
+                            "
+                          >
+                            {{ $t('发送') }}
+                          </a>
+                        </div>
+                        <a
+                          slot="content"
+                          slot-scope="text, record"
+                          :disabled="disableChat"
+                          @click="selectInReplyContent(record)"
+                        >
+                          {{ text }}
+                        </a>
+                        <a
+                          slot="titleKey"
+                          slot-scope="text, record"
+                          :disabled="disableChat"
+                          @click="selectInReplyContent(record)"
+                        >
+                          {{ text }}
+                        </a>
+                      </s-table>
+                    </div>
+                  </template>
+                  <template v-else-if="tabsItem.key === '3'">
+                    <template>
+                      <a-input
+                        :placeholder="$t('请输入相关内容')"
+                        allowClear
+                        style="padding: 14px 8px"
+                        @pressEnter="onKnowledgeSearch"
+                      />
+                      <a-list :data-source="knowledgeBase" class="container" :loading="knowledgeLoading">
+                        <a-list-item v-if="!noFind" slot="renderItem" slot-scope="item" style="padding-bottom: 0">
+                          <a-row>
+                            <a-col type="flex">
+                              <span style="color: #333333; font-weight: 600" class="twoLine">
+                                <a-icon type="file-text" style="color: #1fc1cc; font-size: 14px; padding-right: 4px" />
+                                {{ item.title }}
+                              </span>
+                            </a-col>
+                            <a-col style="color: #808080; padding-top: 6px" class="twoLine">{{ item.content }}</a-col>
+                            <a-divider style="margin: 15px 0" />
+                          </a-row>
+                        </a-list-item>
+                        <a-list-item v-if="noFind">{{ noFind }}</a-list-item>
+                        <!-- <a-list-item @click="loadKnowledgeMore()" style="justify-content: center; padding-top: 0;">加载更多</a-list-item> -->
+                      </a-list>
+                    </template>
+                  </template>
+                </div>
+              </a-tab-pane>
+            </a-tabs>
+          </a-col>
+        </a-row>
+        <a-modal
+          :title="title"
+          :width="width"
+          :visible="myvisible"
+          :destroyOnClose="true"
+          class="modalChange"
+          @cancel="myvisible = !myvisible"
+        >
+          <a-form :form="formFormat">
+            <template v-if="modal == 'photo'">
+              <a-form-item>
+                <a-upload
+                  v-decorator="['info[uploadImage]', { rules: [{ required: true, message: $t('请上传图片') }] }]"
+                  :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+                  :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                  name="upload"
+                  accept="image/*"
+                  listType="picture-card"
+                  :fileList="fileList"
+                  :before-upload="beforeUploadImage"
+                  @preview="handleImagePreview"
+                  @change="(info) => handleUploadChange(info)"
+                >
+                  <div v-if="fileList.length < 1">
+                    <a-icon :type="loadingImage ? 'loading' : 'plus'" />
+                    <div>Upload</div>
+                  </div>
+                </a-upload>
+                <a-modal :visible="previewVisible" :footer="null" @cancel="handleCancel">
+                  <img alt="example" style="width: 100%" :src="imagePreviewUrl" />
+                </a-modal>
+              </a-form-item>
+            </template>
+            <template v-else-if="modal == 'video'">
+              <a-form-item>
+                <a-upload
+                  v-decorator="['info[uploadVideo]', { rules: [{ required: true, message: $t('请上传视频') }] }]"
+                  :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+                  :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                  name="upload"
+                  accept="video/*"
+                  :multiple="true"
+                  :fileList="fileList"
+                  :before-upload="beforeUploadVideo"
+                  @change="(info) => handleUploadChange(info)"
+                >
+                  <a-button v-if="fileList.length < 1">
+                    <a-icon type="upload" />
+                    {{ $t('请选择') }}
+                  </a-button>
+                </a-upload>
+              </a-form-item>
+            </template>
+            <template v-else-if="modal == 'file'">
+              <a-form-item>
+                <a-upload
+                  v-decorator="['info[uploadFile]', { rules: [{ required: true, message: $t('请上传附件') }] }]"
+                  :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+                  :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+                  name="upload"
+                  accept="file/*"
+                  :multiple="true"
+                  :fileList="fileList"
+                  @change="(info) => handleUploadChange(info)"
+                >
+                  <a-button v-if="fileList.length < 1">
+                    <a-icon type="upload" />
+                    {{ $t('请选择') }}
+                  </a-button>
+                </a-upload>
+              </a-form-item>
+            </template>
+            <template v-else-if="modal == 'blacklist'">
+              <div v-if="blackContent">{{ $t('该访客已经加入过黑名单，您可以修改加入黑名单的理由') }}</div>
+              <a-form-item style="margin-top: 8px">
+                <a-textarea
+                  v-decorator="[
+                    'info[blackContent]',
+                    { initialValue: blackContent, rules: [{ required: true, message: $t('请输入加入黑名单的理由') }] }
+                  ]"
+                  :placeholder="$t('请输入加入黑名单的理由')"
+                  :auto-size="{ minRows: 5, maxRows: 8 }"
+                ></a-textarea>
+              </a-form-item>
+            </template>
+          </a-form>
+          <div slot="footer">
+            <a-button
+              type="primary"
+              :disabled="checkUpload"
+              @click="
+                () => {
+                  sendFile(fileList)
+                }
+              "
+            >
+              {{ $t('确定') }}
+            </a-button>
+            <a-button @click="handleSendCancel">{{ $t('取消') }}</a-button>
+          </div>
+        </a-modal>
+        <!-- 转接弹出框 -->
+        <a-drawer
+          :title="$t('转接')"
+          :width="600"
+          :visible="transferVisible"
+          :destroyOnClose="true"
+          @close="transferVisible = !transferVisible"
+        >
+          <a-spin :spinning="false">
+            <a-form :form="transferForm">
+              <a-alert
+                :message="$t('仅能转接给同一技能组，且状态为“就绪”的客服')"
+                type="info"
+                style="margin-bottom: 8px"
+              />
+              <a-row type="flex" :gutter="8" style="margin-bottom: 8px">
+                <a-col flex="1">
+                  <a-input v-model="queryServiceParam.name" type="text" :placeholder="$t('请输入用户名搜索')" />
+                </a-col>
+                <a-col>
+                  <a-button htmlType="submit" @click="$refs.transferTable.refresh(true)">{{ $t('搜索') }}</a-button>
+                </a-col>
+                <a-col>
+                  <a-button
+                    @click="
+                      () => {
+                        queryServiceParam = {}
+                        $refs.transferTable.refresh(true)
+                      }
+                    "
+                  >
+                    {{ $t('重置') }}
+                  </a-button>
+                </a-col>
+              </a-row>
+              <s-table
+                ref="transferTable"
+                size="small"
+                rowKey="serviceId"
+                :columns="transferColumns"
+                :locale="{
+                  emptyText: $t('暂无满足条件客服')
+                }"
+                :data="getServiceList"
+                :sorter="transferSorter"
+              >
+                <div slot="action" slot-scope="text, record">
+                  <a
+                    @click="
+                      () => {
+                        transferRecord = record
+                        transferRemarkVisible = true
+                      }
+                    "
+                  >
+                    {{ $t('转接') }}
+                  </a>
+                </div>
+              </s-table>
+            </a-form>
+            <div class="bbar">
+              <a-button @click="transferVisible = !transferVisible">{{ $t('关闭') }}</a-button>
+            </div>
+          </a-spin>
+          <a-modal
+            :destroyOnClose="true"
+            :title="'转接给：' + transferRecord.serviceId"
+            :visible="transferRemarkVisible"
+            @ok="eventGetswitch(transferRecord)"
+            @cancel="transferRemarkVisible = !transferRemarkVisible"
+          >
+            <a-form :form="transferRemarkForm">
+              <a-form-item :label="$t('备注')" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+                <a-textarea
+                  v-decorator="[
+                    'transferRemark',
+                    {
+                      rules: [{ required: settingControl.transferRemarkRequired, message: $t('请输入转接备注') }]
+                    }
+                  ]"
+                  :placeholder="$t('请输入转接备注')"
+                  :auto-size="{ minRows: 6, maxRows: 10 }"
+                />
+              </a-form-item>
+            </a-form>
+          </a-modal>
+        </a-drawer>
+        <a-modal :title="$t('上传图片')" :visible="cutImageVisible" @ok="handleCutOk" @cancel="handleCutCancel">
+          <img
+            v-viewer
+            style="height: 200px; width: 100%"
+            :src="`${$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${pasteImageUrl}`"
+            alt=""
+          />
+        </a-modal>
+      </div>
+      <a-result
+        v-else-if="judgeService == 'close'"
+        style="height: 100%; display: flex; flex-direction: column; justify-content: center"
+        :title="$t('此页面仅供客服人员使用')"
+      ></a-result>
+      <div v-else></div>
+    </a-spin>
+  </div>
+</template>
+<script>
+import moment from 'moment'
+import { mapGetters } from 'vuex'
+import { throttle } from 'echarts/lib/export'
+import debounce from 'lodash/debounce'
+import storage from '@/utils/storage'
+export default {
+  i18n: window.lang('chat'),
+  components: {
+    DragSort: () => import('@/views/admin/Common/DragSort'),
+    UserTableFormView: () => import('@/views/admin/UserTable/UserTableFormView')
+  },
+  data () {
+    this.getChat = throttle(this.getChat, 500)
+    this.getWaitChat = throttle(this.getWaitChat, 500)
+    this.send = throttle(this.send, 500)
+    this.eventGetQueueList = throttle(this.eventGetQueueList, 500)
+    this.eventGetChatList = throttle(this.eventGetChatList, 500)
+    this.eventGetTransferList = throttle(this.eventGetTransferList, 500)
+    this.getChatHistory = throttle(this.getChatHistory, 500)
+    this.monitorTextarea = throttle(this.monitorTextarea, 500)
+    this.getReplayList = debounce(this.getReplayList, 500)
+    this.keyChange = debounce(this.keyChange, 600)
+    this.sendNews = throttle(this.sendNews, 500)
+    return {
+      loading: false,
+      // 判断是否为客服人员
+      judgeService: undefined,
+      // 预览图片的路径
+      imagePreviewUrl: '',
+      // 控制发送图片预览
+      previewVisible: false,
+      sendVisible: false,
+      activeKey: 'chat',
+      selectSendCheck: 0,
+      chatStatus: '',
+      infoData: {},
+      visitorInfo: {},
+      formThis: this,
+      serviceInfo: {},
+      advanced: false,
+      stompClient: null,
+      tabsList: storage.get('onlineTabsList') ? storage.get('onlineTabsList') : [{
+        name: this.$t('客户资料'),
+        key: '1'
+      }, {
+        name: this.$t('快捷回复'),
+        key: '2'
+      }, {
+        name: this.$t('知识库'),
+        key: '3'
+      }],
+      // 所有工单
+      workOrder: [],
+      // 知识库
+      knowledgeBase: [],
+      knowledgeBaseAll: [],
+      // 默认选择进行时
+      mode: 'going',
+      // 默认选择个人库
+      modeReply: 'private',
+      // 快捷回复分组
+      group: [],
+      // 选中当前会话的访客
+      currentVisitor: '',
+      // 选中历史会话的访客
+      historyVisitor: '',
+      // 排队选中访客
+      queueVisitor: '',
+      // 选中的待小结的访客
+      summarizedVisitor: '',
+      // 选中所有会话的访客
+      monitorVisitor: '',
+      sex: [{
+        value: this.$t('男')
+      }, {
+        value: this.$t('女')
+      }],
+      title: '',
+      width: '',
+      // 查询快捷回复内容
+      queryContentParam: {},
+      replyCategory: 0,
+      replyCategoryList: {},
+      size: 'a',
+      nowFilterVisible: false,
+      queueFilterVisible: false,
+      transferFilterVisible: false,
+      historyFilterVisible: false,
+      summarizedFilterVisible: false,
+      monitorFilterVisible: false,
+      // 当前会话的搜索
+      queryParamNow: {
+        sortField: storage.get('chatNowSortField') || 'entrySequence'
+      },
+      // 转接会话的搜索
+      queryParamTransfer: {
+        sortField: 'transferTime'
+      },
+      // 历史会话的搜索
+      queryParamHistory: {
+      },
+      // 历史会话的搜索
+      queryParamSummarized: {
+      },
+      // 所有会话搜索
+      queryParamMonitor: {
+        searchType: 'service',
+        sortField: 'entrySequence'
+      },
+      // 当前排队的搜索
+      queryParamWait: {
+        sortField: storage.get('chatWaitSortField') || 'waitTimeDesc'
+      },
+      // 知识库loading
+      knowledgeLoading: false,
+      formItemLayout: {
+        labelCol: {
+          span: 6
+        },
+        wrapperCol: {
+          span: 18
+        }
+      },
+      form: this.$form.createForm(this),
+      transferForm: this.$form.createForm(this),
+      visible: false,
+      myvisible: false,
+      modal: '',
+      visitorName: '',
+      // 当前会话访客loading
+      groupLoading: false,
+      // 当前会话的访客数据
+      groupData: [],
+      // 当前会话的访客数量
+      groupTotal: 0,
+      // 转接会话访客loading
+      transferLoading: false,
+      // 转接会话的访客数量
+      transferData: [],
+      // 当前会话的访客数量
+      transferTotal: 0,
+      // 历史会话loading
+      historyLoading: false,
+      // 历史会话的访客数据
+      historyData: [],
+      // 历史会话的访客数量
+      historyTotal: 0,
+      // 待小结loading
+      summarizedLoading: false,
+      // 待小结的访客数据
+      summarizedData: [],
+      // 待小结的访客数量
+      summarizedTotal: 0,
+      monitorLoading: false,
+      monitorData: [],
+      monitorTotal: 0,
+      // 当前等待访客loading
+      waitLoading: false,
+      // 当前等待访客
+      waitData: [],
+      // 当前等待访客数量
+      waitTotal: 0,
+      // 快捷内容表头
+      columns: [{
+        title: '',
+        dataIndex: 'action',
+        scopedSlots: { customRender: 'action' },
+        width: 50
+      }, {
+        title: this.$t('快捷词'),
+        dataIndex: 'title',
+        scopedSlots: { customRender: 'titleKey' },
+        sorter: true
+      }, {
+        title: this.$t('回复内容'),
+        dataIndex: 'content',
+        scopedSlots: { customRender: 'content' },
+        sorter: true
+      }],
+      sorter: { field: 'id', order: 'ascend' },
+      content: '',
+      emojiList: require('./emoji-compact.json'),
+      // 当前选中聊天
+      chatContent: {},
+      // 当前选中聊天位置
+      chatIndex: null,
+      // 聊天内容
+      contentList: [],
+      // 知识库的页数
+      pageKnowledgeNo: 1,
+      // 所有工单的页数
+      pageWorkOrderNo: 1,
+      noFind: '',
+      // 当前会话的分页
+      pageAlready: {
+        pageNo: 1,
+        pageSize: 100,
+        sortOrder: 'ascend'
+      },
+      // 转接会话的分页
+      pageTransfer: {
+        pageNo: 1,
+        pageSize: 20,
+        sortOrder: 'ascend'
+      },
+      // 历史会话的分页
+      pageHistory: {
+        pageNo: 1,
+        pageSize: 20,
+        sortOrder: 'ascend'
+      },
+      pageSummarized: {
+        pageNo: 1,
+        pageSize: 20,
+        sortOrder: 'ascend'
+      },
+      pageMonitor: {
+        pageNo: 1,
+        pageSize: 20,
+        sortOrder: 'ascend'
+      },
+      // 当前排队的分页
+      pageWait: {
+        pageNo: 1,
+        pageSize: 20,
+        sortOrder: 'ascend'
+      },
+      // 发送图片
+      sendImage: '',
+      // 查询客服人员
+      queryServiceParam: {},
+      // 发送文件列表
+      fileList: [],
+      pageContent: {
+        sortField: 'inputTime',
+        sortOrder: 'descend',
+        pageNo: 1,
+        pageSize: 20
+      },
+      // 是否置底更新
+      scrollBottomUpdate: false,
+      // 置顶加载出现加载圈
+      loadingTop: false,
+      visitorContent: {},
+      // 黑名单内容
+      blackContent: '',
+      // 访客历史内容数量
+      historyContentTotal: 0,
+      // 待小结数量
+      summarizedContentTotal: 0,
+      formFormat: this.$form.createForm(this),
+      // 控制转接抽屉
+      transferVisible: false,
+      transferColumns: [{
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 80,
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: this.$t('用户名'),
+        dataIndex: 'serviceId',
+        sorter: true
+      }, {
+        title: this.$t('客服昵称'),
+        dataIndex: 'nickName',
+        sorter: true
+      }, {
+        title: this.$t('接入上限'),
+        dataIndex: 'connectLimit',
+        sorter: true
+      }],
+      transferSorter: { field: 'serviceId', order: 'descend' },
+      // 控制图片格式
+      uploadFormatImage: false,
+      // 控制视频格式
+      uploadFormatVideo: false,
+      // 控制粘贴图片的弹出框
+      cutImageVisible: false,
+      topUserSet: true,
+      loadingImage: false,
+      // 粘贴图片的途径
+      pasteImageUrl: '',
+      // 加载聊天记录
+      loadingContent: false,
+      serviceStatus: '',
+      noMore: false,
+      // 控制显示快捷回复
+      selectReplyCheck: false,
+      // 快捷回复内容
+      replyContentList: [],
+      pageReply: {
+        pageNo: 1,
+        pageSize: 20,
+        sortField: 'content',
+        sortOrder: 'ascend'
+      },
+      scrollReply: true,
+      // 快捷消息数
+      replyContentTotal: 0,
+      // 单次发送消息选择快捷词次数
+      replyContentClick: false,
+      replyContentClickObj: {},
+      // 快捷回复置底加载出现加载圈
+      loadingReply: false,
+      noReplyMore: false,
+      disableChat: true,
+      noGet: false,
+      loadingReplyContent: false,
+      replyLoading: false,
+      // 显示对方正在输入中
+      sending: false,
+      timerSend: null,
+      // 设置发送每隔5秒监听
+      tagSend: false,
+      // 获取配置数据
+      settingControl: {},
+      // 改变当前会话和历史会话的字体
+      changeSessionName: false,
+      serviceAvatar: null,
+      rightClickShow: false,
+      // 撤回消息内容
+      reCallItem: {},
+      // 控制右击全选撤回消息的保存key
+      oldKey: '',
+      newKey: '',
+      replyDialog: false,
+      count: 0,
+      sendLoading: false,
+      sendEnter: null,
+      changeTimeOut: '',
+      checkTimeOut: '',
+      // 服务小结
+      tableName: '',
+      template: [],
+      fieldRule: [],
+      remarksrule: [],
+      remarkMaxRows: 4,
+      remarkMinRows: 2,
+      wayDataRule: [],
+      handleWayData: [],
+      orderType: [],
+      templateOther: [],
+      params: {
+        labelWidth: 100
+      },
+      // 所有会话选中列表监控
+      monitorTimer: null,
+      // 所有监控是否有权限
+      tabsPriv: false,
+      // 转接选择内容
+      transferRemarkVisible: false,
+      transferRecord: {},
+      transferRemarkForm: this.$form.createForm(this),
+      channelLists: [],
+      checkUpload: false,
+      // 快捷词搜索内容
+      replySearchValue: '',
+      // 当前客户昵称
+      serviceNickName: '',
+      notGetChat: false,
+      sendStatus: {
+        0: '等待投递',
+        1: '待审核',
+        2: '待支付',
+        3: '审核失败',
+        4: '待打印',
+        5: '待取件',
+        6: '已完成',
+        7: '已取消',
+        8: '自动失效',
+        9: '服务站管理员取消',
+        10: '运输途中',
+        11: '已签收',
+        12: '提交成功',
+        13: '下单失败',
+        100: '已创建',
+        101: '待揽收',
+        102: '已揽收',
+        103: '运输中',
+        104: '已签收',
+        105: '已取消',
+        106: '已取返件',
+        107: '已创建， 待支付',
+        108: '已支付， 待订柜',
+        109: '待取返件',
+        110: '已支付， 待投柜',
+        111: '待揽收',
+        112: '滞留件， 已释放',
+        200: '待收件',
+        201: '已收件',
+        202: '已取消',
+        203: '已签收'
+      },
+      userMessage: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  watch: {
+    chatContent (newVal) {
+      clearInterval(this.monitorTimer)
+    },
+    content (newVal) {
+      if (this.chatContent.visitorId) {
+        sessionStorage.setItem(this.chatContent.visitorId, newVal)
+      }
+    }
+  },
+  mounted () {
+    this.isService()
+    if (!storage.get('selectSendcheck')) {
+      storage.set('selectSendcheck', 0)
+    }
+    this.selectSendCheck = storage.get('selectSendcheck')
+    this.modeReplyChange()
+  },
+  activated () {
+    this.keyDown()
+  },
+  deactivated () {
+    document.onkeydown = () => { }
+  },
+  updated () {
+    if (this.scrollBottomUpdate) {
+      this.scrollBottomUpdate = false
+      this.scrollToBottom()
+      setTimeout(() => {
+        this.scrollToBottom()
+      }, 600)
+    }
+  },
+  methods: {
+    // 快捷键操作列表
+    keyDown () {
+      document.onkeydown = (e) => {
+        if (e && e.altKey === true && e.key === 'ArrowUp') {
+          if (this.chatIndex !== null && this.chatIndex > 0) {
+            this.chatIndex--
+            this.keyChange('up')
+          } else if (this.chatIndex === null) {
+            this.chatIndex = 0
+            this.keyChange('up')
+          }
+        } else if (e && e.altKey === true && e.key === 'ArrowDown') {
+          if (this.chatIndex !== null && this.chatIndex < (this.groupData.length - 1)) {
+            this.chatIndex++
+            this.keyChange('down')
+          } else if (this.chatIndex === null) {
+            this.chatIndex = 0
+            this.keyChange('down')
+          }
+        }
+      }
+    },
+    keyChange (type) {
+      switch (this.activeKey) {
+        case 'chat':
+          if (!this.chatContent.id && this.groupData.length) {
+            this.getChat(this.groupData[0], 0)
+          } else if (type === 'up' && this.chatIndex >= 0) {
+            this.getChat(this.groupData[this.chatIndex], this.chatIndex)
+          } else if (type === 'down' && this.chatIndex < this.groupData.length) {
+            this.getChat(this.groupData[this.chatIndex], this.chatIndex)
+          }
+          break
+        default:
+          break
+      }
+    },
+    // 清除会话
+    clearChat () {
+      this.chatContent = []
+      this.eventGetChatList()
+    },
+    // 获取服务小结视图内容
+    getView () {
+      const tplviewList = JSON.parse(this.settingControl.summaryLists)
+      const query = this.serviceInfo
+      const tplviewListNotGroup = tplviewList[0]
+      const tplviewListGroup = tplviewList.filter(item => item.group.includes(query.group))
+      let nowTplview = {}
+      if (tplviewListGroup.length) {
+        nowTplview = tplviewListGroup[0]
+      } else {
+        nowTplview = tplviewListNotGroup
+      }
+      if (nowTplview.tplviewid) {
+        this.template = []
+        this.axios({
+          url: '/admin/userTable/edit',
+          data: {
+            action: 'edit',
+            flowStatus: 'proceed',
+            id: Number(this.chatContent.conversationId) || 0,
+            tplviewid: nowTplview.tplviewid
+          }
+        }).then(res => {
+          this.tableName = res.result.tableName
+          this.record = res.result.data
+          this.verifJs = res.result.tplSetting && res.result.tplSetting.verifJs ? res.result.tplSetting.verifJs : ''
+          this.relationTable = res.result.relationTable || []
+          this.pageLoading = false
+          this.templateInit = res.result.template
+          this.templateInit.forEach(item => {
+            if (item.type === 'component') {
+              this.templateCom[item.value] = item
+            }
+          })
+          this.template = JSON.parse(JSON.stringify(res.result.template)) || []
+          this.templateOther = JSON.parse(JSON.stringify(res.result.template)) || []
+          // 表单初始化loader
+          if (res.result.tplSetting && res.result.tplSetting.tplInitJs) {
+            var initAttribute = res.result.tplSetting.tplInitJs
+            var initTemplate = {
+              type: 'component',
+              attribute: initAttribute
+            }
+            this.template.push(initTemplate)
+          }
+          this.fieldRule = res.result.fieldRule
+          const getComponent = (array) => {
+            array.forEach((item, index) => {
+              if (item.columns) {
+                getComponent(item.columns)
+              } else if (item.trs) {
+                getComponent(item.trs)
+              } else if (item.list) {
+                getComponent(item.list)
+              } else {
+                if (item.type === 'component') {
+                  item.component = {
+                    template: `<span>${item.attribute}</span>`,
+                    data: () => {
+                      return {
+                        parent: this
+                      }
+                    }
+                  }
+                }
+              }
+            })
+          }
+          getComponent(this.template)
+        })
+      }
+    },
+    // 获取坐席助手信息
+    getAssistant (item) {
+      this.$set(item, 'assistant', true)
+      this.$set(item, 'assistantLoading', true)
+      this.axios({
+        url: '/chat/stomp/transfer',
+        data: {
+          visitorId: this.chatContent.visitorId,
+          content: item.content
+        }
+      }).then(res => {
+        this.$set(item, 'assistantLoading', false)
+        if (res.code) {
+          this.$set(item, 'assistantMessage', res.message)
+        } else {
+          this.$set(item, 'assistantTitle', res.result.Title)
+        }
+        console.log(res)
+      })
+    },
+    // 保存各个列表筛选方式至前端
+    savaSortField (value, type) {
+      const name = 'chat' + type + 'SortField'
+      storage.set(name, value)
+    },
+    // 粘贴图片出现弹出框
+    pasteImage (e) {
+      let file = null
+      const items = (e.clipboardData || window.clipboardData).items
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          file = items[i].getAsFile()
+        }
+      }
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          this.axios({
+            url: '/admin/attachment/api/base64',
+            data: {
+              imgurl: e.target.result
+            }
+          }).then(res => {
+            if (res.code === 0) {
+              this.pasteImageUrl = res.result.filePath.substr(1)
+              this.cutImageVisible = true
+            }
+          })
+        }
+        reader.readAsDataURL(file)
+      }
+    },
+    // 发送成功粘贴图片
+    handleCutOk () {
+      const len = Math.floor(Math.random() * (100000 - 10000 + 1) + 10000)
+      this.content = `<img src='${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${this.pasteImageUrl}' class="${'laz' + len}">`
+      this.scrollBottomUpdate = true
+      this.sendNews(this.content, '1011', true)
+      this.content = ''
+    },
+    // 取消发送粘贴图片
+    handleCutCancel () {
+      this.cutImageVisible = false
+      this.pasteImageUrl = ''
+    },
+    // 时间戳转化
+    timestampFormat (date) {
+      const m2 = moment()
+      const m1 = moment(date)
+      const du = moment.duration(m2 - m1, 'ms')
+      const years = du.get('years')
+      const days = du.get('days')
+      const hours = du.get('hours')
+      const mins = du.get('minutes')
+      let key = ''
+      if (days >= 1 && days <= 7) {
+        const week = moment(date).day()
+        switch (week) {
+          case 1:
+            key = this.$t('星期一')
+            break
+          case 2:
+            key = this.$t('星期二')
+            break
+          case 3:
+            key = this.$t('星期三')
+            break
+          case 4:
+            key = this.$t('星期四')
+            break
+          case 5:
+            key = this.$t('星期五')
+            break
+          case 6:
+            key = this.$t('星期六')
+            break
+          case 0:
+            key = this.$t('星期日')
+            break
+        }
+        date = key
+        return date
+      } else if (days > 7) {
+        date = moment(date).format('MM/DD')
+        return date
+      } else if (years > 0) {
+        date = moment(date).format('YYYY/MM/DD')
+        return date
+      } else if (hours > 0) {
+        return hours + this.$t('小时前')
+      } else if (mins === 0) {
+        return this.$t('刚刚')
+      } else {
+        return mins + this.$t('分钟前')
+      }
+    },
+    // 时间戳转化
+    timestampFormatM (date) {
+      const m2 = moment()
+      const m1 = moment(date)
+      const du = moment.duration(m2 - m1, 'ms')
+      const secs = moment.duration(m2 - m1, 'ms').asSeconds()
+      const color = secs > this.settingControl.timeoutPromptNotReturn ? 'red' : '#52c41a'
+      const days = du.get('days')
+      const hours = du.get('hours')
+      const mins = du.get('minutes')
+      const sec = du.get('seconds')
+      if (days > 0) {
+        return '<span style="color: ' + color + ';">>' + this.$t('24小时') + '</span>'
+      } else if (hours > 0) {
+        return '<span style="color: ' + color + ';">' + hours + this.$t('时') + (mins > 0 ? mins + this.$t('分') : '') + '</span>'
+      } else if (mins > 0) {
+        return '<span style="color: ' + color + ';">' + mins + this.$t('分') + (sec > 0 ? sec + this.$t('秒') : '') + '</span>'
+      } else if (sec > 0) {
+        return '<span style="color: ' + color + ';">' + sec + '秒</span>'
+      } else {
+        return ''
+      }
+    },
+    // 判断是否为客服
+    isService () {
+      this.axios({
+        url: '/chat/stomp/isService',
+        data: { serviceId: this.userInfo.username }
+      }).then(res => {
+        if (res.code === 0) {
+          if (res.result.isService) {
+            this.judgeService = 'open'
+            this.serviceAvatar = res.result.avatar
+            this.serviceNickName = res.result.nickName
+            this.serviceStatus = res.result.status === 3 && sessionStorage.getItem('onlineStatus') ? JSON.parse(sessionStorage.getItem('onlineStatus')) : res.result.status
+            this.settingControl = res.result.info
+            this.getChannal()
+            this.serviceInfo = res.result
+            this.tabsPriv = res.result.tabsPriv
+            this.initWebSocket()
+            this.eventGetChatList()
+            this.eventGetQueueList()
+            this.eventGetTransferList()
+            this.getView()
+          } else {
+            this.judgeService = 'close'
+          }
+        }
+      })
+    },
+    getChannal () {
+      this.axios({
+        url: '/chat/channel/getChannel'
+      }).then(res => {
+        res.result.forEach(itme => {
+          this.channelLists[itme.value] = itme.label
+        })
+      })
+    },
+    changeTab () {
+      if (this.activeKey === 'chat') {
+        this.eventGetChatList()
+      } else if (this.activeKey === 'queue') {
+        this.eventGetQueueList()
+      } else if (this.activeKey === 'transfer') {
+        this.eventGetTransferList()
+      } else if (this.activeKey === 'summarized') {
+        this.eventGetSummarizedList()
+      } else if (this.activeKey === 'history') {
+        this.eventGetHistoryList()
+      } else if (this.activeKey === 'monitor') {
+        this.eventGetMonitorList()
+      }
+    },
+    // 修改客服状态
+    editServiceStatus (menu) {
+      this.axios({
+        url: '/chat/stomp/changeStatus',
+        data: {
+          serviceId: this.userInfo.username,
+          status: menu.key
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.$message.success(res.message)
+          this.serviceStatus = menu.key
+          sessionStorage.setItem('onlineStatus', menu.key)
+        }
+      })
+    },
+    // 取消撤回框
+    clickTable () {
+      this.selectReplyCheck = false
+      if (this.rightClickShow) {
+        this.rightClickShow = false
+        this.$refs[`replyContentRef${this.reCallItem.id}`][0].style.backgroundColor = 'unset'
+        this.$refs[`replyContentRef${this.reCallItem.id}`][0].style.color = '#24330f'
+      }
+      this.contentList.forEach(item => {
+        item.assistant = false
+      })
+    },
+    // 右边表单的标题切换
+    tabSwitch (key) {
+      if (key === '2') {
+        this.modeReplyChange()
+      }
+    },
+    // 获取聊天窗口的最低高度
+    scrollToBottom () {
+      this.$nextTick(() => {
+        this.$refs.chats.scrollTop = this.$refs.chats.scrollHeight
+      })
+    },
+    // 右击出现弹出框事件
+    rightClick (e, item) {
+      if (this.settingControl.serviceWithdraw && !this.chatContent.thirdParty) {
+        const num = (this.moment() - this.moment(item.inputTime)) / 60000
+        if (num <= 2 && item.code === '1011' && !item.loading) {
+          this.rightClickShow = true
+          this.$nextTick(() => {
+            this.$refs.rightClickRef.style.top = JSON.stringify(e.y) + 'px'
+            this.$refs.rightClickRef.style.left = JSON.stringify(e.x - 100) + 'px'
+            if (Object.keys(this.reCallItem).length > 0) {
+              this.oldKey = this.newKey
+              this.$refs[`replyContentRef${this.oldKey}`][0].style.backgroundColor = 'unset'
+              this.$refs[`replyContentRef${this.oldKey}`][0].style.color = '#24330f'
+            }
+            this.newKey = item.id
+            this.$refs[`replyContentRef${this.newKey}`][0].style.backgroundColor = '#1890ff'
+            this.$refs[`replyContentRef${this.newKey}`][0].style.color = '#ffffff'
+            this.reCallItem = item
+          })
+        } else {
+          this.rightClickShow = false
+        }
+      }
+    },
+    // 撤回消息
+    reCall () {
+      this.axios({
+        url: '/chat/stomp/api/withdrawMessage',
+        data: {
+          code: '1011',
+          serviceId: this.reCallItem.serviceId,
+          visitorId: this.reCallItem.visitorId,
+          id: this.reCallItem.id
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          const time = this.groupData.find(item => item.visitorId === this.reCallItem.visitorId).lastMessageTime
+          this.reCallItem.code = '1028'
+          this.reCallItem.content = this.$t('你撤回了一条消息')
+          this.changeContent(this.reCallItem.id, this.reCallItem.content, time, this.reCallItem.code, '', this.reCallItem.id)
+          this.reCallItem = {}
+        }
+      })
+    },
+    // 初始webstocket
+    initWebSocket () {
+      // 监听socket连接
+      this.stompClient = this.$store.state.app.webSocket
+      const indexChatMsg = (msg) => {
+        this.infoData = JSON.parse(msg.body)
+        if (this.infoData.from || (this.infoData.data.data && this.infoData.data.data.userId)) {
+          this.visitorInfo = this.infoData.from || this.infoData.data.data
+        }
+        if (this.infoData.code === '1039') {
+          // 手动抓取进入排队列表，自动分配失败进入派对列表
+          if (this.activeKey === 'queue') {
+            this.eventGetQueueList()
+          } else {
+            this.waitTotal = this.infoData.data.data.totalCount
+          }
+        }
+        if (['1001', '1024'].includes(this.infoData.code)) {
+          // 自动分配成功进入当前列表
+          if (this.activeKey === 'chat') {
+            this.eventGetChatList()
+          } else {
+            this.groupTotal = this.infoData.data.data.totalCount
+          }
+          // 访客离开，关闭聊天窗口
+          if (!this.chatContent.state && this.infoData.from && this.infoData.from.userId === this.chatContent.visitorId) {
+            this.content = ''
+            this.disableChat = true
+          }
+        }
+        if (this.infoData.code === '1010') {
+          this.scrollBottomUpdate = true
+          if (this.chatContent.visitorId === this.infoData.from.userId) {
+            const msg = {
+              code: '3002',
+              from: {
+                userId: this.chatContent.visitorId,
+                prefix: 'visitor-'
+              }
+            }
+            this.stompClient.send(JSON.stringify(msg))
+          }
+        } else if (this.infoData.code === '1011') {
+
+        } else if (this.infoData.code === '1012') { // 转接会话接收访客
+          if (this.activeKey === 'transfer') {
+            this.eventGetTransferList()
+          } else {
+            this.transferTotal = this.infoData.data.data.totalCount
+          }
+        } else if (this.infoData.code === '1020') {
+          if (this.infoData.data.flag) {
+            sessionStorage.setItem('checkTimeShow' + this.infoData.data.visitorId, false)
+            sessionStorage.setItem('lastVisitorTime' + this.infoData.data.visitorId, '')
+          } else {
+            this.$message.warning(this.infoData.data.content)
+            this.eventGetQueueList()
+          }
+        }
+        // 转接会话的结果，将被转接的访客窗口结束、访客结束、强插关闭
+        if (['1002', '1054', '1055', '1056', '1057', '1059', '1061', '1003'].includes(this.infoData.code)) {
+          if (this.visitorInfo.userId === this.chatContent.visitorId) {
+            this.content = ''
+            this.disableChat = true
+            this.chatContent.endStatus = '1'
+            this.eventGetChatList(this.chatContent)
+            if (this.infoData.code === '1003') {
+              this.eventGetMonitorList()
+            }
+          }
+        }
+        // 设置对方正在输入中
+        if (this.infoData.code === '1026') {
+          if (!this.chatContent.state && this.chatContent.visitorId === this.infoData.from.userId) {
+            clearTimeout(this.timerSend)
+            this.sending = true
+            this.timerSend = setTimeout(() => {
+              this.sending = false
+              clearTimeout(this.timerSend)
+            }, 5000)
+          }
+        }
+        // 记录与当前访客的聊天内容
+        if (this.groupData && this.groupData.length > 0 && ['1010', '1011', '1023', '1027', '1019', '1030', '1044', '1002', '1031', '1049', '1050', '1051', '1054', '1055', '1056', '1057', '1059', '1061', '1003'].includes(this.infoData.code)) {
+          if (!this.chatContent.state && this.visitorInfo && this.chatContent.visitorId === this.visitorInfo.userId) {
+            if (this.infoData.code !== '1027') {
+              let id = 0
+              if (this.contentList.length > 0 && this.contentList[this.contentList.length - 1].id) {
+                id = this.contentList[this.contentList.length - 1].id
+              }
+              id = this.infoData.data.data ? this.infoData.data.data.id : (id + 1)
+              this.visitorContent = {
+                id: id,
+                content: this.infoData.data.content,
+                inputTime: this.infoData.time,
+                serviceId: this.userInfo.username,
+                code: this.infoData.code,
+                visitorId: this.visitorInfo.userId,
+                nickName: this.infoData.to & this.infoData.to.nickName ? this.infoData.to.nickName : this.serviceNickName,
+                assistant: false
+              }
+              this.contentList.push(this.visitorContent)
+            } else {
+              const reCallNew = this.contentList.find(item => item.id === this.infoData.data.data.id)
+              reCallNew.code = '1027'
+              reCallNew.content = `${this.visitorName}${this.$t('撤回了一条消息')}`
+            }
+            this.sending = false
+            this.scrollBottomUpdate = true
+          }
+
+          this.groupData.forEach(item => {
+            if (!item.state && item.visitorId === this.visitorInfo.userId) {
+              let receiveContent = this.infoData.data.content
+              let receiveId = this.infoData.data.id
+              let reCallId = ''
+              if (this.infoData.code === '1027') {
+                receiveContent = `${item.visitorName}${this.$t('撤回了一条消息')}`
+                receiveId = ''
+                reCallId = this.infoData.data.data.id
+                if (this.contentList[this.contentList.length - 1].id === this.infoData.data.data.id) {
+                  item.lastMessageContent = receiveContent
+                }
+              }
+              if ((this.chatContent.id !== item.id || (this.chatContent.id === item.id && this.chatContent.state)) && this.infoData.code === '1010') {
+                item.unreadMessage = item.unreadMessage + 1
+              }
+              this.changeContent(item.id, receiveContent, this.infoData.time, this.infoData.code, receiveId, reCallId)
+            }
+          })
+        }
+      }
+      const webSocketMsg = Object.assign({}, this.$store.state.app.setting.webSocketMsg, {
+        indexChatMsg: indexChatMsg
+      })
+      this.$setSetting({ webSocketMsg: (webSocketMsg) })
+    },
+    // 每隔一分钟更新一次时间
+    changeTime () {
+      clearTimeout(this.changeTimeOut)
+      this.groupData = this.groupData.map(item => {
+        item.formatTime = this.timestampFormat(Date.parse(item.lastTime))
+        return item
+      })
+      if (this.groupData.length > 0) {
+        this.changeTimeOut = setTimeout(() => {
+          this.changeTime()
+        }, 60000)
+      }
+    },
+    getCheckTime () {
+      clearTimeout(this.checkTimeOut)
+      this.groupData = this.groupData.map(item => {
+        item.checkTimeShow = JSON.parse(sessionStorage.getItem('checkTimeShow' + item.visitorId))
+        const time = sessionStorage.getItem('lastVisitorTime' + item.visitorId)
+        item.checkTime = item.checkTimeShow ? this.timestampFormatM(Date.parse(time)) : ''
+        return item
+      })
+      if (this.groupData.length > 0) {
+        this.checkTimeOut = setTimeout(() => {
+          this.getCheckTime()
+        }, 1000)
+      }
+    },
+    // 控制不能发送空白消息的气泡显示
+    noSendEmpty () {
+      if (this.content.length === 0) {
+        this.visiblePop = true
+      } else {
+        this.visiblePop = false
+      }
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+    },
+    // 获取快捷分类
+    modeReplyChange () {
+      if (Object.keys(this.replyCategoryList).length === 0) {
+        this.axios({
+          url: '/chat/replyCategory/allCategory',
+          data: {
+            serviceId: this.userInfo.username
+          }
+        }).then(res => {
+          if (res.code === 0) {
+            this.replyCategoryList = res.result
+          }
+        })
+      }
+      this.replyCategory = 0
+      this.queryContentParam = {}
+      if (this.replyDialog) {
+        this.$refs.replyTable[0].refresh(true)
+      }
+    },
+    // 获取快捷内容
+    replyContentData (parameter) {
+      let serviceId = ''
+      if (this.modeReply === 'private') {
+        serviceId = this.userInfo.username
+      }
+      const data = Object.assign(parameter, {
+        id: this.replyCategory,
+        type: this.modeReply,
+        serviceId: serviceId
+      }, this.queryContentParam)
+      return this.axios({
+        url: '/chat/reply/dialogueInit',
+        data: data
+      }).then(res => {
+        if (res.code === 0) {
+          this.replyDialog = true
+          return res.result
+        }
+      })
+    },
+    // 选择快捷内容
+    selectInReplyContent (record) {
+      // 选中则替换原有文本框内容
+      if (!this.disableChat) {
+        this.content = record.content
+        this.replyContentClick = true
+        this.replyContentClickObj[this.chatContent.id] = true
+      }
+    },
+    // 上传视频限制
+    beforeUploadVideo (file) {
+      return new Promise((resolve, reject) => {
+        const isVideo = file.type
+        if (!isVideo.includes('video')) {
+          this.$message.error(this.$t('上传的是非视频格式'))
+          this.uploadFormatVideo = true
+          return reject(file)
+        } else {
+          this.uploadFormatVideo = false
+          return resolve(file)
+        }
+      })
+    },
+    // 改变快捷分类的id
+    replyContentChange (value) {
+      this.replyCategory = value
+      this.$refs.replyTable[0].refresh(true)
+    },
+    // 获取客服列表
+    getServiceList (parameter) {
+      const data = Object.assign(parameter, { serviceId: this.userInfo.username, action: 'get', visitorId: this.chatContent.visitorId }, this.queryServiceParam)
+      return this.axios({
+        url: '/chat/stomp/serviceInit',
+        data: data
+      }).then(res => {
+        return res.result
+      })
+    },
+    // 获取知识库
+    getKnowledgeBase (pageNo = 1) {
+      this.knowledgeLoading = true
+      return this.axios({
+        url: '/chat/knowledge/init',
+        data: { pageNo: pageNo }
+      }).then(res => {
+        // this.knowledgeBase = []
+        // this.knowledgeBaseAll = []
+        this.knowledgeLoading = false
+      })
+    },
+    //  获取当前会话列表数据
+    eventGetChatList (record) {
+      this.groupLoading = true
+      this.axios({
+        url: '/chat/stomp/chatQueue',
+        data: Object.assign({}, this.queryParamNow, this.pageAlready, { state: 'already' })
+      }).then(res => {
+        if (res.code === 0) {
+          if (res.result.data.length > 0) {
+            res.result.data.forEach(item => {
+              item.formatTime = this.timestampFormat(Date.parse(item.lastMessageTime))
+            })
+          }
+          if (this.pageAlready.pageNo === 1) {
+            this.groupData = res.result.data
+          } else {
+            this.groupData = [...this.groupData, ...res.result.data]
+          }
+          this.groupData.forEach(item => {
+            let string = item.lastMessageContent ? item.lastMessageContent.replace(/<[^>]+>/g, ' ') : ''
+            const arrEntities = { 'lt': '<', 'gt': '>', 'nbsp': ' ', 'amp': '&', 'quot': '"' }
+            string = string.replace(/&(lt|gt|nbsp|amp|quot);/ig, (all, t) => { return arrEntities[t] })
+            this.changeContent(item.id, string, item.lastMessageTime, item.code, item.lastMessageId)
+          })
+          this.groupTotal = res.result.totalCount
+          this.groupLoading = false
+          this.changeTime()
+          this.getCheckTime()
+          if (record && record.id) {
+            this.chatContent.state = 1
+          }
+          if (this.chatContent.state) {
+            // this.groupData.splice(this.chatIndex, 0, this.chatContent)
+          }
+        }
+      })
+    },
+    //  获取转接会话列表数据
+    eventGetTransferList (queryParam) {
+      this.transferLoading = true
+      this.axios({
+        url: '/chat/stomp/chatQueue',
+        data: Object.assign({}, this.pageTransfer, { state: 'transfer' }, this.queryParamTransfer)
+      }).then(res => {
+        if (res.code === 0) {
+          this.transferLoading = false
+          this.transferData = res.result.data
+          this.transferTotal = res.result.totalCount
+        }
+      })
+    },
+    // 改变转接会话的页码
+    changeTransfer (page) {
+      this.pageTransfer.pageNo = page
+      this.eventGetTransferList()
+    },
+    // 抓取转接访客
+    grabTrasfer (item, status) {
+      const data = {
+        visitorId: item.visitorId,
+        serviceId: this.userInfo.username,
+        transferStatus: status
+      }
+      this.axios({
+        url: '/chat/stomp/transferListConfirm',
+        data: data
+      }).then(res => {
+        if (res.code === 0) {
+          this.$message.success(res.message)
+          this.eventGetChatList()
+        } else {
+          this.$message.error(res.message)
+        }
+        this.eventGetTransferList()
+      })
+    },
+    // 获取待小结列表数据
+    eventGetSummarizedList () {
+      this.summarizedLoading = true
+      return new Promise((resolve, reject) => {
+        this.axios({
+          url: '/chat/stomp/chatQueue',
+          data: Object.assign({}, this.queryParamSummarized, { state: 'summary' }, this.pageSummarized)
+        }).then(res => {
+          if (res.code === 0) {
+            this.summarizedData = res.result.data
+            this.summarizedData.forEach(item => {
+              item.endTime = this.timestampFormat(Date.parse(item.endTime))
+            })
+            this.summarizedTotal = res.result.totalCount
+            this.summarizedLoading = false
+            resolve()
+          } else {
+            this.summarizedData = []
+          }
+        })
+      })
+    },
+    // 获取历史会话列表数据
+    eventGetHistoryList () {
+      this.historyLoading = true
+      this.axios({
+        url: '/chat/stomp/chatQueue',
+        data: Object.assign({}, this.pageHistory, { state: 'history' }, this.queryParamHistory)
+      }).then(res => {
+        if (res.code === 0) {
+          this.historyData = res.result.data
+          this.historyData.forEach(item => {
+            item.endTime = this.timestampFormat(Date.parse(item.endTime))
+          })
+          this.historyTotal = res.result.totalCount
+          this.historyLoading = false
+        } else {
+          this.historyData = []
+        }
+      })
+    },
+    // 所有会话监控
+    eventGetMonitorList () {
+      // monitor
+      this.monitorLoading = true
+      this.axios({
+        url: '/chat/stomp/chatQueue',
+        data: Object.assign({}, this.pageMonitor, { state: 'monitor', serviceId: this.userInfo.username }, this.queryParamMonitor)
+      }).then(res => {
+        if (res.code === 0) {
+          if (res.result.data.length > 0) {
+            res.result.data.forEach(item => {
+              item.formatTime = this.timestampFormat(Date.parse(item.lastMessageTime))
+            })
+          }
+          this.monitorData = res.result.data
+          this.monitorTotal = res.result.totalCount
+          this.monitorLoading = false
+        } else {
+          this.monitorData = []
+        }
+      })
+    },
+    // 改变历史会话的页码
+    changeHistory (page) {
+      this.pageHistory.pageNo = page
+      this.eventGetHistoryList()
+    },
+    // 改变待小结会话的页码
+    changeSummarized (page) {
+      this.pageSummarized.pageNo = page
+      this.eventGetSummarizedList()
+    },
+    // 改变历史会话的页码
+    changeMonitor (page) {
+      this.pageMonitor.pageNo = page
+      this.eventGeMonitorList()
+    },
+    // 获取当前排队列表数据
+    eventGetQueueList (queryParam) {
+      this.waitLoading = true
+      this.axios({
+        url: '/chat/stomp/chatQueue',
+        data: Object.assign({}, this.pageWait, { state: 'wait' }, this.queryParamWait)
+      }).then(res => {
+        if (res.code === 0) {
+          if (res.result.data.length > 0) {
+            res.result.data.forEach(item => {
+              item.lastTime = this.timestampFormat(Date.parse(item.lastTime))
+            })
+          }
+          this.waitData = res.result.data
+          this.waitTotal = res.result.totalCount
+          this.waitLoading = false
+        }
+      })
+    },
+    // 改变当前排队的页码
+    changeWait (page) {
+      this.pageWait.pageNo = page
+      this.eventGetQueueList()
+    },
+    // 知识库加载更多
+    loadKnowledgeMore () {
+      this.pageKnowledgeNo = this.pageKnowledgeNo + 1
+      this.getKnowledgeBase(this.pageKnowledgeNo)
+    },
+    // 所有工单加载更多
+    loadWorkOrderMore () {
+      this.pageWorkOrderNo = this.pageWorkOrderNo + 1
+    },
+    reply (record) {
+      this.content = this.content + record.name
+    },
+    // 查找知识库当前内容
+    onKnowledgeSearch (e) {
+      this.knowledgeBase = this.knowledgeBaseAll.filter((msg) => msg.content.includes(e))
+    },
+    onSearchKnowledge () { },
+    // 确认结束回话
+    eventClose (visitorId) {
+      if (this.settingControl.endConfirm) {
+        const that = this
+        this.$confirm({
+          title: this.$t('确认要结束该访客的会话吗？'),
+          onOk () {
+            that.eventCloseEnd(visitorId)
+          }
+        })
+      } else {
+        this.eventCloseEnd(visitorId)
+      }
+    },
+    // 结束会话接口
+    eventCloseEnd (visitorId, type, serviceId) {
+      const that = this
+      that.groupLoading = true
+      that.axios({
+        url: '/chat/stomp/endChat',
+        data: { serviceId: serviceId || that.userInfo.username, visitorId: visitorId, isAdmin: !!type }
+      }).then(res => {
+        that.groupLoading = false
+        if (res.code === 0) {
+          that.noMore = false
+          that.noGet = false
+          that.content = ''
+          that.disableChat = true
+          if (type) {
+            that.eventGetMonitorList()
+          } else {
+            this.eventGetChatList(that.chatContent)
+          }
+        } else {
+          that.$message.warning(res.message)
+        }
+      })
+    },
+    // 抓取客户
+    eventClaim (record) {
+      const data = {
+        messageId: String(new Date().valueOf()) + parseInt(Math.random() * (9999999 - 1000000 + 1) + 1000000, 10),
+        code: '1020',
+        time: this.moment().format('YYYY-MM-DD HH:mm:ss'),
+        from: {
+          userId: this.userInfo.username,
+          prefix: 'user-'
+        },
+        to: this.chatContent.wsUser,
+        data: {
+          serviceId: this.userInfo.username,
+          visitorId: record.visitorId
+        }
+      }
+      this.stompClient.send('/app/chat/sendToUser', JSON.stringify(data))
+      // this.axios({
+      //   url: '/chat/stomp/grabVisitor',
+      //   data: data
+      // }).then(res => {
+      //   if (res.code !== 0) {
+      //     this.$message.warning(res.message)
+      //     this.eventGetQueueList()
+      //   } else {
+      //     sessionStorage.setItem('checkTimeShow' + record.visitorId, false)
+      //     sessionStorage.setItem('lastVisitorTime' + record.visitorId, '')
+      //   }
+      // })
+    },
+    monitorClick (type, record) {
+      const that = this
+      this.$confirm({
+        title: type === 'get' ? this.$t('确定接管当前会话吗？') : this.$t('确定结束当前会话吗？'),
+        onOk: () => {
+          if (type === 'end') {
+            that.eventCloseEnd(record.visitorId, 'monitor', record.serviceId)
+          } else {
+            const data = {
+              visitorId: record.visitorId,
+              serviceId: that.userInfo.username
+            }
+            that.axios({
+              url: '/chat/stomp/enforceTransfer',
+              data: data
+            }).then(res => {
+              if (res.code === 0) {
+                that.getChatMonitor(record).then(() => {
+                  clearInterval(that.monitorTimer)
+                  that.disableChat = false
+                })
+                that.$message.success(res.message)
+                that.eventGetChatList()
+                that.eventGetMonitorList()
+              } else {
+                that.$message.error(res.message)
+              }
+            })
+          }
+        }
+      })
+    },
+    // 转接按钮
+    eventGetswitch (value) {
+      const that = this
+      this.transferRemarkForm.validateFields((errors, values) => {
+        if (!errors) {
+          // 判断会话转接确认是否开启，开启则进入转接会话
+          if (that.settingControl.conversationTransferConfirm) {
+            that.axios({
+              url: '/chat/stomp/serviceInit',
+              data: {
+                toServiceId: value.serviceId,
+                visitorId: that.chatContent.visitorId,
+                action: 'submit',
+                transferRemark: values.transferRemark
+              }
+            }).then(res => {
+              if (!res.code) {
+                that.transferVisible = false
+                that.transferRemarkVisible = false
+                that.$message.success(res.message)
+              } else {
+                that.$message.error(res.message)
+              }
+            })
+          } else {
+            // 关闭则直接进入当前会话
+            const data = {
+              serviceId: this.userInfo.username,
+              wsServiceList: [{
+                visitorId: that.chatContent.visitorId,
+                fromServiceId: that.userInfo.username
+              }],
+              toServiceId: value.serviceId,
+              action: 'submit',
+              transferRemark: values.transferRemark
+            }
+            that.axios({
+              url: '/chat/stomp/serviceTransfer',
+              data: data
+            }).then(res => {
+              if (res.code === 0) {
+                that.$message.success(res.message)
+                that.eventGetChatList()
+                that.myvisible = false
+                that.transferVisible = false
+                that.transferRemarkVisible = false
+              } else {
+                this.$message.error(res.message)
+              }
+            })
+          }
+        }
+      })
+    },
+    // 修改显示撤回的消息
+    getReCall (item) {
+      let user = ''
+      if (item.code === '1027') {
+        user = this.visitorName
+      } else {
+        user = '你'
+      }
+      this.$set(item, 'content', `${user}${this.$t('撤回了一条消息')}`)
+    },
+    // 获取待小结聊天内容
+    getChatSummarized (record, type) {
+      this.contentList = []
+      this.loadingContent = true
+      this.content = ''
+      this.noGet = false
+      record.type = 'summarized'
+      this.chatContent = record
+      this.sending = false
+      this.visitorName = record.visitorName
+      this.summarizedVisitor = record.conversationId
+      if (type) {
+        this.currentVisitor = record.id
+      } else {
+        this.currentVisitor = ''
+      }
+      this.pageContent.pageNo = 1
+      this.disableChat = true
+      this.noMore = false
+      this.chatStatus = 'summarized'
+      this.changeSessionName = true
+      const params = Object.assign({}, this.pageContent,
+        {
+          status: this.chatStatus,
+          visitorId: record.visitorId,
+          conversationId: record.conversationId,
+          type: 'service'
+        })
+      this.axios({
+        url: '/chat/stomp/chatRecords',
+        data: params
+      }).then(res => {
+        this.loadingContent = false
+        if (res.code === 0) {
+          this.contentList = res.result.data
+          this.contentList.forEach(item => {
+            if (item.code === '1013' && item.content) {
+              item.contentObj = JSON.parse(item.content)
+            } else if (item.code === '1027' || item.code === '1028') {
+              this.getReCall(item)
+            }
+          })
+          this.noMore = true
+          this.summarizedContentTotal = res.result.totalCount
+          this.scrollBottomUpdate = true
+          if (res.result.data.filter(item => item.code !== '1046').length === res.result.totalCount) {
+            this.noGet = true
+          }
+          this.getView()
+        } else {
+          this.contentList = []
+        }
+      })
+      this.workOrder = record.workOrder
+    },
+    getWaitChat (record) {
+      this.noGet = false
+      this.noReplyMore = false
+      this.loadingContent = true
+      this.contentList = []
+      this.chatContent = record
+      this.chatContent.id = this.chatContent.conversationId = null
+      this.queueVisitor = record.visitorId
+      this.summarizedVisitor = ''
+      this.selectReplyCheck = false
+      this.noMore = false
+      this.changeSessionName = false
+      this.chatStatus = 'proceed'
+      this.visitorName = record.visitorName
+      this.pageContent.pageNo = 1
+      const params = Object.assign({}, this.pageContent,
+        {
+          status: this.chatStatus,
+          visitorId: record.visitorId,
+          serviceId: this.userInfo.username,
+          type: 'service'
+        })
+      this.disableChat = true
+      this.axios({
+        url: '/chat/stomp/chatRecords',
+        data: params
+      }).then(res => {
+        this.loadingContent = false
+        if (res.code === 0) {
+          // this.notGetChat = true
+          this.contentList = res.result.data
+          this.noMore = true
+          this.contentList.forEach(item => {
+            if (item.code === '1013' && item.content) {
+              item.contentObj = JSON.parse(item.content)
+            } else if (item.code === '1027' || item.code === '1028') {
+              this.getReCall(item)
+            }
+            item.assistant = false
+          })
+          if (res.result.data.filter(item => item.code !== '1046').length === res.result.totalCount) {
+            this.noGet = true
+          }
+          this.scrollBottomUpdate = true
+        }
+      })
+      this.workOrder = record.workOrder
+      this.axios({
+        url: '/chat/stomp/orderQuery',
+        data: {
+          visitorId: record.visitorId
+        }
+      }).then(res => {
+        this.userMessage = res.result
+      })
+    },
+    // 获取历史访客聊天内容
+    getChatHistory (record) {
+      this.contentList = []
+      this.loadingContent = true
+      this.content = ''
+      this.noGet = false
+      this.chatContent = record
+      this.sending = false
+      this.visitorName = record.visitorName
+      this.historyVisitor = record.visitorId
+      this.pageContent.pageNo = 1
+      this.disableChat = true
+      this.noMore = false
+      this.chatStatus = 'history'
+      this.changeSessionName = true
+      const params = Object.assign({}, this.pageContent,
+        {
+          status: this.chatStatus,
+          visitorId: record.visitorId,
+          type: 'service'
+        })
+      this.axios({
+        url: '/chat/stomp/chatRecords',
+        data: params
+      }).then(res => {
+        this.loadingContent = false
+        if (res.code === 0) {
+          this.contentList = res.result.data
+          this.contentList.forEach(item => {
+            if (item.code === '1013' && item.content) {
+              item.contentObj = JSON.parse(item.content)
+            } else if (item.code === '1027' || item.code === '1028') {
+              this.getReCall(item)
+            }
+          })
+          this.noMore = true
+          this.historyContentTotal = res.result.totalCount
+          if (res.result.data.filter(item => item.code !== '1046').length === res.result.totalCount) {
+            this.noGet = true
+          }
+          this.scrollBottomUpdate = true
+          this.getView()
+        } else {
+          this.contentList = []
+        }
+      })
+      this.workOrder = record.workOrder
+    },
+    getChatMonitor (record, type) {
+      this.content = ''
+      this.chatContent = record
+      this.sending = false
+      this.visitorName = record.visitorName
+      this.monitorVisitor = record.visitorId
+      this.currentVisitor = ''
+      this.disableChat = true
+      this.pageContent.pageNo = 1
+      this.chatStatus = 'monitor'
+      this.changeSessionName = true
+      clearInterval(this.monitorTimer)
+      const params = Object.assign({}, this.pageContent,
+        { visitorId: record.visitorId })
+      this.workOrder = record.workOrder
+      return new Promise((resolve, reject) => {
+        this.axios({
+          url: '/chat/stomp/monitorRecords',
+          data: params
+        }).then(res => {
+          if (res.code === 0) {
+            if (record.serviceId === this.userInfo.username) {
+              this.disableChat = false
+            } else {
+              this.monitorTimer = setInterval(() => {
+                this.getChatMonitor(this.chatContent)
+              }, 5000)
+            }
+            resolve()
+            this.contentList = res.result.data
+            this.contentList.forEach(item => {
+              if (item.code === '1013' && item.content) {
+                item.contentObj = JSON.parse(item.content)
+              } else if (item.code === '1027' || item.code === '1028') {
+                this.getReCall(item)
+              }
+            })
+            this.monitorContentTotal = res.result.totalCount
+            if (res.result.data.filter(item => item.code !== '1046').length === res.result.totalCount) {
+              this.noGet = true
+            }
+            this.scrollBottomUpdate = true
+          } else {
+            this.contentList = []
+          }
+        })
+      })
+    },
+    // 获取当前会话聊天内容
+    getChat (record, index) {
+      this.noGet = false
+      this.noReplyMore = false
+      this.loadingContent = true
+      this.contentList = []
+      this.content = sessionStorage.getItem(record.visitorId) || ''
+      if (this.chatContent && ((this.chatContent.visitorId === record.visitorId && record.state) || this.chatContent.visitorId !== record.visitorId)) {
+        this.sending = false
+      }
+      this.chatContent = record
+      this.chatIndex = index
+      this.historyVisitor = ''
+      this.summarizedVisitor = ''
+      this.selectReplyCheck = false
+      this.noMore = false
+      this.changeSessionName = false
+      if (this.chatContent.topTime === 0) {
+        this.topUserSet = true
+      } else {
+        this.topUserSet = false
+      }
+      this.chatStatus = 'proceed'
+      this.visitorName = record.visitorName
+      this.currentVisitor = record.id
+      this.pageContent.pageNo = 1
+      const params = Object.assign({}, this.pageContent,
+        {
+          status: this.chatStatus,
+          visitorId: record.visitorId,
+          serviceId: this.userInfo.username,
+          type: 'service'
+        })
+      const url = '/chat/stomp/chatRecords'
+      this.axios({
+        url: url,
+        data: params
+      }).then(res => {
+        this.loadingContent = false
+        if (res.code === 0) {
+          // this.notGetChat = true
+          this.disableChat = false
+          this.contentList = res.result.data
+          this.noMore = true
+          this.groupData.forEach(item => {
+            if (item.id === record.id) {
+              item.unreadMessage = 0
+            }
+          })
+          this.contentList.forEach(item => {
+            if (item.code === '1013' && item.content) {
+              item.contentObj = JSON.parse(item.content)
+            } else if (item.code === '1027' || item.code === '1028') {
+              this.getReCall(item)
+            }
+            item.assistant = false
+          })
+          if (res.result.data.filter(item => item.code !== '1046').length === res.result.totalCount) {
+            this.noGet = true
+          }
+          this.scrollBottomUpdate = true
+          this.getView()
+        }
+      })
+      this.workOrder = record.workOrder
+      this.axios({
+        url: '/chat/stomp/orderQuery',
+        data: {
+          visitorId: record.visitorId
+        }
+      }).then(res => {
+        this.userMessage = res.result
+      })
+    },
+    // 加载历史消息
+    getHisChat () {
+      this.pageContent.pageNo = 1
+      const params = Object.assign({}, this.pageContent,
+        {
+          status: this.chatStatus,
+          visitorId: this.chatContent.visitorId,
+          serviceId: this.userInfo.username,
+          endStatus: this.chatContent.endStatus,
+          type: 'service'
+        })
+      const url = '/chat/stomp/chatRecords'
+      const height = JSON.parse(JSON.stringify(this.$refs.chats.scrollHeight))
+      this.axios({
+        url: url,
+        data: params
+      }).then(res => {
+        this.loadingContent = false
+        this.notGetChat = false
+        if (res.code === 0) {
+          this.disableChat = false
+          if (this.chatContent.state) {
+            this.disableChat = true
+          }
+          res.result.data.forEach(item => {
+            if (item.code === '1013' && item.content) {
+              item.contentObj = JSON.parse(item.content)
+            } else if (item.code === '1027' || item.code === '1028') {
+              this.getReCall(item)
+            }
+          })
+          this.contentList = [...res.result.data, ...this.contentList]
+          if (res.result.data.filter(item => item.code !== '1046').length === res.result.totalCount) {
+            this.noGet = true
+          }
+          this.noMore = true
+          this.$nextTick(() => {
+            this.$refs.chats.scrollTop = this.$refs.chats.scrollHeight - height
+          })
+        }
+      })
+    },
+    // 置顶会话
+    getTop (id) {
+      let topStatus = null
+      let topShowStatus = ''
+      this.groupData.some(item => {
+        if (item.id === this.chatContent.id) {
+          this.chatContent.topTime = item.topTime
+          if (this.chatContent.topTime === 0) {
+            topStatus = 1
+            topShowStatus = new Date().getTime()
+            this.topUserSet = true
+          } else {
+            topStatus = 0
+            topShowStatus = 0
+            this.topUserSet = false
+          }
+        }
+      })
+      this.axios({
+        url: '/chat/stomp/topChat',
+        data: {
+          visitorId: id,
+          topStatus: topStatus
+        }
+      }).then(res => {
+        if (res.code === 0) {
+          this.$message.success(res.message)
+          this.topUserSet = !this.topUserSet
+          this.groupData.forEach(item => {
+            if (item.id === this.chatContent.id) {
+              item.topTime = topShowStatus
+            }
+          })
+          this.groupData.sort((a, b) => {
+            if (a.topTime === b.topTime) {
+              let key
+              switch (this.queryParamNow.sortField) {
+                case 'messageUpdate':
+                  key = new Date(b.lastMessageTime) - new Date(a.lastMessageTime)
+                  break
+                case 'entrySequence':
+                  key = new Date(b.serviceReceptionTime) - new Date(a.serviceReceptionTime)
+                  break
+                case 'waitReply':
+                  key = new Date(a.lastVisitorTime) - new Date(b.lastVisitorTime)
+                  break
+              }
+              return key
+            }
+            return b.topTime - a.topTime
+          })
+          if (this.chatContent.id) {
+            this.chatIndex = this.groupData.findIndex(item => item.id === this.chatContent.id)
+          }
+        } else {
+          this.$message.error(res.message)
+        }
+      })
+    },
+    // 向上滚动加载
+    popupScroll (e) {
+      if (this.rightClickShow) {
+        this.rightClickShow = false
+        this.$refs[`replyContentRef${this.reCallItem.id}`][0].style.backgroundColor = 'unset'
+        this.$refs[`replyContentRef${this.reCallItem.id}`][0].style.color = '#24330f'
+      }
+      if (e) {
+        const height = JSON.parse(JSON.stringify(e.target.scrollHeight))
+        const scrollTop = e.target.scrollTop
+        if (scrollTop === 0 && this.noMore) {
+          this.pageContent.pageNo++
+          this.loadingTop = true
+          const params = Object.assign({}, this.pageContent,
+            {
+              status: this.chatStatus,
+              visitorId: this.chatContent.visitorId,
+              endStatus: this.chatContent.endStatus,
+              serviceId: '',
+              type: 'service'
+            })
+          const url = '/chat/stomp/chatRecords'
+          if (this.chatContent.type === 'summarized' || (!this.chatContent.state && this.chatContent.conversationId)) {
+            Object.assign(params, { conversationId: this.chatContent.conversationId })
+          }
+          this.axios({
+            url: url,
+            data: params
+          }).then(res => {
+            if (res.code === 0) {
+              this.notGetChat = false
+              res.result.data.forEach(item => {
+                if (item.code === '1013' && item.content) {
+                  item.contentObj = JSON.parse(item.content)
+                } else if (item.code === '1027' || item.code === '1028') {
+                  this.getReCall(item)
+                }
+                item.assistant = false
+              })
+              if (res.result.data.length === 0) {
+                this.noMore = false
+                this.noGet = true
+              }
+              this.contentList = [...res.result.data, ...this.contentList]
+              this.loadingTop = false
+              this.$nextTick(() => {
+                e.target.scrollTop = e.target.scrollHeight - height
+              })
+            }
+          })
+        }
+      }
+    },
+    // 阻止浏览器默认按下alt切换事件，换为空格
+    preventE (e) {
+      if (e.keyCode === 9) {
+        e.preventDefault()
+        this.content += '    '
+      }
+    },
+    // 按住ctrl+enter进行发送，按住enter键进行换行
+    enterSend (e) {
+      if (e.shiftKey && e.keyCode === 13) {
+        e.preventDefault()
+      }
+      if (this.selectSendCheck !== '1') {
+        if (e.ctrlKey && e.keyCode === 13 || e.shiftKey && e.keyCode === 13) {
+          this.content += '\n'
+        } else if (e.keyCode === 13) {
+          e.preventDefault()
+          this.send()
+        }
+      } else {
+        if (e.shiftKey && e.keyCode === 13) {
+          this.content += '\n'
+        } else if (e.ctrlKey && e.keyCode === 13) {
+          this.send()
+        }
+      }
+    },
+    // 向下滚动获取快捷回复内容
+    popupReplyScroll (e) {
+      if (e) {
+        if (e.target.scrollTop === (e.target.scrollHeight - 200) && this.scrollReply) {
+          this.scrollReply = true
+          this.loadingReply = true
+          const content = document.getElementsByClassName('sendTextarea')[0].value
+          this.selectReplyCheck = true
+          const index = content.lastIndexOf('/')
+          const replyContentParam = content.substring(index + 1, content.length)
+          this.pageReply.pageNo++
+          const data = Object.assign({}, this.pageReply, {
+            serviceId: this.userInfo.username,
+            content: replyContentParam
+          })
+          this.axios({
+            url: '/chat/stomp/quickReply',
+            data: data
+          }).then(res => {
+            this.loadingReply = false
+            if (res.code === 0) {
+              const replyContentList = res.result.data
+              if (replyContentList.length > 0) {
+                this.replyContentList = [...this.replyContentList, ...replyContentList]
+              }
+              if (replyContentList.length < 20) {
+                this.scrollReply = false
+              }
+            }
+          })
+        }
+      }
+    },
+    // 选择快捷内容
+    selectReplyContent (value) {
+      this.content = value
+      this.replyContentClick = true
+      this.replyContentClickObj[this.chatContent.id] = true
+      this.selectReplyCheck = false
+    },
+    // 转化内容和时间、替换空格、图片、视频、附件
+    changeContent (cId, content, time, code, id, reCallId) {
+      this.groupData.forEach(item => {
+        item.checkTimeShow = ['1010', '1019'].includes(item.code)
+        if (content && item.id === cId && !item.state) {
+          sessionStorage.setItem('checkTimeShow' + item.visitorId, item.checkTimeShow)
+          item.code = code
+          if (id) {
+            item.lastMessageId = id
+          }
+          if (content.includes('&lt;') || content.includes('&gt;')) {
+            content = content.replace(new RegExp('&lt;', 'gm'), '<')
+            content = content.replace(new RegExp('&gt;', 'gm'), '>')
+          }
+          if (content.search('<br/>') !== -1 || content.search('&nbsp;') !== -1) {
+            content = content.replace(/<br\/>/g, ' ')
+            content = content.replace(/&nbsp;/g, ' ')
+          }
+          if (content && content.search('filePath') !== -1) {
+            if (content.search('class="lazy') !== -1 || content.search('class="laz') !== -1) {
+              content = this.$t('[图片]')
+            } else if (content.search('<video') !== -1) {
+              content = this.$t('[视频]')
+            } else if (content.search('<a target') !== -1) {
+              const name = content.substring(0, content.lastIndexOf('>')).split(/[\\</"]/)[15].substr(1)
+              content = `[${name}]`
+            }
+          }
+          if (code !== '1027' && code !== '1028' && !reCallId && content.length > 0) {
+            let string = content.replace(/<[^>]+>/g, ' ')
+            const arrEntities = { 'lt': '<', 'gt': '>', 'nbsp': ' ', 'amp': '&', 'quot': '"' }
+            string = string.replace(/&(lt|gt|nbsp|amp|quot);/ig, (all, t) => { return arrEntities[t] })
+            this.$set(item, 'lastMessageContent', string)
+          } else if ((code === '1027' || code === '1028') && item.lastMessageId === reCallId) {
+            this.$set(item, 'lastMessageContent', content)
+          }
+          if (code === '1010') {
+            if (item.checkTimeShow) {
+              this.$set(item, 'lastVisitorTime', item.lastVisitorTime)
+            } else {
+              this.$set(item, 'lastVisitorTime', time)
+              sessionStorage.setItem('lastVisitorTime' + item.visitorId, time)
+              item.checkTimeShow = true
+              sessionStorage.setItem('checkTimeShow' + item.visitorId, item.checkTimeShow)
+            }
+          } else if (code === '1011') {
+            item.checkTimeShow = false
+            sessionStorage.setItem('checkTimeShow' + item.visitorId, item.checkTimeShow)
+          }
+          this.$set(item, 'lastMessageTime', time)
+          this.$set(item, 'formatTime', this.timestampFormat(Date.parse(time)))
+        }
+      })
+      // 新消息进入时，前端重排列表
+      this.groupData.sort((a, b) => {
+        if (a.topTime === b.topTime) {
+          let key
+          switch (this.queryParamNow.sortField) {
+            case 'messageUpdate':
+              key = new Date(b.lastMessageTime) - new Date(a.lastMessageTime)
+              break
+            case 'entrySequence':
+              key = new Date(b.serviceReceptionTime) - new Date(a.serviceReceptionTime)
+              break
+            case 'waitReply':
+              key = new Date(a.lastVisitorTime) - new Date(b.lastVisitorTime)
+              break
+          }
+          return key
+        }
+        return b.topTime - a.topTime
+      })
+      if (this.chatContent.id) {
+        this.chatIndex = this.groupData.findIndex(item => item.id === this.chatContent.id)
+      }
+    },
+    // 图片、视频、附件弹出框的取消
+    handleSendCancel () {
+      this.myvisible = !this.myvisible
+      this.fileList = []
+      this.uploadFormatImage = false
+      this.uploadFormatVideo = false
+    },
+    // 发送文件/图片/视频
+    sendFile (fileList) {
+      if (this.modal === 'blacklist') {
+        const { formFormat: { validateFields } } = this
+        validateFields((errors, values) => {
+          if (!errors) {
+            const data = {
+              visitorId: this.chatContent.visitorId,
+              visitorName: this.chatContent.visitorName,
+              inputUser: this.userInfo.username,
+              remarks: values.info.blackContent
+            }
+            this.axios({
+              url: '/chat/stomp/addBlacklist',
+              data: data
+            }).then(res => {
+              if (res.code === 0) {
+                this.$message.success(res.message)
+              } else {
+                this.$message.error(res.message)
+              }
+              this.blackContent = ''
+              this.myvisible = !this.myvisible
+            })
+          }
+        })
+      } else {
+        if (fileList && fileList.length > 0) {
+          if (fileList[0].response.code) {
+            this.$message.error(this.fileList[0].response.message)
+          } else {
+            if (this.modal === 'photo' && !this.uploadFormatImage) {
+              const floor = Math.floor(Math.random() * (100000 - 10000 + 1) + 10000)
+              this.sendImage = this.fileList[0].response.result.filePath.substr(1)
+              this.content = `<img src='${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${this.sendImage}' class="${'lazy' + floor}">`
+              this.myvisible = !this.myvisible
+            } else if (this.modal === 'video' && !this.uploadFormatVideo) {
+              const sendVideo = this.fileList[0].response.result.filePath.substr(1)
+              this.content = `<video width="200" controls="controls" src="` + this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + sendVideo + `"></video>`
+              this.myvisible = !this.myvisible
+            } else if (this.modal === 'file') {
+              const sendFile = this.fileList[0].response.result.filePath.substr(1)
+              const sendName = this.fileList[0].response.result.fileName
+              this.content = `<a target="_blank" href="${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${sendFile}&fileName=${sendName.substring(0, sendName.lastIndexOf('.'))}">${sendName}</a>`
+              this.myvisible = !this.myvisible
+            }
+          }
+        }
+        const { formFormat: { validateFields } } = this
+        validateFields((errors, values) => {
+          if (!errors) {
+            if (!this.uploadFormatImage && !this.uploadFormatVideo && fileList[0] && !fileList[0].response.code) {
+              this.sendNews(this.content, '1011', '', '', '', true)
+              this.content = ''
+            }
+          }
+        })
+      }
+    },
+    // 发送接口
+    sendNews (content, code, image, toVisitor, data, file) {
+      const string = JSON.parse(JSON.stringify(content))
+      if (!string.replace(/(\r\n)|\n|\s|&nbsp;|<br\/>/g, '') && code === '1011') {
+        this.sendVisible = true
+        this.sendLoading = false
+        setTimeout(() => {
+          this.close()
+        }, 3000)
+      } else {
+        let dataContent = data
+        if (code === '1011') {
+          toVisitor = this.chatContent.wsUser
+          dataContent = {
+            'type': 'text',
+            'avatar': this.serviceAvatar,
+            'content': content,
+            // 快捷词计数
+            data: this.replyContentClick ? 1 : undefined,
+            'clientId': this.setting.clientId
+          }
+        }
+        const messageId = String(new Date().valueOf()) + parseInt(Math.random() * (9999999 - 1000000 + 1) + 1000000, 10)
+        const title = {
+          'code': code,
+          messageId,
+          'time': this.moment().format('YYYY-MM-DD HH:mm:ss'),
+          'from': {
+            userId: this.userInfo.username,
+            prefix: 'user-'
+          },
+          'to': toVisitor,
+          'data': dataContent
+        }
+        this.replyContentClick = false
+        this.replyContentClickObj[this.chatContent.id] = false
+        const time = this.moment().format('YYYY-MM-DD HH:mm:ss')
+        this.contentList.push({
+          content: content,
+          messageId,
+          inputTime: time,
+          serviceId: this.userInfo.username,
+          code: code,
+          loading: '1',
+          visitorId: this.chatContent.visitorId,
+          avatar: this.serviceAvatar,
+          nickName: this.serviceNickName,
+          assistant: false
+        })
+        this.content = ''
+        this.scrollBottomUpdate = true
+        this.stompClient.send('/app/chat/sendToUser', JSON.stringify(title))
+        // this.axios({
+        //   url: '/admin/websocket/api/sendTo',
+        //   data: Object.assign(title)
+        // }).then(res => {
+        //   this.sendLoading = false
+        //   clearTimeout(this.sendEnter)
+        //   this.tagSend = false
+        //   sessionStorage.removeItem(this.chatContent.visitorId)
+        //   if (res.code === 0) {
+        //     if (code === '1011') {
+        //       if (image) {
+        //         this.cutImageVisible = false
+        //       }
+        //       if (file) {
+        //         this.fileList = []
+        //       }
+        //       this.contentList.forEach(item => {
+        //         if (item.key === key) {
+        //           item.id = res.result.id
+        //           item.loading = null
+        //         }
+        //       })
+        //       this.$nextTick(() => {
+        //         this.changeContent(this.chatContent.id, title.data.content, time, code, res.result.id)
+        //       })
+        //     } else {
+        //       this.$message.success(res.message)
+        //     }
+        //   } else {
+        //     this.contentList.forEach(item => {
+        //       if (item.key === key) {
+        //         item.loading = '0'
+        //         item.errorMessage = res.message
+        //       }
+        //     })
+        //   }
+        // })
+      }
+    },
+    // 发送内容事件
+    send () {
+      let str = this.content
+      this.sendLoading = true
+      if (str.includes('<') || str.includes('>')) {
+        str = str.replace(new RegExp('<', 'gm'), '&lt;')
+        str = str.replace(new RegExp('>', 'gm'), '&gt;')
+      }
+      if (str.search('img') === -1) {
+        str = str.replace(/\r\n/g, '<br/>')
+        str = str.replace(/\n/g, '<br/>')
+        str = str.replace(/\s/g, '&nbsp;')
+      }
+      this.sendNews(str, '1011')
+    },
+    // 客服发送消息，显示正在输入中
+    wsSend () {
+      const msgWs = {
+        messageId: String(new Date().valueOf()) + parseInt(Math.random() * (9999999 - 1000000 + 1) + 1000000, 10),
+        code: '1026',
+        time: this.moment().format('YYYY-MM-DD HH:mm:ss'),
+        from: {
+          userId: this.userInfo.username,
+          prefix: 'user-'
+        },
+        to: this.chatContent.wsUser,
+        data: {}
+      }
+      this.stompClient.send('/app/chat/sendToUser', JSON.stringify(msgWs))
+    },
+    // 监听数据框的输入值
+    monitorTextarea (value) {
+      this.pageReply.pageNo = 1
+      this.scrollReply = true
+      // 监听正在搜索
+      if (!this.tagSend && this.settingControl.visiterInputing) {
+        this.tagSend = true
+        this.sendEnter = setTimeout(() => {
+          this.tagSend = false
+        }, 3000)
+        this.wsSend()
+      }
+      // 搜索快捷回复
+      const content = this.content.replace(/^\s*/g, '').replace(/[\r\n]/g, '')
+      if (content.indexOf('#') === 0) {
+        this.selectReplyCheck = true
+        this.loadingReplyContent = true
+        this.replySearchValue = content.substr(1)
+        const data = Object.assign({}, this.pageReply, { serviceId: this.userInfo.username, content: content.substr(1) })
+        this.getReplayList(data)
+      } else {
+        this.selectReplyCheck = false
+      }
+    },
+    getReplayList (data) {
+      this.replyLoading = true
+      this.axios({
+        url: '/chat/stomp/quickReply',
+        data: data
+      }).then(res => {
+        if (res.code === 0) {
+          this.loadingReplyContent = false
+          this.replyLoading = false
+          this.replyContentList = res.result.data
+          this.replyContentTotal = res.result.totalCount
+          if (res.result.data.length === 20) {
+            this.noReplyMore = true
+          }
+        }
+      })
+    },
+    // 弹出框消失事件
+    close () {
+      this.sendVisible = false
+    },
+    // 切换快捷发送的选择
+    handleMenuClick (e) {
+      this.selectSendCheck = e.key
+      storage.set('selectSendcheck', e.key)
+    },
+    // 表情转化
+    emojiInsert (word) {
+      const myField = document.getElementsByClassName('sendTextarea')[0]
+      const startPos = myField.selectionStart
+      const endPos = myField.selectionEnd
+      if (this.content.length > 0) {
+        this.content = myField.value.substring(0, startPos) + word + myField.value.substring(endPos, myField.value.length)
+        myField.value = this.content
+        myField.focus()
+        myField.selectionStart = startPos + word.length
+        myField.selectionEnd = startPos + word.length
+      } else {
+        this.content = myField.value.substring(endPos, myField.value.length) + word
+        myField.focus()
+      }
+    },
+    changeCount (word) {
+      if (this.content.length === 0) {
+        this.content = ''
+      }
+      this.content = this.content + word
+    },
+    // 上传事件
+    handleUploadChange (info) {
+      this.fileList = info.fileList
+      if (this.fileList.length > 0 && this.fileList[0].response) {
+        if (this.fileList[0].response.code === 0) {
+          this.checkUpload = false
+        } else {
+          this.$message.error(this.fileList[0].response.message)
+          this.fileList = []
+          this.formFormat = this.$form.createForm(this)
+          this.checkUpload = true
+        }
+      } else if (this.fileList.length === 0) {
+        this.checkUpload = true
+      }
+    },
+    // 上传图片限制
+    beforeUploadImage (file) {
+      return new Promise((resolve, reject) => {
+        const isImage = file.type
+        if (!isImage.includes('image')) {
+          this.$message.error(this.$t('上传的是非图片格式'))
+          this.uploadFormatImage = true
+          return reject(file)
+        }
+        this.uploadFormatImage = false
+        return resolve(file)
+      })
+    },
+    // 预览图片
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.url || file.thumbUrl
+      this.previewVisible = true
+    },
+    // 取消预览图片
+    handleCancel () {
+      this.previewVisible = false
+    },
+    photo () {
+      this.width = '400px'
+      this.title = <span><a-icon type="picture" />  {this.$t('上传图片')}</span>
+      this.modal = 'photo'
+      this.myvisible = true
+      this.checkUpload = true
+    },
+    video () {
+      this.width = '400px'
+      this.title = <span><a-icon type="video-camera" />  {this.$t('上传视频')}</span>
+      this.modal = 'video'
+      this.myvisible = true
+      this.checkUpload = true
+    },
+    file () {
+      this.width = '400px'
+      this.title = <span><a-icon type="file" />  {this.$t('上传附件')}</span>
+      this.modal = 'file'
+      this.myvisible = true
+      this.checkUpload = true
+    },
+    transfer () {
+      this.width = '400px'
+      this.title = <span><a-icon type="wechat" />  {this.$t('客服列表')}</span>
+      this.modal = 'transfer'
+      this.transferVisible = true
+    },
+    checkBlacklist () {
+      this.axios({
+        url: '/chat/stomp/getBlackRemark',
+        data: { visitorId: this.chatContent.visitorId }
+      }).then(res => {
+        if (res.code === 0) {
+          this.blacklist(res.result.remarks || '')
+        }
+      })
+    },
+    blacklist (content) {
+      this.width = '400px'
+      this.title = <span><a-icon type="user-delete" />  {this.$t('加入黑名单')}</span>
+      this.modal = 'blacklist'
+      this.blackContent = content
+      this.myvisible = true
+      this.checkUpload = false
+    },
+    showConfirm () {
+      const that = this
+      this.$confirm({
+        title: this.$t('邀请用户满意度评价?'),
+        onOk () {
+          that.axios({
+            url: '/admin/websocket/sendEvaluation',
+            data: { code: '1031', serviceId: that.userInfo.username, visitorId: that.chatContent.visitorId }
+          }).then(res => {
+            if (res.code === 0) {
+              if (res.result.code === 0) {
+                that.$message.success(res.message)
+              } else {
+                that.$message.warning(res.result.content)
+              }
+            } else {
+              that.$message.error(res.message)
+            }
+          })
+        },
+        onCancel () { }
+      })
+    },
+    getTabsList (data) {
+      this.tabsList = data
+      storage.set('onlineTabsList', data)
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+@import '~ant-design-vue/es/style/themes/default.less';
+/deep/ .popoverStyle {
+  .ant-popover-inner-content {
+    padding: 12px 0px 16px 16px;
+  }
+}
+div::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+div::-webkit-scrollbar-track {
+  background: rgb(239, 239, 239);
+  border-radius: 2px;
+}
+div::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+}
+div::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+div::-webkit-scrollbar-corner {
+  background: #179a16;
+}
+.emojiItem:hover {
+  border: 1px solid #bebdbd;
+}
+.emojiItem {
+  width: 30px;
+  height: 30px;
+  line-height: 23px;
+  text-align: center;
+  display: inline-block;
+  border: 1px solid #fff;
+}
+.sendTextarea {
+  margin: 8px 0;
+  color: rgba(0, 0, 0, 0.92);
+  font-size: 14px;
+  height: 140px;
+  border: none;
+  resize: none;
+  padding: 2px;
+}
+.sendTextarea:focus {
+  box-shadow: none;
+}
+/deep/.ant-card-body {
+  padding: 0;
+}
+
+.userTable /deep/.ant-card-body {
+  padding: 8px;
+}
+.content,
+.visitorName,
+.currentName {
+  text-overflow: -o-ellipsis-lastline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  word-break: break-all;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.currentName {
+  max-width: 200px;
+}
+.from,
+.duration,
+.grab {
+  border-radius: 5px;
+  padding: 1px 2px;
+}
+.from {
+  border: 1px solid #469ffc;
+  color: #469ffc;
+}
+.duration {
+  border: 1px solid #1fc1cc;
+  color: #1fc1cc;
+  margin-left: 8px;
+}
+/deep/.ant-list-item-meta-description {
+  line-height: 16px;
+}
+/deep/.ant-list-split .ant-list-item {
+  border-bottom: 0;
+  padding: 0;
+}
+/deep/.ant-list-item-meta-avatar {
+  margin: 12px 16px;
+}
+/deep/.ant-tabs-nav .ant-tabs-tab {
+  padding-top: 17px;
+  padding-bottom: 17px;
+  margin: 0;
+}
+.userHead {
+  /deep/.ant-badge-count,
+  .ant-badge-dot,
+  .ant-badge .ant-scroll-number-custom-component {
+    top: 12px;
+    right: 8px;
+  }
+}
+.chatHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0px 16px;
+  height: 53px;
+  border-bottom: 1px solid #eaeaea;
+}
+.chatHeadButton {
+  border-radius: 15px;
+  margin-right: 5px;
+  font-size: 12px;
+}
+/deep/.chatBox,
+/deep/.replyBox {
+  display: inline-block;
+  padding: 12px;
+  border-radius: 9px;
+  word-break: break-all;
+  text-align: left;
+  max-width: 500px;
+  img {
+    max-height: 200px;
+    max-width: 430px;
+  }
+}
+.chatBox {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.92);
+}
+.replyBox {
+  background-color: #95de64;
+  color: rgba(0, 0, 0, 0.92);
+  overflow: hidden;
+}
+.sendNews {
+  text-align: right;
+}
+.visitorName {
+  color: #262626;
+}
+.lastTime {
+  font-size: 12px;
+  text-align: right;
+  font-weight: normal;
+  color: #b3b3b3;
+  padding-right: 16px;
+}
+.chatListActive {
+  background-color: @primary-1;
+  .from,
+  .duration {
+    background-color: #fff;
+  }
+}
+.chatListHover:hover {
+  background-color: @primary-1;
+}
+.chatListHover:first-child {
+  border-top: 1px solid #f0f0f0;
+}
+/deep/.ant-tabs-bar {
+  margin: 0;
+}
+/deep/.ant-tabs-content {
+  background-color: #fff;
+}
+.visitorInformation {
+  font-weight: bold;
+  font-size: 16px;
+  border-left: 2px solid #1fc1cc;
+  padding-left: 8px;
+  margin-top: 15px;
+}
+.tabsFlexList {
+  margin: 0 auto;
+  height: calc(100% - 110px);
+  overflow: auto;
+}
+.chatContentList {
+  width: 100%;
+  overflow: hidden auto;
+  background-color: #f7f7f7;
+  height: calc(100vh - 399px);
+}
+.infoItem {
+  font-size: 14px;
+  margin-top: 10px;
+  .visitorFrom {
+    color: #9b9b9b;
+  }
+  .fromNickName {
+    color: #333333;
+  }
+}
+.tipList {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  .tipListItem {
+    padding: 4px 8px;
+    font-size: 14px;
+    margin-right: 5px;
+    margin-top: 5px;
+    border-radius: 2px;
+  }
+}
+.ant-form-item label {
+  color: #9b9b9b;
+}
+.systemReminder {
+  margin: 20px 0;
+  width: 100%;
+  text-align: center;
+  color: #aaaaaa;
+}
+.grab {
+  border: 1px solid @primary-color;
+  color: @primary-color;
+  cursor: pointer;
+}
+.going,
+.over {
+  width: 100%;
+  text-align: center;
+}
+.listTitle {
+  color: #979797;
+}
+.status {
+  color: @primary-color;
+}
+// 没有更多数据
+.noMore {
+  text-align: center;
+  font-size: 12px;
+  color: rgb(220, 220, 220);
+  padding: 12px;
+}
+.tagCheck {
+  // background-color: #f0f0f0;
+  .tagShow {
+    display: none;
+  }
+}
+.tagCheck:hover {
+  padding-right: 0px;
+  .tagShow {
+    display: inline;
+  }
+}
+.replyHover:hover {
+  background-color: @primary-1;
+}
+.rightClickClass {
+  padding: 5px 0;
+  width: 100px;
+  position: fixed;
+  text-align: center;
+  background-color: #fff;
+}
+.rightClickClass:hover {
+  background-color: #eaeaea;
+  cursor: pointer;
+}
+</style>

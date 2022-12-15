@@ -1,0 +1,251 @@
+<template>
+  <a-drawer :title="$t('批量发送')" :width="1050" :visible="visible" :destroyOnClose="true" @close="visible = !visible">
+    <a-spin :spinning="loading">
+      <a-form :labelCol="labelCol" :wrapperCol="wrapperCol" :form="form">
+        <a-form-item label="From">
+          <a-select v-decorator="['from', { initialValue: '', rules: [{ required: true, message: $t('请选择To') }] }]">
+            <a-select-option v-for="item in receiverList" :key="item.label" :value="item.label">
+              {{ item.label }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="To">
+          <div style="display: flex">
+            <a-upload
+              v-decorator="[
+                'filePathTo',
+                { initialValue: '', rules: [{ required: true, message: $t('请上传收件人文件') }] }
+              ]"
+              :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+              :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+              name="upload"
+              :showUploadList="false"
+              @change="handleToChange"
+            >
+              <a-button>
+                <a-icon type="upload" />
+                Upload/Drop
+              </a-button>
+            </a-upload>
+            <span style="margin: 0 16px">{{ uploadMessage }}</span>
+            <a @click="downLoadTemplate">{{ $t('下载模板') }}</a>
+          </div>
+        </a-form-item>
+        <a-form-item label="Subject">
+          <a-input
+            v-decorator="['title', { initialValue: '', rules: [{ required: true, message: $t('请输入Subject') }] }]"
+          />
+        </a-form-item>
+        <a-form-item label="File">
+          <a-upload
+            :action="`${$store.state.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=upload`"
+            :headers="{ 'Access-Token': $store.getters.userInfo.accessToken }"
+            name="upload"
+            listType="text"
+            :fileList="imageFileList"
+            :beforeUpload="
+              (file, fileList) => {
+                return beforeUpload(file, fileList)
+              }
+            "
+            @preview="handleImagePreview"
+            @change="handleImageChange"
+          >
+            <div v-if="imageFileList.length < 10">
+              <a-button>
+                <a-icon type="upload" />
+                Upload/Drop
+              </a-button>
+            </div>
+          </a-upload>
+        </a-form-item>
+        <a-row align="middle" type="flex" style="margin-bottom: 4px">
+          <a-col :span="12">
+            <a-form-item :colon="false" :labelCol="{ span: 4 }" :wrapperCol="{ span: 20 }">
+              <a slot="label" @click="$refs.MailTemplate.show({ formData: mailForm })">{{ $t('邮件模板') }}</a>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <tiny-mce
+          v-if="tinyVisible"
+          ref="tinyMce"
+          v-model="textContent"
+          :newOptions="{ height: '500px' }"
+          @change="
+            (e) => {
+              textContent = e
+            }
+          "
+        />
+      </a-form>
+      <div class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('发送') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('取消') }}</a-button>
+      </div>
+    </a-spin>
+    <mail-template ref="MailTemplate" @ok="getContent" />
+  </a-drawer>
+</template>
+<script>
+export default {
+  i18n: window.lang('mail'),
+  components: {
+    MailTemplate: () => import('@/views/mail/MailTemplate'),
+    TinyMce: () => import('@/components/Editor/TinyMce')
+  },
+  data () {
+    return {
+      uploadMessage: '',
+      receiverList: [],
+      fileNameTo: '',
+      filePathTo: '',
+      //
+      templateId: '',
+      textContent: '',
+      form: this.$form.createForm(this),
+      imagePreviewVisible: false,
+      imagePreviewUrl: '',
+      tinyVisible: false,
+      visible: false,
+      labelCol: { span: 2 },
+      wrapperCol: { span: 22 },
+      mailForm: {
+        language: '英语'
+      },
+      imageFileList: [],
+      loading: false,
+      scroll: {},
+      templateData: [],
+      // 工单信息
+      sendInfo: [],
+      nullKey: 0
+    }
+  },
+  created () {
+    this.getreceiverList()
+  },
+  methods: {
+    show () {
+      this.visible = true
+      this.imageFileList = []
+      this.uploadMessage = this.$t('请选择要上传的文件')
+      this.textContent = ''
+      this.$nextTick(() => {
+        this.tinyVisible = true
+      })
+    },
+    getreceiverList () {
+      this.axios({
+        url: '/mail/account/getAccount'
+      }).then(res => {
+        this.receiverList = res.result
+      })
+    },
+    getContent (e) {
+      this.textContent = e.yjnrmb
+      this.form.setFieldsValue({ 'title': e.yjbtmb })
+    },
+    downLoadTemplate () {
+      const filePath = 'static/template/邮件批量发送.xlsx'
+      const fileName = '邮件批量发送'
+      window.open(`${this.$store.state.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}&fileName=${fileName}`)
+    },
+    // 获取模板信息
+    getTemplate () {
+      this.loading = true
+      this.axios({
+        url: '/crm/assist/mailTemplateOption',
+        data: this.mailForm
+      }).then(res => {
+        this.loading = false
+        if (res.code) {
+          this.$message.error(res.message)
+          return
+        }
+        this.templateData = res.result
+      })
+    },
+    handleImagePreview (file) {
+      this.imagePreviewUrl = file.response.result.filePath
+      this.imagePreviewVisible = true
+      const fileName = encodeURIComponent(file.response.result.fileName)
+      const filePath = encodeURIComponent(this.imagePreviewUrl)
+      window.open(this.$store.state.env.VUE_APP_API_BASE_URL + 'admin/api/download/?filePath=' + filePath + '&fileName=' + fileName)
+    },
+    handleImageChange ({ fileList }) {
+      this.imageFileList = fileList
+    },
+    handleToChange (info) {
+      this.loading = true
+      if (info.file.status === 'uploading') {
+        this.uploadMessage = this.$t('文件【{0}】上传中...', { 0: info.file.name })
+      } else if (info.file.status === 'done') {
+        this.loading = false
+        this.uploadMessage = this.$t('文件【{0}】上传完成', { 0: info.file.name })
+        this.fileNameTo = info.file.response.result.fileName
+        this.filePathTo = info.file.response.result.filePath
+      } else if (info.file.status === 'error') {
+        this.loading = false
+        this.uploadMessage = this.$t('文件【{0}】上传失败', { 0: info.file.name })
+        this.fileName = ''
+      }
+    },
+    // 附件限制条件
+    beforeUpload (file) {
+      const fileType = '.png,.jpg,.jpeg,.gif,.bmp,.flv,.swf,.mkv,.avi,.rm,.rmvb,.mpeg,.mpg,.ogg,.ogv,.mov,.wmv,.mp4,.webm,.mp3,.wav,.mid,.rar,.zip,.tar,.gz,.7z,.bz2,.cab,.iso,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,.md,.xml'
+      const suffix = file.name.substring(file.name.lastIndexOf('.'), file.name.length)
+      if (!fileType.includes(suffix)) {
+        this.$message.error(this.$t('上传文件格式错误'))
+        return false
+      }
+      return true
+    },
+    selectTemplate (record) {
+      this.textContent = record.yjnrmb || ''
+      this.templateId = record.mbid
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          this.loading = true
+          let imageFileList = []
+          if (this.imageFileList.length > 0) {
+            imageFileList = this.imageFileList.map(item => {
+              const obj = {
+                fileName: item.response.result.fileName,
+                filePath: item.response.result.filePath
+              }
+              return obj
+            })
+          }
+          values.files = imageFileList
+          values.content = this.textContent || ''
+          const sendToFile = [{
+            fileName: this.fileNameTo,
+            filePath: this.filePathTo
+          }]
+          this.axios({
+            url: '/mail/data/batchSendMessage',
+            data: {
+              sendFrom: values.from,
+              sendTo: sendToFile,
+              title: values.title,
+              file: values.files,
+              content: values.content
+            }
+          }).then((res) => {
+            if (res.code === 0) {
+              this.visible = false
+              this.$message.success(this.$t('批量发送数据已提交，系统将在后台进行发送'))
+              this.$emit('ok', '')
+            } else {
+              this.$message.error(res.message)
+            }
+            this.loading = false
+          })
+        }
+      })
+    }
+  }
+}
+</script>

@@ -1,0 +1,582 @@
+<template>
+  <div>
+    <a-form-item :label="$t('输入提示')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-input v-decorator="['setting[attribute][emptyText]', { initialValue: setting.attribute.emptyText || '' }]" />
+    </a-form-item>
+    <a-form-item :label="$t('数据源')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-row>
+        <a-col :span="7">
+          <a-radio-group
+            v-decorator="[
+              'setting[attribute][dataSource]',
+              {
+                initialValue: data.attribute.dataSource || 'addressBook',
+                rules: [{ required: true, message: $t('数据源不能为空') }]
+              }
+            ]"
+            @change="getSrc"
+          >
+            <a-radio value="addressBook">{{ $t('地址簿') }}</a-radio>
+            <a-radio value="dictionary">{{ $t('数据字典') }}</a-radio>
+          </a-radio-group>
+        </a-col>
+        <a-col :span="17">
+          <a-form-item v-if="srcShow">
+            <a-select
+              v-decorator="[
+                'setting[form][src]',
+                {
+                  initialValue: setting.form.src || undefined,
+                  rules: [{ required: true, message: $t('请选择数据字典') }]
+                }
+              ]"
+              option-filter-prop="children"
+              :placeholder="$t('请选择数据字典')"
+              :showSearch="true"
+              allowClear
+              @change="getCascader"
+            >
+              <a-select-option
+                v-for="value in srcPath"
+                :key="value.dictCategoryNumber"
+                :value="value.dictCategoryNumber"
+              >
+                {{ value.dictCategoryName }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+      </a-row>
+    </a-form-item>
+    <a-form-item :label="$t('是否必须选到叶子节点')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-switch
+        v-decorator="[
+          'setting[attribute][selectModel]',
+          { initialValue: setting.attribute.selectModel === 'end' ? true : false, valuePropName: 'checked' }
+        ]"
+        :un-checked-children="$t('否')"
+        :checked-children="$t('是')"
+        @change="
+          (e) => {
+            $set(setting.attribute, 'selectModel', e ? 'end' : 'any')
+          }
+        "
+      />
+    </a-form-item>
+    <a-form-item>
+      <a-row>
+        <a-col :span="6">
+          <a-form-item :label="$t('多选')" :labelCol="{ span: 16 }" :wrapperCol="{ span: 8 }">
+            <a-switch
+              v-decorator="[
+                'setting[attribute][multiple]',
+                { initialValue: setting.attribute.multiple === '0' ? false : true, valuePropName: 'checked' }
+              ]"
+              :un-checked-children="$t('否')"
+              :checked-children="$t('是')"
+              @change="
+                (e) => {
+                  $set(setting.attribute, 'multiple', e ? '1' : '0')
+                }
+              "
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="18">
+          <a-form-item :label="$t('勾选继承')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+            <a-checkbox
+              v-decorator="[
+                'setting[attribute][inherit]',
+                { initialValue: setting.attribute.inherit === '1' ? true : false, valuePropName: 'checked' }
+              ]"
+              @change="
+                (e) => {
+                  $set(setting.attribute, 'inherit', e ? '1' : '0')
+                }
+              "
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+    </a-form-item>
+    <!-- 回写内容，下拉框且数据字典是会回写的 -->
+    <a-form-item :label="$t('回写策略')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <div v-for="(option, index) in writeBack" :key="index">
+        <a-row style="margin-left: 5px" :gutter="5">
+          <a-col :span="3" style="text-align: center">
+            <span>{{ changeLevelMethod(index + 1) }}</span>
+          </a-col>
+          <a-col :span="19">
+            <a-select v-model="option.value" :allowClear="true">
+              <a-select-option v-for="(drop, indexs) in dropDownField" :key="indexs" :value="drop.alias">
+                {{ drop.name }}
+              </a-select-option>
+            </a-select>
+          </a-col>
+          <a-col :span="1">
+            <a-icon
+              :style="{ fontSize: '24px', color: '#52c41a', 'padding-top': '3px' }"
+              type="plus-square"
+              theme="filled"
+              @click="writeBack.splice(index + 1, 0, { value: undefined })"
+            />
+          </a-col>
+          <a-col :span="1">
+            <a-icon
+              :style="{ fontSize: '24px', color: writeBack.length === 1 ? '#bfbfbf' : '#ff4d4f', 'padding-top': '3px' }"
+              type="minus-square"
+              theme="filled"
+              @click="writeBack.length === 1 ? '' : writeBack.splice(index, 1)"
+            />
+          </a-col>
+        </a-row>
+      </div>
+    </a-form-item>
+    <a-form-item :label="$t('后置图标')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <a-row>
+        <a-col :span="8">
+          <a-radio-group
+            :defaultValue="setting.form.suffixIcon || ''"
+            @change="
+              (e) => {
+                suffixIcon = e.target.value
+              }
+            "
+          >
+            <a-radio value="">{{ $t('无') }}</a-radio>
+            <a-radio
+              value="string"
+              @click="
+                () => {
+                  if (setting.form.suffixVal) {
+                    setting.form.suffixVal.type = ''
+                  }
+                }
+              "
+            >
+              {{ $t('文字') }}
+            </a-radio>
+            <a-radio value="custom">{{ $t('图标') }}</a-radio>
+          </a-radio-group>
+        </a-col>
+        <a-col :span="12">
+          <a-icon v-if="suffixVal.type && suffixIcon === 'custom'" :type="suffixVal.type" :theme="suffixVal.theme" />
+          <a-button v-if="suffixIcon === 'custom'" style="margin-left: 10px" size="small" @click="handleMenuIcon">
+            {{ $t('设置') }}
+          </a-button>
+          <menu-icon ref="menuIcon" @ok="getIcon" />
+          <a-form-item v-if="suffixIcon === 'string'" style="width: 80px; margin: 0px">
+            <a-input
+              v-decorator="[
+                'setting[form][suffixVal][type]',
+                {
+                  initialValue: setting.form.suffixVal ? setting.form.suffixVal.type : '',
+                  rules: [{ max: 1, message: $t('字符长度不得大于1') }]
+                }
+              ]"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+    </a-form-item>
+    <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <span slot="label">
+        {{ $t('默认值') }}
+        <a-tooltip placement="top">
+          <span slot="title">
+            <div>{{ $t('打开表单视图时，该字段默认显示的值。按生效时机分为：新建时、新建+编辑时。') }}</div>
+            <div>{{ $t('不设置：不设置默认值策略。') }}</div>
+            <div>{{ $t('自定义：自定义或公式编辑默认值策略。') }}</div>
+            <div>{{ $t('数据联动：根据本表其他字段的值，联动调用其他数据表的数据。') }}</div>
+          </span>
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-row type="flex" align="middle">
+        <a-col :span="4">
+          <a-select
+            v-decorator="['setting[form][defaultTemplate]', { initialValue: setting.form.defaultTemplate || '' }]"
+            :placeholder="$t('请选择默认值模板')"
+            @change="changeDefault"
+          >
+            <a-select-option
+              v-for="defaultTemplate in defalutTemplates"
+              :key="defaultTemplate.value"
+              :value="defaultTemplate.value"
+            >
+              {{ defaultTemplate.text }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+        <a-col :span="20">
+          <a-form-item>
+            <a-button v-if="defaultType === 'linkData'" @click="handleDefaultLink">
+              {{ $t('数据联动') }}
+            </a-button>
+            <data-picker
+              v-else-if="defaultType === 'value'"
+              ref="dataPicker"
+              name="setting[form][defaultValue]"
+              :parentId="data.attribute.dataSource === 'addressBook' ? 'parentNumber' : 'parentDictDataNumber'"
+              :parameter="
+                data.attribute.dataSource === 'addressBook'
+                  ? {}
+                  : { dictCategoryNumber: setting.form.src, filterDisabled: true }
+              "
+              displayType="tree"
+              :url="
+                data.attribute.dataSource === 'addressBook'
+                  ? '/admin/address/getAddressChildren'
+                  : '/admin/dict/initData'
+              "
+              :searchUrl="
+                data.attribute.dataSource === 'addressBook' ? '/admin/search/addressSearch' : '/admin/search/dictSearch'
+              "
+              :multiple="setting.attribute.multiple === '1'"
+              :value="setting.form.defaultValue"
+              :optionsConversion="
+                (list, displayType, searchType) => optionsConversionTreeselect(list, displayType, searchType)
+              "
+              @select="
+                (data, options) => {
+                  setting.form.defaultValue = options
+                }
+              "
+            />
+            <a-row v-else-if="defaultType === 'formula'" type="flex" align="middle">
+              <a-col :span="24">
+                <querier-codemirror-input
+                  ref="querierCodemirrorInput"
+                  :lineStyle="{ lineHeight: '18px' }"
+                  :params.sync="setting.form.defaultFormula"
+                />
+              </a-col>
+              <div style="position: absolute; right: 6px; cursor: pointer; z-index: 10" @click="handleCodemirror">
+                fx
+              </div>
+              <a-input
+                v-show="false"
+                v-decorator="[
+                  'defaultValueCheck',
+                  {
+                    initialValue: setting.form.defaultFormula ? setting.form.defaultFormula.value : '',
+                    rules: [{ required: true, message: $t('请输入默认值') }]
+                  }
+                ]"
+              />
+            </a-row>
+          </a-form-item>
+        </a-col>
+      </a-row>
+    </a-form-item>
+    <a-form-item
+      v-if="setting.form.defaultTemplate"
+      :label="$t('默认值加载时机')"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+    >
+      <a-select
+        v-decorator="['setting[form][quoteType]', { initialValue: setting.form.quoteType || 'insert' }]"
+        :allowClear="true"
+        :placeholder="$t('请选择默认值加载时机')"
+      >
+        <a-select-option v-for="quoteType in quoteTypes" :key="quoteType.value" :value="quoteType.value">
+          {{ quoteType.text }}
+        </a-select-option>
+      </a-select>
+    </a-form-item>
+    <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+      <span slot="label">
+        {{ $t('数据保存时强制更新') }}
+        <a-tooltip placement="top" :title="$t('后端事件。无论前端提交什么数据，将强制执行该更新策略。')">
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-switch
+        v-decorator="[
+          'setting[form][forcedUpdate]',
+          { initialValue: setting.form.forcedUpdate == 1 ? true : false, valuePropName: 'checked' }
+        ]"
+        @change="(checked) => (setting.form.forcedUpdate = checked)"
+      />
+    </a-form-item>
+    <a-form-item
+      v-if="Number(setting.form.forcedUpdate) || setting.form.forcedUpdate == 1"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+    >
+      <span slot="label">
+        {{ $t('强制更新为') }}
+        <a-tooltip placement="top" :title="$t('其定义数据强制更新策略，支持公式编辑器。')">
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-row type="flex" align="middle">
+        <a-col :span="24">
+          <querier-codemirror-input
+            ref="querierCodemirrorInput"
+            :lineStyle="{ lineHeight: '18px' }"
+            :params.sync="setting.form.forcedDefaultValue"
+          />
+        </a-col>
+        <div style="position: absolute; right: 8px; cursor: pointer; z-index: 10" @click="forcedHandleCodemirror">
+          fx
+        </div>
+        <a-input
+          v-show="false"
+          v-decorator="[
+            'forcedDefaultValue',
+            {
+              initialValue: setting.form.forcedDefaultValue ? setting.form.forcedDefaultValue.value : '',
+              rules: [{ required: true, message: $t('请输入更新值') }]
+            }
+          ]"
+        />
+      </a-row>
+    </a-form-item>
+    <a-form-item
+      v-if="Number(setting.form.forcedUpdate) || setting.form.forcedUpdate == 1"
+      :labelCol="labelCol"
+      :wrapperCol="wrapperCol"
+    >
+      <span slot="label">
+        {{ $t('强制更新时机') }}
+        <a-tooltip placement="top">
+          <span slot="title">
+            <div>{{ $t('强制更新的时机。') }}</div>
+            <div>{{ $t('新建时：仅新建数据时执行默认值策略。') }}</div>
+            <div>{{ $t('新建+编辑时：新建数据、编辑数据时，均执行默认值策略。') }}</div>
+          </span>
+          <a-icon type="question-circle" />
+        </a-tooltip>
+      </span>
+      <a-select
+        v-decorator="['setting[form][forcedQuoteType]', { initialValue: setting.form.forcedQuoteType || 'insert' }]"
+        :placeholder="$t('请选择默认值加载时机')"
+      >
+        <a-select-option v-for="quoteType in quoteTypes" :key="quoteType.value" :value="quoteType.value">
+          {{ quoteType.text }}
+        </a-select-option>
+      </a-select>
+    </a-form-item>
+    <form-rule-way-condition ref="formRuleWayCondition" @func="getCondition" />
+    <DateLinkage ref="dataLinkage" @ok="getDateLinkage" />
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    MenuIcon: () => import('@/components/SelectIcon'),
+    FormRuleWayCondition: () => import('@/views/admin/Flow/modules/FormRuleWayCondition'),
+    QuerierCodemirrorInput: () => import('@/views/admin/Table/QuerierCodemirrorInput'),
+    DateLinkage: () => import('./DataLinkage')
+  },
+  props: {
+    setting: {
+      type: Object,
+      default: () => { }
+    },
+    tableField: {
+      type: Array,
+      default: () => {
+        return []
+      }
+    },
+    config: {
+      type: Object,
+      default: () => { }
+    },
+    dataOld: {
+      type: Object,
+      default: () => { }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
+      defaultValueLink: {},
+      defaultValue: [],
+      data: {},
+      srcShow: false,
+      srcPath: [],
+      dropDownField: [],
+      writeBack: [{ value: undefined }], // 回写策略
+      suffixVal: {},
+      suffixIcon: '',
+      defaultFlag: false, // 公式编辑
+      treeData: [],
+      replaceFields: {
+        title: 'dictDataName',
+        key: 'dictDataNumber'
+      },
+      defalutTemplates: [
+        { value: '', text: this.$t('不设置') },
+        { value: 'value', text: this.$t('自定义') },
+        { value: 'formula', text: this.$t('公式编辑') },
+        { value: 'linkData', text: this.$t('数据联动') }
+      ],
+      defaultType: 'custom',
+      quoteTypes: [
+        { value: 'insert', text: this.$t('新建时') },
+        { value: 'always', text: this.$t('新建+编辑时') }
+      ],
+      // 当前选中的fx为默认值公式编辑器还是强制值公式编辑器
+      checkType: ''
+    }
+  },
+  watch: {
+    setting: {
+      handler (newVal) {
+        this.data = JSON.parse(JSON.stringify(newVal))
+        if (!this.data.attribute.dataSource) {
+          this.data.attribute.dataSource = 'addressBook'
+        }
+        this.writeBack = this.data.form.writeBack ? this.data.form.writeBack : [{ value: undefined }]
+        this.srcShow = newVal.attribute.dataSource === 'dictionary'
+        if (this.srcShow) {
+          this.axios({
+            url: '/admin/dict/initCategory',
+            data: { dictMode: 1, pageSize: 999, pageNo: 1 }
+          }).then(res => {
+            this.srcPath = res.result.data
+          })
+          this.getWriteBack('dictionaryBack')
+        } else {
+          this.getWriteBack('addressBookBack')
+        }
+        this.suffixIcon = newVal.form.suffixIcon || ''
+        this.suffixVal = newVal.form.suffixVal || { type: '' }
+        this.defaultValueLink = this.data.form.defaultValueLink
+        this.defaultType = this.data.form.defaultTemplate
+        this.defaultValue = this.data.form.defaultValue
+      },
+      immediate: true
+    }
+  },
+  methods: {
+    changeLevelMethod (index) {
+      return this.$t('{0}级值回写到', { 0: index })
+    },
+    // 选择默认值
+    changeDefault (val) {
+      this.setting.form.defaultTemplate = val
+      this.defaultType = val
+    },
+    getDataLinkage (val) {
+      this.defaultValueLink = val
+    },
+    // 显示公式编辑器
+    handleCodemirror () {
+      this.forcedType = ''
+      this.checkType = 'defaultFormula'
+      this.$refs.formRuleWayCondition.show({
+        tableId: this.config.tableId,
+        data: { wayCondition: this.setting.form.defaultFormula }
+      })
+    },
+    forcedHandleCodemirror () {
+      this.checkType = 'forcedDefaultValue'
+      this.$refs.formRuleWayCondition.show({
+        tableId: this.config.tableId,
+        data: { wayCondition: this.setting.form.forcedDefaultValue }
+      })
+    },
+    getCondition (data) {
+      this.setting.form[this.checkType] = data
+    },
+    // 获取数据联动值
+    getDateLinkage (val) {
+      this.setting.form.defaultValueLink = val
+    },
+    // 组织结构options转换
+    optionsConversionTreeselect (list, displayType, searchType) {
+      if (this.data.attribute.dataSource === 'addressBook') {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.number
+            obj.label = item.name
+            return obj
+          })
+        }
+      } else {
+        if (searchType) {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.fullName
+            return obj
+          })
+        } else {
+          return list.map(item => {
+            const obj = item
+            obj.key = item.dictDataNumber
+            obj.label = item.dictDataName
+            return obj
+          })
+        }
+      }
+    },
+    // 默认值数据联动
+    handleDefaultLink () {
+      this.$refs.dataLinkage.show({
+        data: this.data,
+        setting: this.setting,
+        tableField: this.tableField,
+        tableId: this.config.tableId
+      })
+    },
+    getWriteBack (type) {
+      this.axios({
+        url: '/admin/field/getField',
+        data: { tableId: this.config.tableId, formType: 'combobox' }
+      }).then(res => {
+        this.dropDownField = res.result.filter(item => item.setting.attribute.dataSource === type)
+      })
+    },
+    getSrc (e) {
+      this.data.attribute.dataSource = e.target.value
+      if (e.target.value === 'dictionary') {
+        this.srcShow = true
+        this.axios({
+          url: '/admin/dict/initCategory',
+          data: { dictMode: 1, pageSize: 999, pageNo: 1 }
+        }).then(res => {
+          this.srcPath = res.result.data
+        })
+        this.writeBack = [{ value: undefined }]
+        this.getWriteBack('dictionaryBack')
+      } else {
+        this.srcShow = false
+        this.getWriteBack('addressBookBack')
+        this.writeBack = [{ value: undefined }]
+      }
+    },
+    // 获取图标
+    getIcon (value) {
+      this.suffixVal = value
+    },
+    // 后置图标
+    handleLatter (val) {
+      this.suffixIcon = val.target.value
+    },
+    // 打开图标库
+    handleMenuIcon () {
+      this.$refs.menuIcon.show()
+    },
+    getCascader (value) {
+      this.setting.form.src = value
+    }
+  }
+}
+</script>

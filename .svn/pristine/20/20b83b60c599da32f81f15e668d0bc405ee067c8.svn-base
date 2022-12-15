@@ -1,0 +1,161 @@
+<template>
+  <div class="page">
+    <a-form :labelCol="{ span: 6 }" :wrapperCol="{ span: 18 }" class="search" :colon="false">
+      <a-card :title="$t('搜索')" size="small">
+        <a-space slot="extra">
+          <a-button htmlType="submit" @click="$refs.table.refresh(true)" @keydown.enter="$refs.table.refresh(true)">
+            {{ $t('搜索') }}
+          </a-button>
+          <a-button
+            @click="
+              () => {
+                queryParam = {}
+                $refs.table.refresh(true)
+              }
+            "
+          >
+            {{ $t('重置') }}
+          </a-button>
+          <a-button :icon="advanced ? 'up' : 'down'" style="font-size: 11px" @click="advanced = !advanced"></a-button>
+        </a-space>
+        <a-row class="form" :class="advanced ? 'advanced' : 'normal'">
+          <a-col :span="6">
+            <a-form-item label="账号">
+              <a-input v-model="queryParam.userName" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="真实姓名">
+              <a-input v-model="queryParam.realName" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="分机号码">
+              <a-input v-model="queryParam.number" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-card>
+    </a-form>
+    <s-table
+      ref="table"
+      :scroll="{ y: true }"
+      size="small"
+      rowKey="id"
+      :columns="columns"
+      class="table-fill"
+      :data="loadDataTable"
+      :sorter="{ field: 'id', order: 'descend' }"
+    >
+      <div slot="action" slot-scope="text, record">
+        <a @click="handleEdit(record)">权限设置</a>
+      </div>
+    </s-table>
+    <priv-range ref="privRange" :key="privKey" :setting="priv" @ok="getPriv" />
+  </div>
+</template>
+<script>
+
+export default {
+  components: { PrivRange: () => import('../admin/PrivRange/PrivRange') },
+  data () {
+    return {
+      advanced: false,
+      // 搜索参数
+      queryParam: {},
+      // 表头
+      columns: [{
+        title: '操作',
+        dataIndex: 'action',
+        width: 120,
+        align: 'center',
+        scopedSlots: { customRender: 'action' }
+      }, {
+        title: 'ID',
+        dataIndex: 'id',
+        width: 60,
+        sorter: true
+      }, {
+        title: '账号',
+        dataIndex: 'userName',
+        sorter: true
+      }, {
+        title: '真实姓名',
+        dataIndex: 'realName',
+        sorter: true
+      }, {
+        title: '分机号码',
+        dataIndex: 'number',
+        sorter: true
+      }],
+      selectedRowKeys: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      creator: [],
+      colLayout: {},
+      privKey: 'privKey',
+      priv: {}
+    }
+  },
+  created () {
+    this.changeAdvanced(false)
+  },
+  methods: {
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/quality/powered/mockInit',
+        data: Object.assign(parameter, this.queryParam)
+      }).then(res => {
+        this.creator = res.result.data.creator
+        return res.result
+      })
+    },
+    // 获取现在时间
+    getTime (timestamp = +new Date()) {
+      if (timestamp) {
+        const time = new Date(timestamp)
+        const y = time.getFullYear()
+        const M = time.getMonth() + 1
+        const d = time.getDate()
+        const h = time.getHours()
+        const m = time.getMinutes()
+        const s = time.getSeconds()
+        return y + '-' + this.addZero(M) + '-' + this.addZero(d) + ' ' + this.addZero(h) + ':' + this.addZero(m) + ':' + this.addZero(s)
+      } else {
+        return ''
+      }
+    },
+    handleEdit (record) {
+      this.privKey = this.privKey === 'privKey' ? 'privKey_1' : 'privKey'
+      this.$nextTick(() => {
+        this.$refs.privRange.show({
+          page: 'depart',
+          username: record.userName,
+          list: record.already_priv.agent_priv
+        })
+      })
+    },
+    // 获取访问范围
+    getPriv (val) {
+      this.priv = val
+      this.privFlag = Object.keys(this.priv).length !== 0
+    },
+    addZero (value) {
+      return value < 10 ? '0' + value : value
+    },
+    changeAdvanced (tag) {
+      if (tag) {
+        this.advanced = !this.advanced
+      }
+      if (this.advanced) {
+        this.colLayout = { xs: 24, sm: 12, md: 8, lg: 8, xl: 6, xxl: 6 }
+      } else {
+        this.colLayout = { xs: 24, sm: 24, md: 12, lg: 12, xl: 8, xxl: 6 }
+      }
+    }
+  }
+}
+</script>

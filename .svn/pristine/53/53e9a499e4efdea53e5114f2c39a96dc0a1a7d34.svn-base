@@ -1,0 +1,182 @@
+<template>
+  <a-drawer :visible="visible" :destroyOnClose="true" :width="1200" :title="config.title" @close="visible = !visible">
+    <a-spin :spinning="false" style="display: flex; flex-direction: column">
+      <a-row style="padding: 12px; margin-top: 5px; flex: 1" :gutter="[16, 6]">
+        <a-col v-for="item of fontAwesomeData" :key="item" :span="2">
+          <a-checkable-tag
+            :checked="fontAwesomeCheck == item"
+            style="text-align: center; border-radius: 2px; cursor: pointer; width: 100%"
+            :style="fontAwesomeCheck == item ? '' : ' border: 1px dashed #d9d9d9; '"
+            @change="(checked) => selected(item, checked)"
+          >
+            {{ item }}
+          </a-checkable-tag>
+        </a-col>
+      </a-row>
+      <a-input-search
+        v-model="fontAwesomeValue"
+        :placeholder="$t('请输入图标名称搜索')"
+        enter-button
+        style="padding: 5px"
+        @change="onSearch()"
+      />
+      <a-row style="flex-grow: 3; overflow-y: scroll">
+        <div class="content">
+          <ul>
+            <li v-for="(item, index) in fontAwesomeInitData" :key="index" @click="handleClick(item)">
+              <span>
+                <font-awesome-icon :icon="item" />
+              </span>
+              <span>{{ item }}</span>
+            </li>
+          </ul>
+        </div>
+      </a-row>
+      <div class="bbar">
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+  </a-drawer>
+</template>
+<script>
+import fontAwesome from './fontAwesome.json'
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      fontAwesomeData: [],
+      fontAwesomeInitData: [],
+      fontAwesomeRealData: [],
+      fontAwesomeCheck: ['全部'],
+      fontAwesomeValue: '',
+      tabKey: 'outlined',
+      config: {
+        title: this.$t('选择图标')
+      },
+      load: false
+    }
+  },
+  mounted () {
+    if (!this.load) {
+      Promise.resolve().then(() => {
+        let arr = []
+        for (const item of fontAwesome) {
+          arr = arr.concat(item.items)
+        }
+        this.fontAwesomeRealData = arr
+        this.fontAwesomeInitData = [...new Set(arr)]
+      })
+      const res = fontAwesome.map(item => {
+        return item.type
+      })
+      this.fontAwesomeData = ['全部', ...res]
+    }
+  },
+  methods: {
+    show () {
+      this.load = true
+      this.visible = true
+    },
+    // 搜索
+    onSearch () {
+      const value = this.fontAwesomeValue
+      if (!value) {
+        this.fontAwesomeInitData = this.fontAwesomeRealData
+      }
+      const arr = this.fontAwesomeRealData.filter(item => {
+        return item.indexOf(value) !== -1
+      })
+      this.fontAwesomeInitData = [...new Set(arr)]
+    },
+    getValue (arr, val) {
+      return arr.filter(item => {
+        return item.indexOf(val) !== -1
+      })
+    },
+    handleClick (myitem) {
+      this.visible = false
+      this.$emit('ok', { type: myitem })
+    },
+    selected (tag, checked) {
+      const nextChecked = tag
+      this.fontAwesomeCheck = nextChecked
+
+      const arr = fontAwesome.filter(item => {
+        return nextChecked === item.type
+      })
+      if (arr.length) {
+        let res = []
+        for (const one of arr) {
+          res = res.concat(one.items)
+        }
+        this.fontAwesomeInitData = [...new Set(res)]
+      } else {
+        this.fontAwesomeInitData = this.fontAwesomeRealData
+      }
+    }
+  }
+}
+</script>
+<style lang="less" scoped>
+/deep/ .ant-drawer-body > .ant-spin-nested-loading > .ant-spin-container > :first-child {
+  padding: 0px;
+  background-color: #fff;
+  overflow: visible;
+}
+/deep/ .ant-drawer-wrapper-body {
+  overflow-x: hidden;
+}
+
+ul {
+  margin: 0;
+  padding: 0 15px;
+  list-style: none;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  li {
+    width: 64px;
+    height: 72px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
+    list-style: none;
+    cursor: pointer;
+    color: #555;
+    position: relative;
+    border-radius: 4px;
+    background-color: #fff;
+    overflow: hidden;
+    transition: all 0.3s;
+    span:first-child {
+      height: 50px;
+      line-height: 50px;
+      font-size: 30px;
+    }
+    span:last-child {
+      line-height: 20px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      width: 100%;
+      padding: 0 4px;
+    }
+  }
+  li:hover {
+    background: rgb(24, 144, 255);
+    color: #fff;
+    span:first-child {
+      font-size: 40px;
+    }
+  }
+}
+.tags {
+  font-size: 16px;
+  margin-top: 5px;
+  cursor: pointer;
+}
+</style>

@@ -1,0 +1,445 @@
+<template>
+  <a-drawer :destroyOnClose="true" :title="config.title" :width="1000" :visible="visible" @close="close">
+    <a-spin :spinning="loading">
+      <a-tabs v-model="activeKey">
+        <a-tab-pane :key="1" :tab="config.type === 'import' ? $t('导入数据') : $t('导出数据')">
+          <a-form :form="formfile" :label-col="{ span: 3 }" :wrapper-col="{ span: 21 }">
+            <a-alert
+              v-if="config.message"
+              :message="config.message"
+              size="small"
+              type="info"
+              style="margin-bottom: 8px"
+            />
+            <slot v-if="config.slotScoped"></slot>
+            <a-form-item v-else-if="config.type === 'import' && !config.slotScoped" :label="$t('模板下载')">
+              <a-button icon="download" @click="handleDownloadTemplate">{{ $t('模板下载') }}</a-button>
+            </a-form-item>
+            <a-form-item :label="config.type === 'import' ? $t('导入文件') : $t('导出文件名称')">
+              <div v-if="config.type === 'import'">
+                <a-upload
+                  name="upload"
+                  :showUploadList="false"
+                  :action="config.uploadUrl"
+                  :headers="{ 'Access-Token': userInfo.accessToken }"
+                  @change="handleChange"
+                >
+                  <a-button>
+                    <a-icon type="upload" />
+                    {{ $t('选择文件') }}
+                  </a-button>
+                </a-upload>
+                {{ uploadMessage }}
+              </div>
+              <a-input
+                v-else
+                v-decorator="[
+                  'fileName',
+                  {
+                    initialValue: '',
+                    rules: [{ required: true, message: $t('请输入导出文件名称') }, { validator: checkName }]
+                  }
+                ]"
+              />
+            </a-form-item>
+          </a-form>
+        </a-tab-pane>
+        <a-tab-pane :key="2" :tab="$t('我的任务')">
+          <a-alert :message="message" style="margin-bottom: 8px" />
+          <div style="display: flex; margin-bottom: 8px">
+            <a-input
+              v-model="queryParamTask.name"
+              :placeholder="$t('请输入文件名搜索')"
+              @keydown.enter="$refs.tableTask.refresh()"
+            />
+            <a-space style="margin-left: 8px">
+              <a-button type="primary" @click="$refs.tableTask.refresh()">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParamTask = {}
+                    $refs.tableTask.refresh()
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+          </div>
+          <s-table ref="tableTask" size="small" rowKey="id" :columns="columnsTask" :data="loadDataTable">
+            <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+            <span slot="status" slot-scope="text, record">
+              <a-badge v-if="text == '0'" status="error" :text="$t('未开始')" />
+              <a-tooltip
+                v-else-if="text == '1'"
+                :title="$t('总导出数: ') + record.totalCount + `', ${$t('已导出数: ')}'` + record.completeCount"
+              >
+                <a-progress :percent="record.processing || 0" status="active" />
+              </a-tooltip>
+              <a-badge v-else-if="text == '2'" status="success" :text="$t('已完成')" />
+              <a-badge v-else-if="text == '3'" status="error" :text="$t('失败')" />
+            </span>
+            <span slot="duration" slot-scope="text">{{ text }}</span>
+            <div slot="action" slot-scope="text, record">
+              <a @click="handleView(record)">{{ $t('查看') }}</a>
+              <a-divider type="vertical" />
+              <template v-if="config.type !== 'import'">
+                <a :disabled="record.status != 2" @click="handleDownload(record)">{{ $t('下载') }}</a>
+                <a-divider type="vertical" />
+              </template>
+              <a :disabled="record.status == 1" @click="handleDelete(record)">{{ $t('删除') }}</a>
+            </div>
+          </s-table>
+        </a-tab-pane>
+        <a-tab-pane :key="3" :tab="$t('所有任务')">
+          <div style="display: flex; margin-bottom: 8px">
+            <a-input
+              v-model="queryParamAll.name"
+              :placeholder="$t('请输入文件名搜索')"
+              @keydown.enter="$refs.tableAll.refresh()"
+            />
+            <a-space style="margin-left: 8px">
+              <a-button type="primary" @click="$refs.tableAll.refresh()">{{ $t('搜索') }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    queryParamAll = {}
+                    $refs.tableAll.refresh()
+                  }
+                "
+              >
+                {{ $t('重置') }}
+              </a-button>
+            </a-space>
+          </div>
+          <s-table ref="tableAll" size="small" rowKey="id" :columns="columnsAll" :data="AllDataTable">
+            <span slot="serial" slot-scope="text, record, index">{{ index + 1 }}</span>
+            <span slot="status" slot-scope="text, record">
+              <a-badge v-if="text == '0'" status="error" :text="$t('未开始')" />
+              <a-tooltip
+                v-else-if="text == '1'"
+                :title="`${$t('总导出数: ')}` + record.totalCount + `, ${$t('已导出数: ')}` + record.completeCount"
+              >
+                <a-progress :percent="record.processing || 0" status="active" />
+              </a-tooltip>
+              <a-badge v-else-if="text == '2'" status="success" :text="$t('已完成')" />
+              <a-badge v-else-if="text == '3'" status="error" :text="$t('失败')" />
+            </span>
+            <span slot="duration" slot-scope="text">{{ text }}</span>
+          </s-table>
+        </a-tab-pane>
+      </a-tabs>
+      <div class="bbar">
+        <a-button
+          v-if="activeKey === 1"
+          type="primary"
+          :disabled="config.type === 'import' && !filePath ? true : false"
+          @click="handleOk"
+        >
+          {{ config.type === 'import' ? $t('导入') : $t('导出') }}
+        </a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-spin>
+    <user-table-import-view ref="userTableImportView" />
+  </a-drawer>
+</template>
+<script>
+import debounce from 'lodash/debounce'
+import { mapGetters } from 'vuex'
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    UserTableImportView: () => import('@/views/admin/UserTable/UserTableImportView')
+  },
+  data () {
+    this.checkName = debounce(this.checkName, 1000)
+    return {
+      config: {},
+      activeKey: 1,
+      visible: false,
+      loading: false,
+      check: false,
+      fileName: '',
+      filePath: '',
+      formfile: this.$form.createForm(this),
+      labelCol: { span: 5 },
+      wrapperCol: { span: 17 },
+      // 搜索参数
+      queryParamTask: {},
+      uploadMessage: this.$t('请选择要导入的文件'),
+      queryParamAll: {},
+      columnsTask: [],
+      columnsAll: [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('文件名'),
+        dataIndex: 'fileName',
+        width: 170
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 150
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'runTime',
+        width: 150
+      }, {
+        title: this.$t('耗时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' },
+        width: 100
+      }, {
+        title: this.$t('任务状态'),
+        dataIndex: 'status',
+        width: 130,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('创建人'),
+        dataIndex: 'inputUser',
+        width: 90
+      }],
+      type: '',
+      customTitle: {},
+      Interval: null,
+      message: '',
+      tableId: '',
+      template: {}
+    }
+  },
+  computed: {
+    ...mapGetters(['setting', 'userInfo'])
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.activeKey = 1
+      config.number = this.config.number || config.className
+      this.config = config
+      this.fileName = ''
+      this.filePath = ''
+      this.uploadMessage = this.$t('请选择要导入的文件')
+      this.columnsTask = [{
+        title: '#',
+        width: 40,
+        scopedSlots: { customRender: 'serial' }
+      }, {
+        title: this.$t('文件名'),
+        dataIndex: 'fileName',
+        width: 170
+      }, {
+        title: this.$t('创建时间'),
+        dataIndex: 'inputTime',
+        width: 150
+      }, {
+        title: this.$t('开始时间'),
+        dataIndex: 'runTime',
+        width: 150
+      }, {
+        title: this.$t('耗时'),
+        dataIndex: 'duration',
+        scopedSlots: { customRender: 'duration' },
+        width: 100
+      }, {
+        title: this.$t('任务状态'),
+        dataIndex: 'status',
+        width: 130,
+        scopedSlots: { customRender: 'status' }
+      }, {
+        title: this.$t('文件大小'),
+        dataIndex: 'fileSize'
+      }, {
+        title: this.$t('操作'),
+        dataIndex: 'action',
+        align: 'center',
+        width: 120,
+        scopedSlots: { customRender: 'action' }
+      }]
+      if (!this.config.uploadUrl) {
+        this.config.uploadUrl = `${process.env.VUE_APP_API_BASE_URL}admin/attachment/upload/?uploadName=file`
+      }
+    },
+    // 验证首字符是否输入空格
+    checkName (rule, value, callback) {
+      if (value) {
+        const string = this.$t('请输入内容，且不能为纯空格字符')
+        const regLength = value.split(' ').join('').length
+        if (regLength === 0) {
+          callback(string)
+        }
+      }
+      callback()
+    },
+    handleOk () {
+      // 导入/导出按钮 提交
+      this.formfile.validateFields((err, values) => {
+        if (!err) {
+          this.loading = true
+          const time = new Date()
+          if (this.config.type === 'import') {
+            this.axios({
+              url: '/admin/task/add',
+              data: {
+                type: 'import',
+                className: this.config.className, // 各模块的导入类名，根据不同模块 传入不同的模块名
+                parameter: Object.assign({
+                  fileName: this.fileName,
+                  filePath: this.filePath
+                }, this.config.parameter),
+                number: this.config.number,
+                name: this.fileName
+              }
+            }).then(() => {
+              this.loading = false
+              this.activeKey = 2
+              this.$emit('ok')
+              // 第一次tab跳转表格未创建
+              this.$nextTick(() => {
+                this.$refs.tableTask.refresh()
+              })
+            })
+          } else {
+            const suffix = this.config.exportSuffix ?? '.xlsx'
+            this.axios({
+              url: '/admin/task/add',
+              data: {
+                type: 'export',
+                className: this.config.className, // 各模块的导入类名，根据不同模块 传入不同的模块名
+                parameter: Object.assign({
+                  fileName: values.fileName + suffix,
+                  filePath: 'public/upload/' + time.getFullYear() + '/' + ((time.getMonth() + 1) < 10 ? '0' + (time.getMonth() + 1) : (time.getMonth() + 1)) + '/' + (time.getDate() < 10 ? '0' + time.getDate() : time.getDate()) + '/' + (new Date()).valueOf() + suffix
+                }, this.config.parameter),
+                number: this.config.number,
+                name: values.fileName + suffix
+              }
+            }).then(() => {
+              this.loading = false
+              this.activeKey = 2
+              this.$emit('ok')
+              // 第一次tab跳转表格未创建
+              this.$nextTick(() => {
+                this.$refs.tableTask.refresh()
+              })
+            })
+          }
+        }
+      })
+    },
+    // 查看
+    handleView (record) {
+      this.$refs.userTableImportView.show({
+        action: 'view',
+        title: this.$t('查看'),
+        url: '/admin/task/view',
+        record: record
+      })
+    },
+    handleChange (info) {
+      this.loading = true
+      if (info.file.status === 'uploading') {
+        this.uploadMessage = this.$t('文件【{0}】上传中...', { 0: info.file.name })
+      } else if (info.file.status === 'done') {
+        this.loading = false
+        this.uploadMessage = this.$t('文件【{0}】上传完成', { 0: info.file.name })
+        this.template = info.file.response.result.data
+        this.tableId = info.file.response.result.tableId
+        this.fileName = info.file.response.result.fileName
+        this.filePath = info.file.response.result.filePath
+      } else if (info.file.status === 'error') {
+        this.loading = false
+        this.uploadMessage = this.$t('文件【{0}】上传失败', { 0: info.file.name })
+        this.fileName = ''
+      }
+    },
+    // 我的任务显示
+    loadDataTable (parameter) {
+      return this.axios({
+        url: '/admin/task/select',
+        data: Object.assign(parameter, this.queryParamTask, { type: this.config.type === 'import' ? 'import' : 'export', number: this.config.number, sortField: 'inputTime', sortOrder: 'descend', access: 'myTask' })
+      }).then(res => {
+        res.result.data = this.changeData(res.result.data)
+        this.message = res.result.processMsg
+        clearInterval(this.Interval)
+        if (res.result.data.some(item => item.status !== 2)) {
+          this.runtime()
+        }
+        return res.result
+      })
+    },
+    // 所有任务显示
+    AllDataTable (parameter) {
+      return this.axios({
+        url: '/admin/task/select',
+        data: Object.assign(parameter, this.queryParamAll, { type: this.config.type === 'import' ? 'import' : 'export', number: this.config.number, sortField: 'inputTime', sortOrder: 'descend', access: 'allTask' })
+      }).then(res => {
+        res.result.data = this.changeData(res.result.data)
+        clearInterval(this.Interval)
+        if (res.result.data.some(item => item.status !== 2)) {
+          this.runtime()
+        }
+        return res.result
+      })
+    },
+    changeData (array) {
+      return array.map(item => {
+        const obj = item
+        const setting = JSON.parse(item.setting)
+        const reg = new RegExp(this.config.exportSuffix ?? '.xlsx')
+        obj.fileName = setting.parameter && setting.parameter.fileName ? setting.parameter.fileName.replace(reg, '') : ''
+        obj.filePath = setting.parameter && setting.parameter.filePath ? setting.parameter.filePath : ''
+        obj.processing = item.complete_count / item.total_count
+        return obj
+      })
+    },
+    runtime () {
+      this.Interval = setTimeout(() => {
+        if (this.activeKey === 2) {
+          this.$refs.tableTask.refresh()
+        } else if (this.activeKey === 3) {
+          this.$refs.tableAll.refresh()
+        } else {
+          clearInterval(this.Interval)
+        }
+      }, 5000)
+    },
+    close () {
+      this.visible = !this.visible
+      clearInterval(this.Interval)
+    },
+    // 导出文件下载
+    handleDownload (record) {
+      const filePath = encodeURIComponent(record.filePath)
+      const fileName = encodeURIComponent(record.fileName)
+      window.open(`${process.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}&fileName=${fileName}`)
+    },
+    // 模板下载
+    handleDownloadTemplate () {
+      const filePath = encodeURIComponent(this.config.filePath)
+      if (this.config.fileName) {
+        const fileName = encodeURIComponent(this.config.fileName)
+        window.open(`${process.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}&fileName=${fileName}`)
+      } else {
+        window.open(`${process.env.VUE_APP_API_BASE_URL}admin/api/download/?filePath=${filePath}`)
+      }
+    },
+    // 导出任务删除
+    handleDelete (record) {
+      const that = this
+      this.$confirm({
+        title: this.$t('您确认要删除该记录吗？'),
+        onOk () {
+          that.axios({
+            url: '/admin/task/delete',
+            data: { id: record.id }
+          }).then(res => {
+            that.$refs.tableTask.refresh()
+            return res.result
+          })
+        }
+      })
+    }
+  }
+}
+</script>

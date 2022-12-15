@@ -1,0 +1,135 @@
+<template>
+  <div>
+    <a-modal :title="config.title" :visible="visible" :width="900" :destroyOnClose="true" @cancel="visible = !visible">
+      <a-spin :spinning="loading">
+        <a-form :form="form" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-row>
+            <a-col :span="12">
+              <a-form-item :label="$t('组件类型')">
+                <a-select
+                  v-decorator="['info[type]', { initialValue: data.type || 'workflowFilter' }]"
+                  :showArrow="false"
+                  :disabled="true"
+                  style="width: 100%"
+                >
+                  <a-select-option value="workflowFilter">{{ $t('流程筛选组') }}</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item :label="$t('列宽')">
+                <a-input-number
+                  v-decorator="[
+                    'info[column]',
+                    { initialValue: data.column || 6, rules: [{ required: true, message: $t('请输入列宽') }] }
+                  ]"
+                  :min="1"
+                  :max="24"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col :span="12">
+              <a-form-item :label="$t('Label名称')">
+                <a-input v-decorator="['info[name]', { initialValue: data.name }]" />
+              </a-form-item>
+              <a-form-item :label="$t('是否显示')">
+                <a-switch
+                  v-decorator="[
+                    'info[showWorkflowFilters]',
+                    { initialValue: data.showWorkflowFilters, valuePropName: 'checked' }
+                  ]"
+                />
+              </a-form-item>
+            </a-col>
+          </a-row>
+          <a-form-item :label="$t('帮助说明')" :labelCol="{ span: 3 }" :wrapperCol="{ span: 21 }">
+            <a-textarea
+              v-decorator="['info[help]', { initialValue: data.help }]"
+              :auto-size="{ minRows: 1, maxRows: 5 }"
+            />
+          </a-form-item>
+          <packet-filter
+            ref="packetFilter"
+            :config="{ workflowFilters: data.workflowFilters }"
+            :flowgroupBtnConfig="flowgroupBtnConfig"
+            :allWorkflows="allWorkflows"
+            :tabThis="tabThis"
+          />
+        </a-form>
+      </a-spin>
+      <div slot="footer" class="bbar">
+        <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+        <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+      </div>
+    </a-modal>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  components: {
+    PacketFilter: () => import('./PacketFilter')
+  },
+  props: {
+    flowgroupBtnConfig: {
+      type: Object,
+      default () {
+        return {}
+      },
+      required: false
+    },
+    tabThis: {
+      type: Object,
+      default () {
+        return {}
+      }
+    }
+  },
+  data () {
+    return {
+      visible: false,
+      loading: false,
+      config: {},
+      data: {},
+      form: this.$form.createForm(this),
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      allWorkflows: []
+    }
+  },
+  methods: {
+    show (config) {
+      this.config = config
+      this.data = config.record
+      this.visible = true
+      // 流程中心
+      if (['webProcessCenterDataWindow', 'appProcessCenterDataWindow'].includes(this.flowgroupBtnConfig.type)) { // 流程中心（pc端或移动端）
+        this.loading = true
+        this.axios({
+          url: '/admin/processCenter/getAllWorkflows'
+        }).then(res => {
+          if (!res.code) {
+            this.allWorkflows = res.result
+            this.loading = false
+            this.$nextTick(() => {
+              this.$refs.packetFilter.show()
+            })
+          }
+        })
+      } else {
+        this.$nextTick(() => {
+          this.$refs.packetFilter.show()
+        })
+      }
+    },
+    handleSubmit () {
+      this.form.validateFields((errors, values) => {
+        if (!errors) {
+          const data = values.info
+          data.workflowFilters = this.$refs.packetFilter.workflowFilters
+          this.$emit('ok', data)
+          this.visible = false
+        }
+      })
+    }
+  }
+}
+</script>

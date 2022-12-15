@@ -1,0 +1,79 @@
+<template>
+  <div>
+    <a-drawer
+      :destroyOnClose="true"
+      :title="$t('从模板中添加')"
+      :width="600"
+      :visible="visible"
+      @close="visible = !visible"
+    >
+      <a-spin :spinning="loading">
+        <div>
+          <a-alert :message="$t('仅显示未使用的默认按钮')" style="margin-bottom: 8px" show-icon />
+          <a-table
+            ref="table"
+            rowKey="usage"
+            :columns="columns"
+            :dataSource="unCheckBar"
+            :rowSelection="rowSelection"
+            size="small"
+            :pagination="false"
+          >
+            <span slot="position" slot-scope="text">
+              {{ text === 'line' ? $t('行操作') : $t('工具栏') }}
+            </span>
+          </a-table>
+        </div>
+        <div class="bbar">
+          <a-button type="primary" @click="handleSubmit">{{ $t('保存') }}</a-button>
+          <a-button @click="visible = !visible">{{ $t('关闭') }}</a-button>
+        </div>
+      </a-spin>
+    </a-drawer>
+  </div>
+</template>
+<script>
+export default {
+  i18n: window.lang('admin'),
+  data () {
+    return {
+      visible: false,
+      unCheckBar: [],
+      loading: false,
+      selectedRowKeys: [],
+      listArray: [],
+      rowSelection: {
+        onChange: (selectedRowKeys, selectedRows) => {
+          this.selectedRowKeys = selectedRowKeys
+        }
+      },
+      columns: [{
+        title: this.$t('按钮名称'),
+        dataIndex: 'name'
+      }, {
+        title: this.$t('按钮位置'),
+        dataIndex: 'position',
+        scopedSlots: { customRender: 'position' }
+      }]
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.unCheckBar = config.unCheckBar
+      this.listArray = config.listArray
+    },
+    handleSubmit () {
+      const data = []
+      this.listArray.forEach(item => {
+        if (this.selectedRowKeys.includes(item.usage)) {
+          data.push(item)
+        }
+      })
+      this.visible = false
+      this.$emit('ok', data)
+      this.$message.success(this.$t('操作成功'))
+    }
+  }
+}
+</script>

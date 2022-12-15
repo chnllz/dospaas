@@ -1,0 +1,136 @@
+<template>
+  <a-modal
+    :title="config.title"
+    :width="600"
+    :visible="visible"
+    :confirmLoading="loading"
+    :okText="$t('保存')"
+    :destroyOnClose="true"
+    @ok="handleSubmit"
+    @cancel="visible = !visible"
+  >
+    <a-spin :spinning="loading">
+      <a-form :form="form">
+        <a-form-item :label="$t('模板名称')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-input
+            v-decorator="[
+              'name',
+              {
+                initialValue: config.data && config.data.name ? config.data.name : '',
+                rules: [{ required: true, message: $t('请输入模板名称') }]
+              }
+            ]"
+            :disabled="config.data && config.data.id === 1"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('适用技能组')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-select
+            v-decorator="[
+              'group',
+              {
+                initialValue: config.data && config.data.group ? config.data.group : undefined,
+                rules: [{ required: config.data && config.data.id !== 1, message: $t('请选择适用技能组') }]
+              }
+            ]"
+            :disabled="config.data && config.data.id === 1"
+            allowClear
+            mode="multiple"
+            show-search
+            :filter-option="filterOption"
+          >
+            <a-select-option v-for="group in groupList" :key="group.id" :value="group.id">
+              {{ group.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <span slot="label">
+            {{ contentLabel }}
+            <a-tooltip>
+              <div slot="title">
+                <div>{{ $t('支持模板变量') }}</div>
+                <template v-if="type === 'invite'">
+                  <div>{{ $t('${nickName}：客服昵称') }}</div>
+                </template>
+                <template v-else>
+                  <div>{{ $t('${commentText}：满意度') }}</div>
+                </template>
+              </div>
+              <a-icon type="question-circle" />
+            </a-tooltip>
+          </span>
+          <a-textarea
+            v-decorator="[
+              'content',
+              {
+                initialValue: config.data && config.data.content ? config.data.content : '',
+                rules: [{ required: true, message: contentLabel }]
+              }
+            ]"
+            :auto-size="{ minRows: 3, maxRows: 5 }"
+          />
+        </a-form-item>
+        <a-form-item :label="$t('备注')" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-textarea
+            v-decorator="['remarks', { initialValue: config.data && config.data.remarks ? config.data.remarks : '' }]"
+            :disabled="config.data && config.data.id === 1"
+            :auto-size="{ minRows: 3, maxRows: 5 }"
+          />
+        </a-form-item>
+      </a-form>
+    </a-spin>
+  </a-modal>
+</template>
+<script>
+export default {
+  i18n: window.lang('chat'),
+  data () {
+    return {
+      config: {},
+      labelCol: { span: 6 },
+      wrapperCol: { span: 18 },
+      visible: false,
+      loading: false,
+      form: this.$form.createForm(this),
+      type: '',
+      contentLabel: '',
+      groupList: [],
+      commentLists: []
+    }
+  },
+  methods: {
+    show (config) {
+      this.visible = true
+      this.config = config
+      this.type = config.type
+      this.contentLabel = this.$t('请输入{0}', { 0: config.contentLabel })
+      this.commentLists = config.commentLists
+      this.groupList = this.config.groupList
+    },
+    handleClose () {
+      this.visible = !this.visible
+    },
+    filterOption (input, option) {
+      return (
+        option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+      )
+    },
+    handleSubmit () {
+      const { form: { validateFields } } = this
+      validateFields((errors, values) => {
+        if (!errors) {
+          values = Object.assign(this.config.data, values)
+          if (this.config.action === 'add') {
+            this.commentLists.push(values)
+          } else {
+            this.$set(this.commentLists, this.recordIndex, values)
+          }
+          this.visible = false
+          this.$message.success(this.$t('操作成功'))
+          this.$emit('func', this.commentLists, this.type)
+        }
+      })
+    }
+  }
+}
+</script>
